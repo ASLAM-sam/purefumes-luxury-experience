@@ -10,18 +10,26 @@ export const SectionTitle = memo(function SectionTitle({ eyebrow, title, subtitl
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.7, ease: "easeOut" }}
-      className={center ? "text-center" : ""}
+      className={center ? "mx-auto max-w-3xl text-center" : "max-w-2xl"}
     >
       {eyebrow && (
-        <p className="text-[0.65rem] uppercase tracking-[0.4em] text-gold mb-4">{eyebrow}</p>
+        <p className="mb-4 text-[0.68rem] font-medium uppercase tracking-[0.42em] text-gold">
+          {eyebrow}
+        </p>
       )}
-      <h2 className="font-display text-4xl md:text-6xl text-foreground">{title}</h2>
+      <h2 className="font-display text-4xl leading-[0.95] text-foreground sm:text-5xl md:text-6xl">
+        {title}
+      </h2>
       {subtitle && (
-        <p className="mt-5 max-w-xl mx-auto text-sm md:text-base text-muted-foreground font-light">
+        <p
+          className={`mt-5 text-sm leading-7 text-muted-foreground md:text-base ${
+            center ? "mx-auto max-w-2xl" : "max-w-xl"
+          }`}
+        >
           {subtitle}
         </p>
       )}
-      <div className="mt-6 mx-auto h-px w-24 gold-line" />
+      <div className={`mt-6 h-px w-24 gold-line ${center ? "mx-auto" : ""}`} />
     </motion.div>
   );
 });

@@ -38,18 +38,20 @@ export const Navbar = memo(function Navbar() {
 
   return (
     <>
-      <header className="fixed top-9 inset-x-0 z-50 glass border-b border-border">
-        <Container className="flex items-center justify-between h-20">
-          <Link to="/" className="font-display text-xl md:text-2xl tracking-wide">
-            <span className="text-navy">Pure</span>
+      <header className="fixed inset-x-0 top-9 z-50 border-b border-beige/10 glass text-beige shadow-[0_18px_60px_-36px_rgba(0,0,0,0.75)]">
+        <Container className="flex h-[5.5rem] items-center justify-between gap-4">
+          <Link to="/" className="flex items-end gap-2 font-display text-[1.65rem] tracking-[0.04em] md:text-4xl">
+            <span className="text-beige">Pure</span>
             <span className="text-gold">fumes</span>
-            <span className="text-navy/60 text-sm ml-2 tracking-[0.3em] uppercase">Hyderabad</span>
+            <span className="mb-1 ml-1 text-[0.65rem] tracking-[0.38em] uppercase text-beige/60 md:text-xs">
+              Hyderabad
+            </span>
           </Link>
 
-          <nav className="hidden md:flex items-center gap-10 text-xs uppercase tracking-[0.25em]">
+          <nav className="hidden items-center gap-10 text-xs uppercase tracking-[0.25em] md:flex lg:gap-12">
             <Link
               to="/"
-              className="underline-slide"
+              className="underline-slide text-[0.72rem] font-medium tracking-[0.36em] text-beige/80 transition-colors duration-300 ease-in-out hover:text-gold"
               activeProps={{ className: "text-gold" }}
               activeOptions={{ exact: true }}
             >
@@ -61,7 +63,12 @@ export const Navbar = memo(function Navbar() {
               onMouseEnter={() => handleEnter("cat")}
               onMouseLeave={handleLeave}
             >
-              <button className="underline-slide">Categories</button>
+              <button
+                type="button"
+                className="underline-slide text-[0.72rem] font-medium tracking-[0.36em] text-beige/80 transition-colors duration-300 ease-in-out hover:text-gold"
+              >
+                Categories
+              </button>
               <AnimatePresence>
                 {openMenu === "cat" && (
                   <motion.div
@@ -70,14 +77,14 @@ export const Navbar = memo(function Navbar() {
                     animate="show"
                     exit="hidden"
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-1/2 -translate-x-1/2 mt-4 w-56 bg-card border border-border p-2 shadow-2xl"
+                    className="absolute left-1/2 top-full mt-5 w-64 -translate-x-1/2 rounded-[1.75rem] border border-beige/10 bg-[#0b264a]/95 p-3 text-beige shadow-[0_28px_60px_-24px_rgba(0,0,0,0.78)] backdrop-blur-xl"
                   >
                     {categories.map((c) => (
                       <Link
                         key={c}
                         to="/category/$slug"
                         params={{ slug: c.toLowerCase().replace(" ", "-") }}
-                        className="block px-4 py-3 hover:bg-muted hover:text-gold transition-colors"
+                        className="block rounded-2xl px-4 py-3 text-[0.72rem] tracking-[0.3em] text-beige/75 transition duration-300 ease-in-out hover:bg-beige/10 hover:text-gold"
                       >
                         {c}
                       </Link>
@@ -92,7 +99,12 @@ export const Navbar = memo(function Navbar() {
               onMouseEnter={() => handleEnter("brand")}
               onMouseLeave={handleLeave}
             >
-              <button className="underline-slide">Brands A–Z</button>
+              <button
+                type="button"
+                className="underline-slide text-[0.72rem] font-medium tracking-[0.36em] text-beige/80 transition-colors duration-300 ease-in-out hover:text-gold"
+              >
+                Brands A-Z
+              </button>
               <AnimatePresence>
                 {openMenu === "brand" && (
                   <motion.div
@@ -101,19 +113,19 @@ export const Navbar = memo(function Navbar() {
                     animate="show"
                     exit="hidden"
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full right-0 mt-4 w-80 bg-card border border-border p-5 shadow-2xl max-h-96 overflow-y-auto no-scrollbar"
+                    className="absolute right-0 top-full mt-5 max-h-96 w-[22rem] overflow-y-auto rounded-[1.75rem] border border-beige/10 bg-[#0b264a]/95 p-5 text-beige shadow-[0_28px_60px_-24px_rgba(0,0,0,0.78)] backdrop-blur-xl no-scrollbar"
                   >
                     {Object.keys(brandsByLetter)
                       .sort()
                       .map((letter) => (
-                        <div key={letter} className="mb-3">
-                          <p className="text-gold text-[0.65rem] tracking-[0.3em] mb-1">{letter}</p>
+                        <div key={letter} className="mb-4 last:mb-0">
+                          <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.4em] text-gold/90">{letter}</p>
                           {brandsByLetter[letter].map((b) => (
                             <Link
                               key={b}
                               to="/brand/$brand"
                               params={{ brand: b.toLowerCase() }}
-                              className="block py-1 text-xs tracking-wider text-muted-foreground hover:text-gold"
+                              className="block rounded-xl px-2 py-2 text-[0.72rem] tracking-[0.24em] text-beige/72 transition duration-300 ease-in-out hover:bg-beige/10 hover:text-gold"
                             >
                               {b}
                             </Link>
@@ -126,32 +138,33 @@ export const Navbar = memo(function Navbar() {
             </div>
           </nav>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 md:gap-4">
             <button
               onClick={() => setSearch(true)}
               aria-label="Search"
-              className="p-2 hover:text-gold transition-colors"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-beige/10 bg-beige/5 text-beige/80 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:border-gold/50 hover:bg-gold hover:text-navy"
             >
-              <Search className="w-4 h-4" />
+              <Search className="h-4 w-4" />
             </button>
             <Link
               to="/cart"
               aria-label="Cart"
-              className="relative p-2 hover:text-gold transition-colors"
+              className="relative flex h-11 w-11 items-center justify-center rounded-full border border-beige/10 bg-beige/5 text-beige/80 transition duration-300 ease-in-out hover:-translate-y-0.5 hover:border-gold/50 hover:bg-gold hover:text-navy"
             >
-              <ShoppingBag className="w-4 h-4" />
+              <ShoppingBag className="h-4 w-4" />
               {cartCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-medium leading-none text-navy">
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-semibold leading-none text-navy shadow-[0_10px_18px_-10px_rgba(200,169,106,0.95)]">
                   {cartCount}
                 </span>
               )}
             </Link>
             <button
               onClick={() => setMobile((v) => !v)}
-              className="md:hidden p-2"
+              type="button"
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-beige/10 bg-beige/5 text-beige transition duration-300 ease-in-out hover:border-gold/50 hover:text-gold md:hidden"
               aria-label="Menu"
             >
-              {mobile ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobile ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </Container>
@@ -162,10 +175,14 @@ export const Navbar = memo(function Navbar() {
               initial={{ height: 0 }}
               animate={{ height: "auto" }}
               exit={{ height: 0 }}
-              className="md:hidden overflow-hidden border-t border-border bg-card"
+              className="overflow-hidden border-t border-beige/10 bg-[#0b264a]/95 text-beige backdrop-blur-xl md:hidden"
             >
-              <div className="p-6 space-y-4 text-sm uppercase tracking-[0.25em]">
-                <Link to="/" onClick={() => setMobile(false)} className="block">
+              <div className="space-y-2 p-6 text-sm uppercase tracking-[0.25em]">
+                <Link
+                  to="/"
+                  onClick={() => setMobile(false)}
+                  className="block rounded-2xl border border-beige/10 bg-beige/5 px-4 py-4 text-[0.72rem] tracking-[0.36em] text-beige/85 transition duration-300 ease-in-out hover:border-gold/40 hover:text-gold"
+                >
                   Home
                 </Link>
                 {categories.map((c) => (
@@ -174,7 +191,7 @@ export const Navbar = memo(function Navbar() {
                     to="/category/$slug"
                     params={{ slug: c.toLowerCase().replace(" ", "-") }}
                     onClick={() => setMobile(false)}
-                    className="block text-muted-foreground"
+                    className="block rounded-2xl px-4 py-3 text-[0.72rem] tracking-[0.32em] text-beige/70 transition duration-300 ease-in-out hover:bg-beige/10 hover:text-gold"
                   >
                     {c}
                   </Link>

@@ -18,10 +18,16 @@ function Index() {
       <Hero />
       <Categories />
       <FeaturedProducts />
-      <section className="py-32 bg-beige/30">
+      <section className="bg-beige/20 py-16 md:py-20">
         <Container>
-          <SectionTitle eyebrow="The Houses" title="Brands A — Z" subtitle="Filter by letter to discover our curated roster." />
-          <div className="mt-16"><BrandAZ /></div>
+          <SectionTitle
+            eyebrow="The Houses"
+            title="Brands A - Z"
+            subtitle="Filter by letter to discover our curated roster of fragrance houses."
+          />
+          <div className="mt-12">
+            <BrandAZ />
+          </div>
         </Container>
       </section>
       <Testimonials />

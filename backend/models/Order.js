@@ -97,6 +97,31 @@ const orderSchema = new mongoose.Schema(
       required: true,
       min: [0, "Total amount cannot be negative"],
     },
+    paymentId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    paymentMethod: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    paymentGateway: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    paymentOrderId: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    paymentSignature: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     status: {
       type: String,
       enum: ORDER_STATUSES,

@@ -26,37 +26,38 @@ export const BrandAZ = memo(function BrandAZ() {
 
   return (
     <div>
-      <div className="flex flex-wrap gap-1 justify-center border-y border-border py-6">
-        {alphabet.map((currentLetter) => {
-          const has = available.has(currentLetter);
-          const active = letter === currentLetter;
-          return (
-            <button
-              key={currentLetter}
-              disabled={!has}
-              onClick={() => setLetter(active ? null : currentLetter)}
-              className={`w-9 h-9 text-xs tracking-widest transition-colors rounded-lg ${
-                active
-                  ? "bg-navy text-beige"
-                  : has
-                    ? "text-navy hover:text-gold"
-                    : "text-navy/20 cursor-not-allowed"
-              }`}
-            >
-              {currentLetter}
-            </button>
-          );
-        })}
+      <div className="flex flex-wrap justify-center gap-1 border-y border-border py-6">
+          {alphabet.map((currentLetter) => {
+            const has = available.has(currentLetter);
+            const active = letter === currentLetter;
+            return (
+              <button
+                key={currentLetter}
+                disabled={!has}
+                onClick={() => setLetter(active ? null : currentLetter)}
+                className={`h-9 w-9 rounded-lg text-xs tracking-widest transition duration-300 ease-in-out ${
+                  active
+                    ? "bg-navy text-beige"
+                    : has
+                      ? "text-navy hover:text-gold"
+                      : "text-navy/20 cursor-not-allowed"
+                }`}
+              >
+                {currentLetter}
+              </button>
+            );
+          })}
       </div>
-      <motion.div layout className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+
+      <motion.div layout className="mt-12 grid grid-cols-2 gap-x-6 gap-y-4 md:grid-cols-4">
         {filtered.map((brand) => (
           <Link
             key={brand}
             to="/brand/$brand"
             params={{ brand: brand.toLowerCase() }}
-            className="group py-4 border-b border-border hover:border-navy transition-colors"
+            className="group border-b border-border py-4 transition duration-300 ease-in-out hover:border-navy"
           >
-            <span className="font-display text-2xl text-navy group-hover:text-gold transition-colors">
+            <span className="font-display text-2xl text-navy transition duration-300 ease-in-out group-hover:text-gold">
               {brand}
             </span>
           </Link>

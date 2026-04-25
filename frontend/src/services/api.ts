@@ -9,6 +9,10 @@ const BASE = (
   (import.meta.env.VITE_API_BASE_URL as string | undefined) || "http://localhost:5000/api"
 ).replace(/\/$/, "");
 const TOKEN_KEY = "purefumes_admin_token";
+const CATALOG_CACHE_TTL_MS = 30 * 1000;
+const CATALOG_CACHE_MAX_KEYS = 100;
+const catalogResponseCache = new Map<string, CatalogCacheEntry>();
+const inflightCatalogRequests = new Map<string, Promise<unknown>>();
 
 const API_ORIGIN = (() => {
   try {
@@ -22,6 +26,11 @@ type ApiEnvelope<T> = {
   success: boolean;
   data: T;
   message?: string;
+};
+
+type CatalogCacheEntry = {
+  createdAt: number;
+  data: unknown;
 };
 
 type PaginatedProducts = {
@@ -80,6 +89,11 @@ export type Order = {
   size?: string;
   price?: number;
   isSeen?: boolean;
+  paymentId?: string;
+  paymentMethod?: string;
+  paymentGateway?: string;
+  paymentOrderId?: string;
+  paymentSignature?: string;
 };
 
 type PaginatedOrders = {
@@ -94,12 +108,23 @@ type PaginatedOrders = {
 
 export type LoginResponse = { token: string };
 
+type RazorpayConfig = {
+  keyId: string;
+};
+
 export type CreateOrderInput = {
   customerName: string;
   phone: string;
   address: string;
   items: Array<{ productId: string; quantity: number; size?: string }>;
+  paymentId?: string;
+  paymentMethod?: string;
+  paymentGateway?: string;
+  paymentOrderId?: string;
+  paymentSignature?: string;
 };
+
+let cachedRazorpayKey = "";
 
 const emitDataEvent = (name: string) => {
   if (typeof window !== "undefined") {
@@ -131,6 +156,45 @@ const queryString = (params: ProductListParams = {}) => {
 
   const qs = search.toString();
   return qs ? `?${qs}` : "";
+};
+
+const isCatalogPath = (path: string) =>
+  path.startsWith("/products") || path.startsWith("/categories");
+
+const canCacheCatalogRequest = (method: string, path: string) =>
+  method === "GET" && isCatalogPath(path);
+
+const getCatalogCacheKey = (method: string, path: string, token: string | null) =>
+  `${method}:${token ? "auth" : "public"}:${path}`;
+
+const getCatalogCacheEntry = (key: string) => catalogResponseCache.get(key) ?? null;
+
+const isFreshCatalogEntry = (entry: CatalogCacheEntry) =>
+  Date.now() - entry.createdAt < CATALOG_CACHE_TTL_MS;
+
+const setCatalogCacheEntry = (key: string, data: unknown) => {
+  if (catalogResponseCache.size >= CATALOG_CACHE_MAX_KEYS) {
+    const oldestKey = catalogResponseCache.keys().next().value;
+
+    if (oldestKey) {
+      catalogResponseCache.delete(oldestKey);
+      inflightCatalogRequests.delete(oldestKey);
+    }
+  }
+
+  catalogResponseCache.set(key, {
+    createdAt: Date.now(),
+    data,
+  });
+};
+
+const clearCatalogCache = (pathPrefix: string) => {
+  Array.from(catalogResponseCache.keys()).forEach((key) => {
+    if (key.includes(`:${pathPrefix}`)) {
+      catalogResponseCache.delete(key);
+      inflightCatalogRequests.delete(key);
+    }
+  });
 };
 
 const isCategory = (value: unknown): value is Product["category"] =>
@@ -246,6 +310,11 @@ const normalizeOrder = (order: Order): Order => ({
   size: order.size ?? order.items?.[0]?.size ?? "",
   price: order.price ?? order.items?.[0]?.price ?? order.totalAmount,
   isSeen: Boolean(order.isSeen),
+  paymentId: order.paymentId ?? "",
+  paymentMethod: order.paymentMethod ?? "",
+  paymentGateway: order.paymentGateway ?? "",
+  paymentOrderId: order.paymentOrderId ?? "",
+  paymentSignature: order.paymentSignature ?? "",
 });
 
 async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -253,7 +322,22 @@ async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const token = auth.getToken();
   const headers = new Headers(init.headers);
-  const method = init.method || "GET";
+  const method = (init.method || "GET").toUpperCase();
+  const cacheableCatalogRequest = canCacheCatalogRequest(method, path);
+  const catalogCacheKey = cacheableCatalogRequest ? getCatalogCacheKey(method, path, token) : "";
+  const cachedCatalogEntry = cacheableCatalogRequest ? getCatalogCacheEntry(catalogCacheKey) : null;
+
+  if (cachedCatalogEntry && isFreshCatalogEntry(cachedCatalogEntry)) {
+    return cachedCatalogEntry.data as T;
+  }
+
+  if (cacheableCatalogRequest) {
+    const inflightRequest = inflightCatalogRequests.get(catalogCacheKey);
+
+    if (inflightRequest) {
+      return inflightRequest as Promise<T>;
+    }
+  }
 
   if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
@@ -267,23 +351,46 @@ async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
     console.debug(`[API] ${method} ${BASE}${path}`);
   }
 
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    cache: "no-store",
-    headers,
-  });
+  const request = (async () => {
+    const res = await fetch(`${BASE}${path}`, {
+      ...init,
+      cache: init.cache ?? (cacheableCatalogRequest ? "default" : "no-store"),
+      headers,
+    });
 
-  const payload = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+    const payload = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
 
-  if (!res.ok || payload?.success === false) {
-    throw new Error(payload?.message || `${res.status} ${res.statusText}`);
+    if (!res.ok || payload?.success === false) {
+      throw new Error(payload?.message || `${res.status} ${res.statusText}`);
+    }
+
+    const data =
+      payload && typeof payload === "object" && "data" in payload ? payload.data : (payload as T);
+
+    if (cacheableCatalogRequest) {
+      setCatalogCacheEntry(catalogCacheKey, data);
+    }
+
+    return data as T;
+  })();
+
+  if (cacheableCatalogRequest) {
+    inflightCatalogRequests.set(catalogCacheKey, request as Promise<unknown>);
   }
 
-  if (payload && typeof payload === "object" && "data" in payload) {
-    return payload.data;
-  }
+  try {
+    return await request;
+  } catch (error) {
+    if (cachedCatalogEntry) {
+      return cachedCatalogEntry.data as T;
+    }
 
-  return payload as T;
+    throw error;
+  } finally {
+    if (cacheableCatalogRequest) {
+      inflightCatalogRequests.delete(catalogCacheKey);
+    }
+  }
 }
 
 export const productsApi = {
@@ -296,25 +403,43 @@ export const productsApi = {
     const product = await http<ProductPayload>(`/products/${id}`);
     return normalizeProduct(product);
   },
-  create: async (product: Omit<Product, "id">): Promise<Product> =>
-    normalizeProduct(
-      await http<ProductPayload>("/products", { method: "POST", body: JSON.stringify(product) }),
-    ),
-  createWithImages: async (formData: FormData): Promise<Product> =>
-    normalizeProduct(await http<ProductPayload>("/products", { method: "POST", body: formData })),
-  update: async (id: string, product: Partial<Product>): Promise<Product> =>
-    normalizeProduct(
-      await http<ProductPayload>(`/products/${id}`, {
-        method: "PUT",
-        body: JSON.stringify(product),
-      }),
-    ),
-  updateWithImages: async (id: string, formData: FormData): Promise<Product> =>
-    normalizeProduct(
-      await http<ProductPayload>(`/products/${id}`, { method: "PUT", body: formData }),
-    ),
+  create: async (product: Omit<Product, "id">): Promise<Product> => {
+    const createdProduct = await http<ProductPayload>("/products", {
+      method: "POST",
+      body: JSON.stringify(product),
+    });
+    clearCatalogCache("/products");
+    clearCatalogCache("/categories");
+    return normalizeProduct(createdProduct);
+  },
+  createWithImages: async (formData: FormData): Promise<Product> => {
+    const createdProduct = await http<ProductPayload>("/products", { method: "POST", body: formData });
+    clearCatalogCache("/products");
+    clearCatalogCache("/categories");
+    return normalizeProduct(createdProduct);
+  },
+  update: async (id: string, product: Partial<Product>): Promise<Product> => {
+    const updatedProduct = await http<ProductPayload>(`/products/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(product),
+    });
+    clearCatalogCache("/products");
+    clearCatalogCache("/categories");
+    return normalizeProduct(updatedProduct);
+  },
+  updateWithImages: async (id: string, formData: FormData): Promise<Product> => {
+    const updatedProduct = await http<ProductPayload>(`/products/${id}`, {
+      method: "PUT",
+      body: formData,
+    });
+    clearCatalogCache("/products");
+    clearCatalogCache("/categories");
+    return normalizeProduct(updatedProduct);
+  },
   remove: async (id: string): Promise<void> => {
     await http<{ id: string }>(`/products/${id}`, { method: "DELETE" });
+    clearCatalogCache("/products");
+    clearCatalogCache("/categories");
   },
 };
 
@@ -353,6 +478,18 @@ export const authApi = {
     return response;
   },
   logout: () => auth.clear(),
+};
+
+export const paymentsApi = {
+  getRazorpayKey: async (): Promise<string> => {
+    if (cachedRazorpayKey) {
+      return cachedRazorpayKey;
+    }
+
+    const data = await http<RazorpayConfig>("/payments/razorpay/config");
+    cachedRazorpayKey = String(data.keyId || "").trim();
+    return cachedRazorpayKey;
+  },
 };
 
 export const isUsingMock = false;

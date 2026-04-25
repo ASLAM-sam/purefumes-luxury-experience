@@ -25,14 +25,14 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
   }, [products]);
 
   return (
-    <section id="featured" className="py-32 bg-beige/30">
+    <section id="featured" className="bg-beige/30 py-16 md:py-20">
       <Container>
         <SectionTitle
           eyebrow="The Collection"
           title="Featured Fragrances"
           subtitle="One signature scent from every house we carry."
         />
-        <div className="mt-16 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-16">
+        <div className="mt-12 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
           {featured.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound, useNavigate } from "@tanstack/react-router";
 import { useState, useMemo, useCallback, useEffect } from "react";
-import { motion } from "framer-motion";
-import { Clock, Wind, ShoppingBag, Heart, ChevronLeft } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Clock, Wind, ShoppingBag, Heart, ChevronLeft, Eye } from "lucide-react";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { Container } from "@/components/common/Container";
 import { Button } from "@/components/common/Button";
@@ -44,6 +44,7 @@ function ProductPage() {
   const { addNotification } = useNotification();
   const nav = useNavigate();
   const [size, setSize] = useState(product.sizes[0]);
+  const [viewers, setViewers] = useState(10);
   const galleryImages = useMemo(
     () => (product.images?.length ? product.images : [product.image]).filter(Boolean),
     [product.image, product.images],
@@ -54,6 +55,26 @@ function ProductPage() {
     setSize(product.sizes[0]);
     setMainImage(galleryImages[0] || "");
   }, [galleryImages, product]);
+
+  useEffect(() => {
+    let timeoutId: number | null = null;
+
+    const scheduleNext = () => {
+      timeoutId = window.setTimeout(() => {
+        setViewers(Math.floor(Math.random() * 21) + 5);
+        scheduleNext();
+      }, Math.floor(Math.random() * 5000) + 5000);
+    };
+
+    setViewers(Math.floor(Math.random() * 21) + 5);
+    scheduleNext();
+
+    return () => {
+      if (timeoutId) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, []);
 
   const savings = useMemo(() => {
     if (!product.originalPrice) return 0;
@@ -69,6 +90,16 @@ function ProductPage() {
     addToCart(product, size);
     nav({ to: "/cart" });
   }, [addToCart, nav, product, size]);
+
+  const handleBuyNow = useCallback((currentProduct: typeof product) => {
+    nav({
+      to: "/checkout",
+      state: {
+        buyNowProduct: currentProduct,
+        buyNowSize: size,
+      },
+    });
+  }, [nav, size]);
 
   return (
     <SiteShell>
@@ -256,7 +287,7 @@ function ProductPage() {
                     <Heart className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <Button
                     onClick={onAddToCart}
                     disabled={product.stock <= 0}
@@ -272,6 +303,29 @@ function ProductPage() {
                   >
                     View Cart
                   </Button>
+                </div>
+                <Button
+                  onClick={() => handleBuyNow(product)}
+                  disabled={product.stock <= 0}
+                  className="mt-3 w-full !rounded-full !bg-gold px-6 py-3 !font-semibold !tracking-[0.26em] !text-navy hover:!opacity-95"
+                >
+                  <ShoppingBag className="h-4 w-4 mr-2" /> Buy It Now
+                </Button>
+                <div className="mt-4 flex items-center gap-2 text-sm text-beige/70" aria-live="polite">
+                  <Eye className="h-4 w-4 text-gold" />
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={viewers}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.22, ease: "easeOut" }}
+                      className="inline-flex items-center gap-1"
+                    >
+                      <span className="font-semibold text-gold">{viewers}</span>
+                      customers are viewing this product
+                    </motion.span>
+                  </AnimatePresence>
                 </div>
               </section>
             </motion.div>

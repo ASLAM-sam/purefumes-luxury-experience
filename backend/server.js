@@ -9,12 +9,13 @@ import mongoSanitize from "express-mongo-sanitize";
 import mongoose from "mongoose";
 import morgan from "morgan";
 import connectDB from "./config/db.js";
-import { apiLimiter } from "./middlewares/rateLimiter.js";
+import { apiLimiter, catalogLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler, notFound } from "./middlewares/errorMiddleware.js";
 import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import paymentRoutes from "./routes/paymentRoutes.js";
 
 dotenv.config();
 
@@ -68,11 +69,18 @@ app.use(
 );
 app.use(compression());
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
-app.use("/api", (_req, res, next) => {
-  res.set("Cache-Control", "no-store");
+app.use("/api", (req, res, next) => {
+  const isCatalogRead =
+    req.method === "GET" &&
+    (req.path.startsWith("/products") || req.path.startsWith("/categories"));
+
+  res.set(
+    "Cache-Control",
+    isCatalogRead ? "public, max-age=30, stale-while-revalidate=120" : "no-store",
+  );
   next();
 });
-app.use(apiLimiter);
+app.use("/api", apiLimiter);
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(mongoSanitize({ replaceWith: "_" }));
@@ -91,9 +99,10 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
-app.use("/api/products", productRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/products", catalogLimiter, productRoutes);
 app.use("/api/orders", orderRoutes);
-app.use("/api/categories", categoryRoutes);
+app.use("/api/categories", catalogLimiter, categoryRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

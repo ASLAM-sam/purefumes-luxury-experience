@@ -28,23 +28,22 @@
 }
 
 :root {
-  /* Luxury palette: navy #07203F, beige #EBDED4, off-white #F8F5F2 */
-  --background: oklch(0.97 0.006 60);          /* #F8F5F2 */
-  --foreground: oklch(0.2 0.04 255);           /* near navy text */
-  --navy: oklch(0.22 0.06 255);                /* #07203F */
-  --beige: oklch(0.91 0.015 60);               /* #EBDED4 */
-  --ink: oklch(0.22 0.06 255);                 /* navy alias */
-  --bone: oklch(0.94 0.012 60);
-  --gold: oklch(0.7 0.12 80);                  /* #C9A14A */
-  --gold-soft: oklch(0.78 0.09 85);
-  --muted: oklch(0.93 0.012 60);
-  --muted-foreground: oklch(0.45 0.03 255);
-  --border: oklch(0.85 0.015 60);
-  --card: oklch(0.99 0.004 60);
-  --gradient-gold: linear-gradient(135deg, oklch(0.78 0.1 85), oklch(0.65 0.13 75));
-  --gradient-navy: linear-gradient(135deg, oklch(0.25 0.06 255), oklch(0.18 0.07 255));
-  --shadow-luxe: 0 30px 80px -20px oklch(0.22 0.06 255 / 0.18);
-  --shadow-soft: 0 8px 30px -10px oklch(0.22 0.06 255 / 0.12);
+  --background: #f7f3ef;
+  --foreground: #102842;
+  --navy: #07203f;
+  --beige: #ebded4;
+  --ink: #102842;
+  --bone: #fdf9f5;
+  --gold: #c8a96a;
+  --gold-soft: #d9bf90;
+  --muted: #f1e7de;
+  --muted-foreground: #687587;
+  --border: rgba(7, 32, 63, 0.12);
+  --card: rgba(255, 255, 255, 0.78);
+  --gradient-gold: linear-gradient(135deg, #dbc38f 0%, #c8a96a 46%, #b18b4d 100%);
+  --gradient-navy: linear-gradient(135deg, #0d2b53 0%, #07203f 56%, #05162d 100%);
+  --shadow-luxe: 0 28px 80px -24px rgba(7, 32, 63, 0.32);
+  --shadow-soft: 0 20px 45px -28px rgba(7, 32, 63, 0.28);
 }
 
 @layer base {
@@ -52,6 +51,9 @@
   html { scroll-behavior: smooth; }
   body {
     background-color: var(--color-background);
+    background-image:
+      radial-gradient(circle at top, rgba(200, 169, 106, 0.1), transparent 34%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0));
     color: var(--color-foreground);
     font-family: var(--font-body);
     font-weight: 400;
@@ -80,7 +82,7 @@
   .underline-slide::after {
     content: "";
     position: absolute;
-    left: 0; bottom: -4px;
+    left: 0; bottom: -6px;
     width: 100%; height: 1px;
     background: var(--gold);
     transform: scaleX(0);
@@ -90,5 +92,70 @@
   .underline-slide:hover::after { transform: scaleX(1); transform-origin: left; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-  .glass { background: color-mix(in oklab, var(--card) 70%, transparent); backdrop-filter: blur(14px); }
+  .glass {
+    background: linear-gradient(180deg, rgba(7, 32, 63, 0.82), rgba(7, 32, 63, 0.72));
+    backdrop-filter: blur(18px);
+  }
+  .surface-card {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.76));
+    backdrop-filter: blur(14px);
+  }
+  .gold-glow {
+    box-shadow:
+      0 16px 36px -20px rgba(200, 169, 106, 0.95),
+      0 0 0 1px rgba(200, 169, 106, 0.2);
+  }
+  .hero-orb {
+    background:
+      radial-gradient(circle at center, rgba(200, 169, 106, 0.32), transparent 58%);
+    filter: blur(16px);
+  }
+  .animate-fade-up {
+    animation: fade-up 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .animate-fade-up-delay-1 {
+    animation: fade-up 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both;
+  }
+  .animate-fade-up-delay-2 {
+    animation: fade-up 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
+  }
+  .animate-gold-pulse {
+    animation: gold-pulse 2.8s ease-in-out infinite;
+  }
+  .animate-float-soft {
+    animation: float-soft 6s ease-in-out infinite;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 28px, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes gold-pulse {
+  0%, 100% {
+    box-shadow:
+      0 16px 36px -20px rgba(200, 169, 106, 0.95),
+      0 0 0 1px rgba(200, 169, 106, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 22px 46px -18px rgba(200, 169, 106, 0.98),
+      0 0 0 1px rgba(200, 169, 106, 0.3);
+  }
+}
+
+@keyframes float-soft {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -10px, 0);
+  }
 }

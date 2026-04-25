@@ -47,6 +47,11 @@ const createOrderValidation = [
     .optional({ values: "falsy" })
     .trim()
     .isLength({ max: 80 }),
+  body("paymentId").optional({ values: "falsy" }).trim().isLength({ max: 200 }),
+  body("paymentMethod").optional({ values: "falsy" }).trim().isLength({ max: 80 }),
+  body("paymentGateway").optional({ values: "falsy" }).trim().isLength({ max: 80 }),
+  body("paymentOrderId").optional({ values: "falsy" }).trim().isLength({ max: 200 }),
+  body("paymentSignature").optional({ values: "falsy" }).trim().isLength({ max: 300 }),
 ];
 
 const listOrdersValidation = [

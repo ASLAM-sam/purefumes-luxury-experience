@@ -63,6 +63,11 @@ const normalizeOrderResponse = (order) => {
     size: raw.size || firstItem.size || "",
     price: Number(raw.price || firstItem.price || raw.totalAmount || 0),
     totalAmount: Number(raw.totalAmount || raw.price || firstItem.price || 0),
+    paymentId: raw.paymentId || "",
+    paymentMethod: raw.paymentMethod || "",
+    paymentGateway: raw.paymentGateway || "",
+    paymentOrderId: raw.paymentOrderId || "",
+    paymentSignature: raw.paymentSignature || "",
     items: Array.isArray(raw.items) ? raw.items : [],
   };
 };
@@ -134,6 +139,11 @@ export const placeOrder = asyncHandler(async (req, res) => {
             price: preparedItems[0]?.price || totalAmount,
             items: preparedItems,
             totalAmount,
+            paymentId: String(req.body.paymentId || "").trim(),
+            paymentMethod: String(req.body.paymentMethod || "").trim(),
+            paymentGateway: String(req.body.paymentGateway || "").trim(),
+            paymentOrderId: String(req.body.paymentOrderId || "").trim(),
+            paymentSignature: String(req.body.paymentSignature || "").trim(),
             status: "Pending",
           },
         ],

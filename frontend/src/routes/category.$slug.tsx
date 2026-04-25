@@ -45,16 +45,7 @@ function CategoryPage() {
 
         if (!isActive) return;
 
-        if (categoryProducts.length > 0) {
-          setProducts(categoryProducts);
-          return;
-        }
-
-        const allProducts = await productsApi.list({ limit: 100 });
-
-        if (!isActive) return;
-
-        setProducts(allProducts.filter((product) => product.category === category));
+        setProducts(categoryProducts);
       } catch (err) {
         if (!isActive) return;
 
