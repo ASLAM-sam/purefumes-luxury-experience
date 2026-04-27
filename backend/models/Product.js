@@ -46,6 +46,12 @@ const productSchema = new mongoose.Schema(
       maxlength: [120, "Brand cannot exceed 120 characters"],
       index: true,
     },
+    brandId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Brand",
+      default: null,
+      index: true,
+    },
     category: {
       type: String,
       required: [true, "Product category is required"],
@@ -83,12 +89,13 @@ const productSchema = new mongoose.Schema(
           maxlength: [1000, "Image URL cannot exceed 1000 characters"],
         },
       ],
-      required: [true, "Exactly 3 images required"],
+      default: [],
       validate: {
         validator(images) {
-          return Array.isArray(images) && images.filter(Boolean).length === 3;
+          const total = Array.isArray(images) ? images.filter(Boolean).length : 0;
+          return total >= 0 && total <= 20;
         },
-        message: "Exactly 3 images required",
+        message: "Products can have up to 20 images",
       },
     },
 
@@ -121,6 +128,7 @@ const productSchema = new mongoose.Schema(
 
 productSchema.index({ name: "text", brand: "text", description: "text" });
 productSchema.index({ category: 1, brand: 1 });
+productSchema.index({ brandId: 1, category: 1 });
 productSchema.index({ category: 1, price: 1 });
 productSchema.index({ stock: 1 });
 

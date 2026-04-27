@@ -13,20 +13,22 @@ export const ProductCard = memo(function ProductCard({ product }: { product: Pro
       viewport={{ once: true, margin: "-50px" }}
       transition={{ duration: 0.6, ease: "easeOut" }}
     >
-      <Link
-        to="/product/$id"
-        params={{ id: product.id }}
-        className="group block text-left"
-      >
+      <Link to="/product/$id" params={{ id: product.id }} className="group block text-left">
         <div className="relative aspect-[3/4] overflow-hidden rounded-xl bg-beige shadow-soft transition duration-300 ease-in-out group-hover:-translate-y-1 group-hover:shadow-lg">
-          <img
-            src={product.image}
-            alt={product.name}
-            loading="lazy"
-            width={800}
-            height={1024}
-            className="h-full w-full object-cover transition duration-300 ease-in-out group-hover:scale-105"
-          />
+          {product.image ? (
+            <img
+              src={product.image}
+              alt={product.name}
+              loading="lazy"
+              width={800}
+              height={1024}
+              className="h-full w-full object-cover transition duration-300 ease-in-out group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.88),_rgba(241,236,230,0.88)_58%,_rgba(234,223,210,0.98))] text-6xl font-display text-navy/35">
+              {product.name.trim().charAt(0).toUpperCase() || "P"}
+            </div>
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-navy/45 via-transparent to-transparent opacity-70" />
           <span className="absolute left-4 top-4 rounded-full bg-navy/80 px-3 py-1 text-[0.6rem] uppercase tracking-[0.3em] text-beige">
             {product.category}

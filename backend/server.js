@@ -14,6 +14,7 @@ import { errorHandler, notFound } from "./middlewares/errorMiddleware.js";
 import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
+import brandRoutes from "./routes/brandRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 
@@ -72,7 +73,9 @@ app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 app.use("/api", (req, res, next) => {
   const isCatalogRead =
     req.method === "GET" &&
-    (req.path.startsWith("/products") || req.path.startsWith("/categories"));
+    (req.path.startsWith("/products") ||
+      req.path.startsWith("/brands") ||
+      req.path.startsWith("/categories"));
 
   res.set(
     "Cache-Control",
@@ -101,6 +104,7 @@ app.get("/api/health", (_req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/products", catalogLimiter, productRoutes);
+app.use("/api/brands", catalogLimiter, brandRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/categories", catalogLimiter, categoryRoutes);
 

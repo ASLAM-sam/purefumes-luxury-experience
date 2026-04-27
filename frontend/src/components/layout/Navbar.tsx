@@ -4,8 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, Search, ShoppingBag, X } from "lucide-react";
 import { Container } from "@/components/common/Container";
 import { SearchBar } from "@/components/search/SearchBar";
-import { groupBrandsByLetter } from "@/data/brands";
-import { productsApi } from "@/services/api";
+import type { Brand } from "@/data/brands";
+import { brandsApi } from "@/services/api";
 import { useApp } from "@/context/AppContext";
 
 const categories = ["Middle Eastern", "Designer", "Niche"] as const;
@@ -20,19 +20,26 @@ export const Navbar = memo(function Navbar() {
   const [openMenu, setOpenMenu] = useState<"cat" | "brand" | null>(null);
   const [mobile, setMobile] = useState(false);
   const [search, setSearch] = useState(false);
-  const [brands, setBrands] = useState<string[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
 
   const handleEnter = useCallback((m: "cat" | "brand") => setOpenMenu(m), []);
   const handleLeave = useCallback(() => setOpenMenu(null), []);
-  const brandsByLetter = useMemo(() => groupBrandsByLetter(brands), [brands]);
+  const brandsByLetter = useMemo(
+    () =>
+      brands.reduce<Record<string, Brand[]>>((acc, brand) => {
+        const letter = (brand.fallbackLetter || brand.name.charAt(0) || "#").toUpperCase();
+        (acc[letter] ||= []).push(brand);
+        return acc;
+      }, {}),
+    [brands],
+  );
 
   useEffect(() => {
-    productsApi
+    brandsApi
       .list()
-      .then((products) => {
-        const nextBrands = Array.from(new Set(products.map((product) => product.brand))).sort();
-        setBrands(nextBrands);
-      })
+      .then((nextBrands) =>
+        setBrands([...nextBrands].sort((a, b) => a.name.localeCompare(b.name))),
+      )
       .catch(() => setBrands([]));
   }, []);
 
@@ -103,7 +110,7 @@ export const Navbar = memo(function Navbar() {
                 type="button"
                 className="underline-slide text-[0.72rem] font-medium tracking-[0.36em] text-beige/80 transition-colors duration-300 ease-in-out hover:text-gold"
               >
-                Brands A-Z
+                Brands
               </button>
               <AnimatePresence>
                 {openMenu === "brand" && (
@@ -115,19 +122,25 @@ export const Navbar = memo(function Navbar() {
                     transition={{ duration: 0.2 }}
                     className="absolute right-0 top-full mt-5 max-h-96 w-[22rem] overflow-y-auto rounded-[1.75rem] border border-beige/10 bg-[#0b264a]/95 p-5 text-beige shadow-[0_28px_60px_-24px_rgba(0,0,0,0.78)] backdrop-blur-xl no-scrollbar"
                   >
+                    <Link
+                      to="/brands"
+                      className="mb-4 block rounded-2xl border border-beige/10 bg-beige/5 px-4 py-3 text-[0.72rem] tracking-[0.28em] text-beige/85 transition duration-300 ease-in-out hover:border-gold/40 hover:text-gold"
+                    >
+                      View All Brands
+                    </Link>
                     {Object.keys(brandsByLetter)
                       .sort()
                       .map((letter) => (
                         <div key={letter} className="mb-4 last:mb-0">
                           <p className="mb-2 text-[0.62rem] font-semibold tracking-[0.4em] text-gold/90">{letter}</p>
-                          {brandsByLetter[letter].map((b) => (
+                          {brandsByLetter[letter].map((brand) => (
                             <Link
-                              key={b}
-                              to="/brand/$brand"
-                              params={{ brand: b.toLowerCase() }}
+                              key={brand.id}
+                              to="/brand/$brandId"
+                              params={{ brandId: brand.id }}
                               className="block rounded-xl px-2 py-2 text-[0.72rem] tracking-[0.24em] text-beige/72 transition duration-300 ease-in-out hover:bg-beige/10 hover:text-gold"
                             >
-                              {b}
+                              {brand.name}
                             </Link>
                           ))}
                         </div>
@@ -196,6 +209,13 @@ export const Navbar = memo(function Navbar() {
                     {c}
                   </Link>
                 ))}
+                <Link
+                  to="/brands"
+                  onClick={() => setMobile(false)}
+                  className="block rounded-2xl px-4 py-3 text-[0.72rem] tracking-[0.32em] text-beige/70 transition duration-300 ease-in-out hover:bg-beige/10 hover:text-gold"
+                >
+                  Brands
+                </Link>
               </div>
             </motion.div>
           )}

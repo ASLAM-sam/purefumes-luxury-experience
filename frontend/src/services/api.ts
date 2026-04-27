@@ -3,6 +3,7 @@
  * Product, category, and order data must come from MongoDB through VITE_API_BASE_URL.
  */
 
+import type { Brand, BrandPreviewProduct } from "@/data/brands";
 import type { Accord, BestTime, Product } from "@/data/products";
 
 const BASE = (
@@ -48,10 +49,15 @@ type ProductListParams = {
   limit?: number;
   sort?: string;
   category?: Product["category"];
+  brandId?: string;
   brand?: string;
   search?: string;
   minPrice?: number;
   maxPrice?: number;
+};
+
+type BrandListParams = {
+  category?: Brand["category"];
 };
 
 type ProductPayload = Partial<Product> & {
@@ -61,6 +67,70 @@ type ProductPayload = Partial<Product> & {
   season?: Product["seasons"];
   timeOfDay?: Product["usage"] | string;
   accords?: Array<Partial<Accord> & { color?: string; intensity?: number }>;
+};
+
+type BrandPayload = Partial<Brand> & {
+  _id?: string;
+  id?: string;
+};
+
+export type BulkBrandImportRow = {
+  rowNumber?: number;
+  name: string;
+  category: string;
+  logo?: string;
+};
+
+export type BulkBrandImportIssue = {
+  rowNumber: number;
+  name: string;
+  category: string;
+  logo: string;
+  status: "skipped" | "failed";
+  reason: string;
+};
+
+export type BulkBrandImportResult = {
+  totalRows: number;
+  createdCount: number;
+  skippedCount: number;
+  failedCount: number;
+  createdBrands: Brand[];
+  skippedRows: BulkBrandImportIssue[];
+  failedRows: BulkBrandImportIssue[];
+  batchSize: number;
+};
+
+export type BulkProductImportRow = {
+  rowNumber?: number;
+  name: string;
+  brand: string;
+  price: string | number;
+  stock: string | number;
+  description?: string;
+};
+
+export type BulkProductImportIssue = {
+  rowNumber: number;
+  name: string;
+  brand: string;
+  category: string;
+  price: string | number;
+  stock: string | number;
+  description: string;
+  status: "skipped" | "failed";
+  reason: string;
+};
+
+export type BulkProductImportResult = {
+  totalRows: number;
+  createdCount: number;
+  skippedCount: number;
+  failedCount: number;
+  createdProducts: Product[];
+  skippedRows: BulkProductImportIssue[];
+  failedRows: BulkProductImportIssue[];
+  batchSize: number;
 };
 
 export type OrderItem = {
@@ -145,7 +215,7 @@ const requireBackend = () => {
   }
 };
 
-const queryString = (params: ProductListParams = {}) => {
+const queryString = (params: Record<string, unknown> = {}) => {
   const search = new URLSearchParams();
 
   Object.entries(params).forEach(([key, value]) => {
@@ -159,7 +229,7 @@ const queryString = (params: ProductListParams = {}) => {
 };
 
 const isCatalogPath = (path: string) =>
-  path.startsWith("/products") || path.startsWith("/categories");
+  path.startsWith("/products") || path.startsWith("/brands") || path.startsWith("/categories");
 
 const canCacheCatalogRequest = (method: string, path: string) =>
   method === "GET" && isCatalogPath(path);
@@ -199,6 +269,9 @@ const clearCatalogCache = (pathPrefix: string) => {
 
 const isCategory = (value: unknown): value is Product["category"] =>
   value === "Middle Eastern" || value === "Designer" || value === "Niche";
+
+const isBrandCategory = (value: unknown): value is Brand["category"] =>
+  value === "middle-eastern" || value === "designer" || value === "niche";
 
 const isUsage = (value: unknown): value is Product["usage"] =>
   value === "Day" || value === "Night" || value === "Day & Night";
@@ -249,6 +322,36 @@ const resolveImageUrl = (value: unknown) => {
   return image.startsWith("/") ? `${API_ORIGIN}${image}` : image;
 };
 
+const normalizeBrand = (brand: BrandPayload): Brand => ({
+  _id: brand._id,
+  id: String(brand.id || brand._id || ""),
+  name: String(brand.name || ""),
+  logo: resolveImageUrl(brand.logo || ""),
+  fallbackLetter: String(
+    brand.fallbackLetter || brand.name?.toString()?.trim()?.charAt(0) || "#",
+  ).toUpperCase(),
+  category: isBrandCategory(brand.category) ? brand.category : "designer",
+  productCount: Number.isFinite(Number(brand.productCount)) ? Number(brand.productCount) : 0,
+  previewProducts: Array.isArray(brand.previewProducts)
+    ? brand.previewProducts.map(
+        (product) =>
+          ({
+            _id: product?._id,
+            id: String(product?.id || product?._id || ""),
+            name: String(product?.name || ""),
+            brand: String(product?.brand || ""),
+            brandId: product?.brandId ? String(product.brandId) : null,
+            category: String(product?.category || ""),
+            image: resolveImageUrl(product?.image || ""),
+            images: asStringArray(product?.images).map(resolveImageUrl),
+            price: Number.isFinite(Number(product?.price)) ? Number(product?.price) : 0,
+          }) satisfies BrandPreviewProduct,
+      )
+    : [],
+  createdAt: brand.createdAt,
+  updatedAt: brand.updatedAt,
+});
+
 const normalizeProduct = (product: ProductPayload): Product => {
   const sizes = Array.isArray(product.sizes) ? product.sizes : [];
   const price = Number(product.price ?? sizes[0]?.price ?? 0);
@@ -272,12 +375,19 @@ const normalizeProduct = (product: ProductPayload): Product => {
     : isUsage(product.timeOfDay)
       ? product.timeOfDay
       : "Day & Night";
+  const brandDetails =
+    product.brandDetails && typeof product.brandDetails === "object"
+      ? normalizeBrand(product.brandDetails as BrandPayload)
+      : null;
+  const normalizedBrandId = String(product.brandId || brandDetails?.id || "").trim();
 
   return {
     _id: product._id,
     id: String(product.id || product._id || ""),
     name: String(product.name || ""),
-    brand: String(product.brand || ""),
+    brand: String(product.brand || brandDetails?.name || ""),
+    brandId: normalizedBrandId || null,
+    brandDetails,
     category: isCategory(product.category) ? product.category : "Designer",
     price,
     image,
@@ -361,7 +471,11 @@ async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
     const payload = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
 
     if (!res.ok || payload?.success === false) {
-      throw new Error(payload?.message || `${res.status} ${res.statusText}`);
+      const firstError =
+        Array.isArray((payload as { errors?: Array<{ message?: string }> } | null)?.errors) &&
+        (payload as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
+
+      throw new Error(firstError || payload?.message || `${res.status} ${res.statusText}`);
     }
 
     const data =
@@ -409,14 +523,34 @@ export const productsApi = {
       body: JSON.stringify(product),
     });
     clearCatalogCache("/products");
+    clearCatalogCache("/brands");
     clearCatalogCache("/categories");
     return normalizeProduct(createdProduct);
   },
   createWithImages: async (formData: FormData): Promise<Product> => {
-    const createdProduct = await http<ProductPayload>("/products", { method: "POST", body: formData });
+    const createdProduct = await http<ProductPayload>("/products", {
+      method: "POST",
+      body: formData,
+    });
     clearCatalogCache("/products");
+    clearCatalogCache("/brands");
     clearCatalogCache("/categories");
     return normalizeProduct(createdProduct);
+  },
+  bulkCreate: async (products: BulkProductImportRow[]): Promise<BulkProductImportResult> => {
+    const result = await http<
+      Omit<BulkProductImportResult, "createdProducts"> & { createdProducts: ProductPayload[] }
+    >("/products/bulk", {
+      method: "POST",
+      body: JSON.stringify({ products }),
+    });
+    clearCatalogCache("/products");
+    clearCatalogCache("/brands");
+    clearCatalogCache("/categories");
+    return {
+      ...result,
+      createdProducts: result.createdProducts.map(normalizeProduct),
+    };
   },
   update: async (id: string, product: Partial<Product>): Promise<Product> => {
     const updatedProduct = await http<ProductPayload>(`/products/${id}`, {
@@ -424,6 +558,7 @@ export const productsApi = {
       body: JSON.stringify(product),
     });
     clearCatalogCache("/products");
+    clearCatalogCache("/brands");
     clearCatalogCache("/categories");
     return normalizeProduct(updatedProduct);
   },
@@ -433,13 +568,61 @@ export const productsApi = {
       body: formData,
     });
     clearCatalogCache("/products");
+    clearCatalogCache("/brands");
     clearCatalogCache("/categories");
     return normalizeProduct(updatedProduct);
   },
   remove: async (id: string): Promise<void> => {
     await http<{ id: string }>(`/products/${id}`, { method: "DELETE" });
     clearCatalogCache("/products");
+    clearCatalogCache("/brands");
     clearCatalogCache("/categories");
+  },
+};
+
+export const brandsApi = {
+  list: async (params: BrandListParams = {}): Promise<Brand[]> => {
+    const data = await http<BrandPayload[]>(`/brands${queryString(params)}`);
+    return data.map(normalizeBrand);
+  },
+  get: async (id: string): Promise<Brand | undefined> => {
+    const brand = await http<BrandPayload>(`/brands/${id}`);
+    return normalizeBrand(brand);
+  },
+  createWithLogo: async (formData: FormData): Promise<Brand> => {
+    const createdBrand = await http<BrandPayload>("/brands", {
+      method: "POST",
+      body: formData,
+    });
+    clearCatalogCache("/brands");
+    clearCatalogCache("/products");
+    return normalizeBrand(createdBrand);
+  },
+  updateWithLogo: async (id: string, formData: FormData): Promise<Brand> => {
+    const updatedBrand = await http<BrandPayload>(`/brands/${id}`, {
+      method: "PUT",
+      body: formData,
+    });
+    clearCatalogCache("/brands");
+    clearCatalogCache("/products");
+    return normalizeBrand(updatedBrand);
+  },
+  bulkCreate: async (brands: BulkBrandImportRow[]): Promise<BulkBrandImportResult> => {
+    const result = await http<BulkBrandImportResult>("/brands/bulk", {
+      method: "POST",
+      body: JSON.stringify({ brands }),
+    });
+    clearCatalogCache("/brands");
+    clearCatalogCache("/products");
+    return {
+      ...result,
+      createdBrands: result.createdBrands.map(normalizeBrand),
+    };
+  },
+  remove: async (id: string): Promise<void> => {
+    await http<{ id: string }>(`/brands/${id}`, { method: "DELETE" });
+    clearCatalogCache("/brands");
+    clearCatalogCache("/products");
   },
 };
 

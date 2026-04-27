@@ -1,3 +1,5 @@
+import type { Brand } from "@/data/brands";
+
 export type Size = { size: string; price: number };
 export type Season = "Spring" | "Summer" | "Autumn" | "Winter";
 export type BestTime = "Morning" | "Day" | "Evening" | "Night";
@@ -8,6 +10,8 @@ export type Product = {
   id: string;
   name: string;
   brand: string;
+  brandId?: string | null;
+  brandDetails?: Brand | null;
   category: "Middle Eastern" | "Designer" | "Niche";
   price?: number;
   image: string;

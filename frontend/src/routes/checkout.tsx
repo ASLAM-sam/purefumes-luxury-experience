@@ -89,9 +89,9 @@ const loadRazorpay = () => {
   }
 
   razorpayScriptPromise = new Promise((resolve) => {
-    const existingScript = document.querySelector(`script[src="${RAZORPAY_URL}"]`) as
-      | HTMLScriptElement
-      | null;
+    const existingScript = document.querySelector(
+      `script[src="${RAZORPAY_URL}"]`,
+    ) as HTMLScriptElement | null;
 
     if (existingScript) {
       if (existingScript.dataset.loaded === "true") {
@@ -257,7 +257,8 @@ function CheckoutPage() {
           },
         });
       } catch (ex) {
-        const message = ex instanceof Error ? ex.message : "Order could not be saved after payment.";
+        const message =
+          ex instanceof Error ? ex.message : "Order could not be saved after payment.";
         setLoading(null);
         setError(message);
         addNotification(message, "error");
@@ -397,16 +398,26 @@ function CheckoutPage() {
           <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
             <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:p-8">
               <div className="grid gap-6 md:grid-cols-[8rem_minmax(0,1fr)] md:items-start">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="aspect-square w-full rounded-xl bg-beige object-cover md:w-32"
-                />
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="aspect-square w-full rounded-xl bg-beige object-cover md:w-32"
+                  />
+                ) : (
+                  <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-beige text-3xl font-display text-navy/35 md:w-32">
+                    {product.name.trim().charAt(0).toUpperCase() || "P"}
+                  </div>
+                )}
                 <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">{product.brand}</p>
+                  <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">
+                    {product.brand}
+                  </p>
                   <h2 className="mt-2 font-display text-3xl text-navy">{product.name}</h2>
                   <p className="mt-2 text-sm text-muted-foreground">{size.size}</p>
-                  <p className="mt-4 text-sm leading-7 text-muted-foreground">{product.description}</p>
+                  <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                    {product.description}
+                  </p>
                 </div>
               </div>
 

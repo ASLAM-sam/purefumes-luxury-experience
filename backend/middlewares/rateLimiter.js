@@ -16,6 +16,7 @@ const createLimiter = (options) =>
 const isCatalogReadRequest = (req) =>
   req.method === "GET" &&
   (req.path.startsWith("/products") ||
+    req.path.startsWith("/brands") ||
     req.path.startsWith("/categories") ||
     req.path === "/health");
 

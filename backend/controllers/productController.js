@@ -1,13 +1,20 @@
 import mongoose from "mongoose";
+import Brand from "../models/Brand.js";
 import Product from "../models/Product.js";
 import {
   buildProductFilter,
   buildSort,
   createPaginationMeta,
+  escapeRegex,
   getPagination,
 } from "../utils/apiFeatures.js";
 import { ApiError, asyncHandler } from "../middlewares/errorMiddleware.js";
 import { storeUploadedImage } from "../middlewares/uploadMiddleware.js";
+import {
+  attachBrandDetails,
+  resolveBrandFromProductInput,
+} from "../utils/brandHelpers.js";
+import { bulkImportProducts } from "../services/bulkProductImportService.js";
 
 const PRODUCT_CACHE_TTL_MS = 30 * 1000;
 const PRODUCT_CACHE_MAX_KEYS = 100;
@@ -300,6 +307,92 @@ const validateProductPayload = (
   }
 };
 
+const PRODUCT_TO_BRAND_CATEGORY = {
+  "Middle Eastern": "middle-eastern",
+  Designer: "designer",
+  Niche: "niche",
+};
+
+const syncProductBrandFields = async (
+  payload,
+  body = {},
+  { productCategory } = {},
+) => {
+  const hasBrandField = Object.prototype.hasOwnProperty.call(body, "brand");
+  const hasBrandIdField = Object.prototype.hasOwnProperty.call(body, "brandId");
+
+  if (!hasBrandField && !hasBrandIdField) {
+    return payload;
+  }
+
+  const { brand, clearBrandId } = await resolveBrandFromProductInput({
+    brandId: hasBrandIdField ? body.brandId : undefined,
+    brandName: hasBrandField ? payload.brand : undefined,
+  });
+
+  if (clearBrandId) {
+    payload.brandId = null;
+    return payload;
+  }
+
+  if (brand) {
+    const expectedBrandCategory = PRODUCT_TO_BRAND_CATEGORY[productCategory];
+
+    if (expectedBrandCategory && brand.category !== expectedBrandCategory) {
+      throw new ApiError(
+        400,
+        "Selected brand does not match the product category",
+      );
+    }
+
+    payload.brandId = brand.id;
+    payload.brand = brand.name;
+    return payload;
+  }
+
+  if (hasBrandField) {
+    payload.brandId = null;
+  }
+
+  return payload;
+};
+
+const buildProductQueryFilter = async (query = {}) => {
+  const filter = buildProductFilter(query);
+  const brandId = String(query.brandId || "").trim();
+
+  if (!brandId) {
+    return filter;
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(brandId)) {
+    throw new ApiError(400, "Invalid brand id");
+  }
+
+  const brand = await Brand.findById(brandId).select("name").lean();
+  const brandFilter = brand
+    ? {
+        $or: [
+          { brandId },
+          {
+            brand: {
+              $regex: `^${escapeRegex(String(brand.name || "").trim())}$`,
+              $options: "i",
+            },
+          },
+        ],
+      }
+    : { brandId };
+
+  if (!Object.keys(filter).length) {
+    return brandFilter;
+  }
+
+  return {
+    $and: [filter, brandFilter],
+  };
+};
+
 const normalizeProductResponse = (product) => {
   const raw =
     typeof product?.toObject === "function"
@@ -318,6 +411,7 @@ const normalizeProductResponse = (product) => {
   return {
     ...cleanProduct,
     id,
+    brandId: raw.brandId ? String(raw.brandId) : null,
     image,
     images: [...new Set(images)],
     topNotes: Array.isArray(raw.topNotes) ? raw.topNotes : [],
@@ -351,7 +445,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     return res.json({ success: true, data: cachedPayload });
   }
 
-  const filter = buildProductFilter(req.query);
+  const filter = await buildProductQueryFilter(req.query);
   const sort = buildSort(req.query.sort);
   const shouldPaginate =
     req.query.page !== undefined || req.query.limit !== undefined;
@@ -360,7 +454,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     const products = await Product.find(filter)
       .sort(sort)
       .lean({ virtuals: true });
-    const payload = products.map(normalizeProductResponse);
+    const payload = await attachBrandDetails(products.map(normalizeProductResponse));
 
     setCachedProductList(cacheKey, payload);
     return res.json({ success: true, data: payload });
@@ -378,7 +472,7 @@ export const getProducts = asyncHandler(async (req, res) => {
   ]);
 
   const payload = {
-    products: products.map(normalizeProductResponse),
+    products: await attachBrandDetails(products.map(normalizeProductResponse)),
     pagination: createPaginationMeta({ page, limit, total }),
   };
 
@@ -397,12 +491,17 @@ export const getProductById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Product not found");
   }
 
-  res.json({ success: true, data: normalizeProductResponse(product) });
+  const [payload] = await attachBrandDetails([normalizeProductResponse(product)]);
+
+  res.json({ success: true, data: payload });
 });
 
 export const createProduct = asyncHandler(async (req, res) => {
   const payload = buildProductPayload(req.body);
   await addUploadedImages(payload, req.files);
+  await syncProductBrandFields(payload, req.body, {
+    productCategory: payload.category,
+  });
   validateProductPayload(payload, {
     requireImages: true,
     requireAccords: true,
@@ -410,10 +509,28 @@ export const createProduct = asyncHandler(async (req, res) => {
 
   const product = await Product.create(payload);
   clearProductCache();
+  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
 
-  res
-    .status(201)
-    .json({ success: true, data: normalizeProductResponse(product) });
+  res.status(201).json({ success: true, data: response });
+});
+
+export const bulkCreateProducts = asyncHandler(async (req, res) => {
+  const products = Array.isArray(req.body.products) ? req.body.products : [];
+
+  if (!products.length) {
+    throw new ApiError(422, "At least one product row is required");
+  }
+
+  const result = await bulkImportProducts(products);
+
+  if (result.createdCount > 0) {
+    clearProductCache();
+  }
+
+  res.status(201).json({
+    success: true,
+    data: result,
+  });
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
@@ -421,8 +538,17 @@ export const updateProduct = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid product id");
   }
 
+  const existingProduct = await Product.findById(req.params.id).select("category");
+
+  if (!existingProduct) {
+    throw new ApiError(404, "Product not found");
+  }
+
   const payload = buildProductPayload(req.body, { isUpdate: true });
   await addUploadedImages(payload, req.files);
+  await syncProductBrandFields(payload, req.body, {
+    productCategory: payload.category || existingProduct.category,
+  });
   validateProductPayload(payload);
 
   const product = await Product.findByIdAndUpdate(req.params.id, payload, {
@@ -430,12 +556,10 @@ export const updateProduct = asyncHandler(async (req, res) => {
     runValidators: true,
   });
 
-  if (!product) {
-    throw new ApiError(404, "Product not found");
-  }
-
   clearProductCache();
-  res.json({ success: true, data: normalizeProductResponse(product) });
+  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+
+  res.json({ success: true, data: response });
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
@@ -458,12 +582,13 @@ export const getLowStockProducts = asyncHandler(async (req, res) => {
   const products = await Product.find({ stock: { $lt: threshold } })
     .sort({ stock: 1, name: 1 })
     .lean({ virtuals: true });
+  const payload = await attachBrandDetails(products.map(normalizeProductResponse));
 
   res.json({
     success: true,
     data: {
       threshold,
-      products: products.map(normalizeProductResponse),
+      products: payload,
     },
   });
 });

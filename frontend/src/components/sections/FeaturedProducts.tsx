@@ -18,8 +18,9 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
   const featured = useMemo(() => {
     const seen = new Set<string>();
     return products.filter((product) => {
-      if (seen.has(product.brand)) return false;
-      seen.add(product.brand);
+      const key = product.brandId || product.brand;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
   }, [products]);

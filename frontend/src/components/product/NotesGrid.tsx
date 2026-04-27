@@ -11,21 +11,33 @@ const cols = [
 
 export const NotesGrid = memo(function NotesGrid({ top, middle, base }: Props) {
   const data = { top, middle, base };
+
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
       {cols.map(({ key, label, Icon, color }) => (
         <div key={key} className="rounded-2xl bg-beige/50 p-5 shadow-soft">
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ backgroundColor: color + "33" }}>
-              <Icon className="w-4 h-4" style={{ color }} />
+          <div className="mb-3 flex items-center gap-2">
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-full"
+              style={{ backgroundColor: color + "33" }}
+            >
+              <Icon className="h-4 w-4" style={{ color }} />
             </div>
-            <p className="text-[0.65rem] tracking-[0.25em] uppercase text-navy/70 font-medium">{label}</p>
+            <p className="text-[0.65rem] uppercase tracking-[0.25em] text-navy/70 font-medium">
+              {label}
+            </p>
           </div>
-          <ul className="space-y-1.5">
-            {data[key].map((n) => (
-              <li key={n} className="text-sm text-navy/85">{n}</li>
-            ))}
-          </ul>
+          {data[key].length > 0 ? (
+            <ul className="space-y-1.5">
+              {data[key].map((n) => (
+                <li key={n} className="text-sm text-navy/85">
+                  {n}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-navy/45">Not listed yet</p>
+          )}
         </div>
       ))}
     </div>

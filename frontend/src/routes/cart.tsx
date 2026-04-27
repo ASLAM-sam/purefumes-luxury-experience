@@ -63,11 +63,17 @@ function CartPage() {
                     }}
                     className="grid cursor-pointer gap-4 rounded-lg border border-border bg-card p-4 shadow-soft transition hover:bg-beige/30 sm:grid-cols-[6rem_1fr_auto]"
                   >
-                    <img
-                      src={item.product.image}
-                      alt={item.product.name}
-                      className="aspect-square w-full rounded-lg bg-beige object-cover sm:w-24"
-                    />
+                    {item.product.image ? (
+                      <img
+                        src={item.product.image}
+                        alt={item.product.name}
+                        className="aspect-square w-full rounded-lg bg-beige object-cover sm:w-24"
+                      />
+                    ) : (
+                      <div className="flex aspect-square w-full items-center justify-center rounded-lg bg-beige text-xl font-display text-navy/35 sm:w-24">
+                        {item.product.name.trim().charAt(0).toUpperCase() || "P"}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="text-[0.65rem] uppercase tracking-[0.3em] text-gold">
                         {item.product.brand}

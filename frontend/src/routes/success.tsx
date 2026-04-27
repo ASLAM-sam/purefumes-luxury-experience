@@ -40,20 +40,30 @@ function SuccessPage() {
 
             {product && size ? (
               <div className="mt-10 grid gap-8 md:grid-cols-[8rem_minmax(0,1fr)]">
-                <img
-                  src={product.image}
-                  alt={product.name}
-                  className="aspect-square w-full rounded-xl bg-beige object-cover md:w-32"
-                />
+                {product.image ? (
+                  <img
+                    src={product.image}
+                    alt={product.name}
+                    className="aspect-square w-full rounded-xl bg-beige object-cover md:w-32"
+                  />
+                ) : (
+                  <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-beige text-3xl font-display text-navy/35 md:w-32">
+                    {product.name.trim().charAt(0).toUpperCase() || "P"}
+                  </div>
+                )}
                 <div className="space-y-5">
                   <div>
-                    <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">{product.brand}</p>
+                    <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">
+                      {product.brand}
+                    </p>
                     <h2 className="mt-2 font-display text-3xl text-navy">{product.name}</h2>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="rounded-xl bg-beige/30 p-4">
-                      <p className="text-[0.62rem] uppercase tracking-[0.3em] text-navy/55">Order Details</p>
+                      <p className="text-[0.62rem] uppercase tracking-[0.3em] text-navy/55">
+                        Order Details
+                      </p>
                       <div className="mt-3 space-y-2 text-sm text-navy/75">
                         <p>Size: {size.size}</p>
                         <p>Quantity: {quantity}</p>
@@ -66,7 +76,9 @@ function SuccessPage() {
                     </div>
 
                     <div className="rounded-xl bg-beige/30 p-4">
-                      <p className="text-[0.62rem] uppercase tracking-[0.3em] text-navy/55">Delivery To</p>
+                      <p className="text-[0.62rem] uppercase tracking-[0.3em] text-navy/55">
+                        Delivery To
+                      </p>
                       <div className="mt-3 space-y-2 text-sm text-navy/75">
                         <p>{customer?.name || "Customer"}</p>
                         <p>{customer?.phone || "-"}</p>
@@ -78,7 +90,8 @@ function SuccessPage() {
               </div>
             ) : (
               <p className="mt-8 text-center text-sm text-muted-foreground">
-                Your order summary is unavailable, but no order is created until Razorpay confirms the payment.
+                Your order summary is unavailable, but no order is created until Razorpay confirms
+                the payment.
               </p>
             )}
 

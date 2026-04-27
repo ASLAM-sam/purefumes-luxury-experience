@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { body, param, query } from "express-validator";
 import {
+  bulkCreateProducts,
   createProduct,
   deleteProduct,
   getLowStockProducts,
@@ -119,6 +120,10 @@ const productQueryValidation = [
     .optional()
     .isIn(PRODUCT_CATEGORIES)
     .withMessage("Invalid category"),
+  query("brandId")
+    .optional()
+    .isMongoId()
+    .withMessage("Valid brand id is required"),
   query("brand").optional().trim().isLength({ max: 120 }),
   query("search").optional().trim().isLength({ max: 160 }),
 ];
@@ -129,11 +134,21 @@ const createProductValidation = [
     .notEmpty()
     .withMessage("Product name is required")
     .isLength({ max: 160 }),
-  body("brand")
-    .trim()
-    .notEmpty()
-    .withMessage("Brand is required")
-    .isLength({ max: 120 }),
+  body("brand").optional().trim().isLength({ max: 120 }),
+  body("brandId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Valid brand id is required"),
+  body().custom((_, { req }) => {
+    const hasBrand = Boolean(String(req.body.brand || "").trim());
+    const hasBrandId = Boolean(String(req.body.brandId || "").trim());
+
+    if (hasBrand || hasBrandId) {
+      return true;
+    }
+
+    throw new Error("Brand is required");
+  }),
   body("category").isIn(PRODUCT_CATEGORIES).withMessage("Invalid category"),
   body("price")
     .notEmpty()
@@ -167,6 +182,10 @@ const updateProductValidation = [
   productIdParam,
   body("name").optional().trim().notEmpty().isLength({ max: 160 }),
   body("brand").optional().trim().isLength({ max: 120 }),
+  body("brandId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Valid brand id is required"),
   body("category")
     .optional()
     .isIn(PRODUCT_CATEGORIES)
@@ -200,6 +219,15 @@ const updateProductValidation = [
 router.get("/", productQueryValidation, validateRequest, getProducts);
 router.get("/low-stock", adminAuth, getLowStockProducts);
 router.get("/:id", productIdParam, validateRequest, getProductById);
+router.post(
+  "/bulk",
+  adminAuth,
+  body("products")
+    .isArray({ min: 1 })
+    .withMessage("At least one product row is required"),
+  validateRequest,
+  bulkCreateProducts,
+);
 router.post(
   "/",
   adminAuth,

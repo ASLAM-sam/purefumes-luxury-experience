@@ -1,13 +1,23 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { Plus, Upload, X } from "lucide-react";
+import type { Brand } from "@/data/brands";
 import type { BestTime, Product, Season } from "@/data/products";
 import { Button } from "@/components/common/Button";
+import { brandsApi } from "@/services/api";
 
 type FormAccord = { name: string; percentage: string };
 type FormSize = { size: string; price: string };
 type FormState = Omit<
   Product,
-  "id" | "_id" | "createdAt" | "updatedAt" | "accords" | "price" | "sizes" | "stock"
+  | "id"
+  | "_id"
+  | "createdAt"
+  | "updatedAt"
+  | "accords"
+  | "price"
+  | "sizes"
+  | "stock"
+  | "brandDetails"
 > & {
   price: string;
   stock: string;
@@ -20,6 +30,7 @@ const EMPTY_IMAGES = ["", "", ""];
 const createEmptyForm = (): FormState => ({
   name: "",
   brand: "",
+  brandId: "",
   category: "Designer",
   price: "",
   image: "",
@@ -62,6 +73,7 @@ const toFormState = (product?: Product): FormState => {
   return {
     ...createEmptyForm(),
     ...rest,
+    brandId: product.brandId || product.brandDetails?.id || "",
     price: Number.isFinite(price) ? String(price) : "",
     image: images[0] || "",
     images,
@@ -85,6 +97,13 @@ const ALL_SEASONS: Season[] = ["Spring", "Summer", "Autumn", "Winter"];
 const BEST_TIMES: BestTime[] = ["Morning", "Day", "Evening", "Night"];
 const CATS = ["Middle Eastern", "Designer", "Niche"] as const;
 const USAGES = ["Day", "Night", "Day & Night"] as const;
+const CATEGORY_TO_BRAND_CATEGORY: Record<Product["category"], Brand["category"]> = {
+  "Middle Eastern": "middle-eastern",
+  Designer: "designer",
+  Niche: "niche",
+};
+
+const getBrandId = (brand: Brand) => brand.id || brand._id || "";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -147,6 +166,9 @@ export const ProductForm = memo(function ProductForm({
   resetOnSuccess?: boolean;
 }) {
   const [form, setForm] = useState<FormState>(() => toFormState(initial));
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(true);
+  const [brandsError, setBrandsError] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -161,6 +183,38 @@ export const ProductForm = memo(function ProductForm({
       previews.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [imageFiles]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadBrands = async () => {
+      setBrandsLoading(true);
+      setBrandsError("");
+
+      try {
+        const nextBrands = await brandsApi.list();
+
+        if (!isActive) return;
+
+        setBrands(nextBrands);
+      } catch (ex) {
+        if (!isActive) return;
+
+        setBrands([]);
+        setBrandsError(ex instanceof Error ? ex.message : "No brands available.");
+      } finally {
+        if (isActive) {
+          setBrandsLoading(false);
+        }
+      }
+    };
+
+    loadBrands();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((current) => ({ ...current, [k]: v }));
@@ -194,6 +248,16 @@ export const ProductForm = memo(function ProductForm({
   const imagePreviewUrls = filePreviews.length
     ? filePreviews
     : form.images.map((image) => image.trim()).filter(Boolean);
+  const availableBrands = useMemo(() => {
+    const selectedBrandId = String(form.brandId || "").trim();
+    const selectedCategory = CATEGORY_TO_BRAND_CATEGORY[form.category];
+
+    return brands.filter((brand) => {
+      const currentBrandId = getBrandId(brand);
+
+      return brand.category === selectedCategory || currentBrandId === selectedBrandId;
+    });
+  }, [brands, form.brandId, form.category]);
 
   const toggleSeason = (season: Season) => {
     set(
@@ -288,6 +352,7 @@ export const ProductForm = memo(function ProductForm({
         .filter((size) => size.size);
       const price = Number(form.price);
       const stock = Number(form.stock);
+      const selectedBrand = brands.find((brand) => getBrandId(brand) === form.brandId);
 
       if (hasNewFiles && imageFiles.length !== 3) {
         throw new Error("Select exactly 3 image files.");
@@ -331,6 +396,22 @@ export const ProductForm = memo(function ProductForm({
         throw new Error("At least one size is required.");
       }
 
+      if (brandsLoading) {
+        throw new Error("Brands are still loading.");
+      }
+
+      if (!form.brandId) {
+        throw new Error("Select a brand.");
+      }
+
+      if (!selectedBrand) {
+        throw new Error(brandsError || "No brands available.");
+      }
+
+      if (selectedBrand.category !== CATEGORY_TO_BRAND_CATEGORY[form.category]) {
+        throw new Error("Selected brand does not match the product category.");
+      }
+
       if (
         form.sizes.some(
           (size) =>
@@ -345,7 +426,7 @@ export const ProductForm = memo(function ProductForm({
 
       const payload = new FormData();
       payload.append("name", form.name.trim());
-      payload.append("brand", form.brand.trim());
+      payload.append("brandId", form.brandId);
       payload.append("category", form.category);
       payload.append("price", String(price));
       payload.append("stock", String(stock));
@@ -398,17 +479,65 @@ export const ProductForm = memo(function ProductForm({
           />
         </Field>
         <Field label="Brand">
-          <input
-            required
-            value={form.brand}
-            onChange={(e) => set("brand", e.target.value)}
-            className={inputCls}
-          />
+          <>
+            <select
+              required
+              value={form.brandId ?? ""}
+              onChange={(e) => {
+                const brandId = e.target.value;
+                const selectedBrand = brands.find((brand) => getBrandId(brand) === brandId);
+
+                setForm((current) => ({
+                  ...current,
+                  brandId,
+                  brand: selectedBrand?.name || "",
+                }));
+              }}
+              disabled={brandsLoading || availableBrands.length === 0}
+              className={inputCls}
+            >
+              <option value="">
+                {brandsLoading
+                  ? "Loading brands..."
+                  : availableBrands.length > 0
+                    ? "Select Brand"
+                    : "No brands available"}
+              </option>
+              {availableBrands.map((brand) => (
+                <option key={getBrandId(brand)} value={getBrandId(brand)}>
+                  {brand.name}
+                </option>
+              ))}
+            </select>
+            {brandsError ? (
+              <p className="mt-2 text-xs text-red-600">{brandsError}</p>
+            ) : null}
+            {!brandsLoading && !brandsError && availableBrands.length === 0 ? (
+              <p className="mt-2 text-xs text-navy/55">No brands available.</p>
+            ) : null}
+          </>
         </Field>
         <Field label="Category">
           <select
             value={form.category}
-            onChange={(e) => set("category", e.target.value as Product["category"])}
+            onChange={(e) => {
+              const category = e.target.value as Product["category"];
+
+              setForm((current) => {
+                const selectedBrand = brands.find(
+                  (brand) => getBrandId(brand) === current.brandId,
+                );
+                const keepBrand =
+                  selectedBrand?.category === CATEGORY_TO_BRAND_CATEGORY[category];
+
+                return {
+                  ...current,
+                  category,
+                  brandId: keepBrand ? current.brandId : "",
+                  brand: keepBrand ? current.brand : "",
+                };
+              });
+            }}
             className={inputCls}
           >
             {CATS.map((category) => (
@@ -704,7 +833,7 @@ export const ProductForm = memo(function ProductForm({
       <div className="flex justify-end border-t border-border pt-4">
         <Button
           type="submit"
-          disabled={saving || !accordFormValid}
+          disabled={saving || brandsLoading || !form.brandId || !accordFormValid}
           className="!bg-navy !text-beige"
         >
           {saving ? "Saving..." : submitLabel}

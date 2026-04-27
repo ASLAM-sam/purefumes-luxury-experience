@@ -6,15 +6,19 @@ import multer from "multer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadDir = path.join(__dirname, "..", "uploads", "products");
+const uploadsRoot = path.join(__dirname, "..", "uploads");
+const productUploadDir = path.join(uploadsRoot, "products");
+const brandUploadDir = path.join(uploadsRoot, "brands");
 
-fs.mkdirSync(uploadDir, { recursive: true });
+[productUploadDir, brandUploadDir].forEach((directory) => {
+  fs.mkdirSync(directory, { recursive: true });
+});
 
 cloudinary.config({ secure: true });
 
 const storage = multer.diskStorage({
   destination(_req, _file, callback) {
-    callback(null, uploadDir);
+    callback(null, productUploadDir);
   },
   filename(_req, file, callback) {
     const ext = path.extname(file.originalname).toLowerCase();
@@ -24,6 +28,21 @@ const storage = multer.diskStorage({
       .replace(/(^-|-$)+/g, "")
       .toLowerCase();
     callback(null, `${Date.now()}-${safeName || "product"}${ext}`);
+  },
+});
+
+const brandStorage = multer.diskStorage({
+  destination(_req, _file, callback) {
+    callback(null, brandUploadDir);
+  },
+  filename(_req, file, callback) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeName = path
+      .basename(file.originalname, ext)
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/(^-|-$)+/g, "")
+      .toLowerCase();
+    callback(null, `${Date.now()}-${safeName || "brand"}${ext}`);
   },
 });
 
@@ -45,6 +64,15 @@ const productImageUploader = multer({
   },
 }).array("images", 3);
 
+const brandLogoUploader = multer({
+  storage: brandStorage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1,
+  },
+}).single("logo");
+
 export const uploadProductImages = (req, res, next) => {
   productImageUploader(req, res, (error) => {
     if (error) {
@@ -59,17 +87,36 @@ export const uploadProductImages = (req, res, next) => {
   });
 };
 
-export const storeUploadedImage = async (file) => {
+export const uploadBrandLogo = (req, res, next) => {
+  brandLogoUploader(req, res, (error) => {
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message || "Logo upload failed",
+      });
+    }
+
+    next();
+  });
+};
+
+export const storeUploadedImage = async (
+  file,
+  {
+    cloudinaryFolder = "purefumes-hyderabad/products",
+    localSubdirectory = "products",
+  } = {},
+) => {
   if (process.env.CLOUDINARY_URL) {
     const result = await cloudinary.uploader.upload(file.path, {
-      folder: "purefumes-hyderabad/products",
+      folder: cloudinaryFolder,
       resource_type: "image",
     });
     await fs.promises.unlink(file.path).catch(() => undefined);
     return result.secure_url;
   }
 
-  return `/uploads/products/${file.filename}`;
+  return `/uploads/${localSubdirectory}/${file.filename}`;
 };
 
 export const cleanupUploadedFiles = async (files = []) => {
