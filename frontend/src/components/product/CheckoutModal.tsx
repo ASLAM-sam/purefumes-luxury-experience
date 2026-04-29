@@ -7,13 +7,32 @@ import { Button } from "@/components/common/Button";
 import { ordersApi } from "@/services/api";
 
 export const CheckoutModal = memo(function CheckoutModal() {
-  const { cart, cartTotal, checkoutOpen, closeCheckout, clearCart } = useApp();
+  const {
+    cart,
+    cartTotal,
+    cartDiscount,
+    cartFinalTotal,
+    cartCouponCode,
+    cartCouponMessage,
+    cartCouponTone,
+    cartCouponLoading,
+    checkoutOpen,
+    closeCheckout,
+    clearCart,
+    applyCartCoupon,
+    removeCartCoupon,
+  } = useApp();
   const { addNotification } = useNotification();
   const [form, setForm] = useState({ name: "", phone: "", address: "" });
+  const [couponCode, setCouponCode] = useState(cartCouponCode);
   const [done, setDone] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const closeTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setCouponCode(cartCouponCode);
+  }, [cartCouponCode]);
 
   useEffect(
     () => () => {
@@ -49,6 +68,7 @@ export const CheckoutModal = memo(function CheckoutModal() {
           customerName: form.name,
           phone: form.phone,
           address: form.address,
+          couponCode: cartCouponCode || undefined,
           items: cart.map((item) => ({
             productId: item.product.id,
             quantity: item.quantity,
@@ -127,10 +147,74 @@ export const CheckoutModal = memo(function CheckoutModal() {
                       </p>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between border-t border-border pt-3">
-                    <span className="text-xs uppercase tracking-[0.25em] text-navy/60">Total</span>
-                    <span className="font-display text-2xl text-navy">Rs. {cartTotal}</span>
+                  <div className="border-t border-border pt-3 text-sm text-navy/70">
+                    <div className="flex items-center justify-between">
+                      <span>Subtotal</span>
+                      <span>Rs. {cartTotal.toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span>Discount</span>
+                      <span className={cartDiscount > 0 ? "text-green-700" : ""}>
+                        -Rs. {cartDiscount.toLocaleString("en-IN")}
+                      </span>
+                    </div>
                   </div>
+                  <div className="flex items-center justify-between border-t border-border pt-3">
+                    <span className="text-xs uppercase tracking-[0.25em] text-navy/60">
+                      Final Total
+                    </span>
+                    <span className="font-display text-2xl text-navy">
+                      Rs. {cartFinalTotal.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-lg border border-border bg-beige/30 p-4">
+                  <p className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/55">
+                    Coupon Code
+                  </p>
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                    <input
+                      type="text"
+                      value={couponCode}
+                      onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                      placeholder="Coupon code"
+                      className="w-full rounded-lg border border-border bg-white/70 px-4 py-3 text-sm uppercase text-navy outline-none focus:border-navy"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void applyCartCoupon(couponCode)}
+                      disabled={cartCouponLoading || !cart.length}
+                      className="rounded-lg bg-navy px-4 py-3 text-xs uppercase tracking-[0.2em] text-beige transition hover:opacity-90 disabled:opacity-50"
+                    >
+                      {cartCouponLoading ? "Applying..." : "Apply Coupon"}
+                    </button>
+                  </div>
+                  {cartCouponCode ? (
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white/70 px-4 py-3 text-sm text-navy/75">
+                      <span>Applied: {cartCouponCode}</span>
+                      <button
+                        type="button"
+                        onClick={removeCartCoupon}
+                        className="text-xs uppercase tracking-[0.2em] text-red-600 transition hover:text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : null}
+                  {cartCouponMessage ? (
+                    <p
+                      className={`mt-3 text-sm ${
+                        cartCouponTone === "error"
+                          ? "text-red-600"
+                          : cartCouponTone === "info"
+                            ? "text-navy/60"
+                            : "text-green-700"
+                      }`}
+                    >
+                      {cartCouponMessage}
+                    </p>
+                  ) : null}
                 </div>
 
                 <form onSubmit={submit} className="mt-6 space-y-4">
@@ -163,7 +247,7 @@ export const CheckoutModal = memo(function CheckoutModal() {
                     disabled={submitting || !cart.length}
                     className="mt-4 w-full"
                   >
-                    {submitting ? "Placing..." : `Place Order Rs. ${cartTotal}`}
+                    {submitting ? "Placing..." : `Place Order Rs. ${cartFinalTotal}`}
                   </Button>
                 </form>
               </>

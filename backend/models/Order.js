@@ -97,6 +97,22 @@ const orderSchema = new mongoose.Schema(
       required: true,
       min: [0, "Total amount cannot be negative"],
     },
+    subtotalAmount: {
+      type: Number,
+      required: true,
+      min: [0, "Subtotal amount cannot be negative"],
+    },
+    discountAmount: {
+      type: Number,
+      default: 0,
+      min: [0, "Discount amount cannot be negative"],
+    },
+    couponCode: {
+      type: String,
+      trim: true,
+      uppercase: true,
+      default: "",
+    },
     paymentId: {
       type: String,
       trim: true,
@@ -166,6 +182,10 @@ orderSchema.pre("validate", function normalizeOrder(next) {
     this.size = this.size || firstItem.size || "";
     this.price = this.price || firstItem.price || this.totalAmount || 0;
   }
+
+  this.subtotalAmount = this.subtotalAmount ?? this.totalAmount ?? 0;
+  this.discountAmount = this.discountAmount ?? 0;
+  this.couponCode = String(this.couponCode || "").trim().toUpperCase();
 
   next();
 });

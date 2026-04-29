@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Expand, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { OptimizedImage } from "@/components/common/OptimizedImage";
 
 const SWIPE_THRESHOLD_PX = 40;
 
@@ -163,10 +164,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                   aria-pressed={selected}
                 >
                   {image ? (
-                    <img
+                    <OptimizedImage
                       src={image}
                       alt={`${productName} thumbnail ${index + 1}`}
-                      loading="lazy"
+                      width={160}
+                      height={160}
+                      sizes="5rem"
                       className="h-full w-full rounded-[1rem] object-cover"
                     />
                   ) : (
@@ -201,10 +204,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                 aria-label="Open product image preview"
               >
                 {activeImage ? (
-                  <img
+                  <OptimizedImage
                     src={activeImage}
                     alt={productName}
-                    loading="eager"
+                    width={1100}
+                    height={1100}
+                    sizes="(max-width: 768px) 92vw, 55vw"
                     className={cn(
                       "h-full w-full object-contain transition duration-300 ease-out",
                       zoomed ? "scale-[1.85]" : "scale-100",
@@ -278,10 +283,13 @@ export const ProductImageGallery = memo(function ProductImageGallery({
             <div className="relative flex min-h-0 flex-1 items-center justify-center">
               <div className="flex h-full w-full items-center justify-center rounded-[2rem] border border-white/10 bg-white/5 p-4 sm:p-8">
                 {activeImage ? (
-                  <img
+                  <OptimizedImage
                     src={activeImage}
                     alt={productName}
-                    className="max-h-full max-w-full object-contain"
+                    width={1400}
+                    height={1400}
+                    sizes="92vw"
+                    className="h-full w-full object-contain"
                   />
                 ) : null}
               </div>
@@ -326,10 +334,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                     aria-label={`Fullscreen image ${index + 1}`}
                   >
                     {image ? (
-                      <img
+                      <OptimizedImage
                         src={image}
                         alt={`${productName} fullscreen thumbnail ${index + 1}`}
-                        loading="lazy"
+                        width={160}
+                        height={160}
+                        sizes="5rem"
                         className="h-full w-full rounded-[1rem] object-cover"
                       />
                     ) : (

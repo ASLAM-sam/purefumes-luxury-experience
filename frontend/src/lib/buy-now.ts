@@ -18,6 +18,10 @@ export type BuyNowSuccessState = BuyNowState & {
   buyNowPaymentId?: string;
   buyNowPaymentGateway?: string;
   buyNowOrderId?: string;
+  buyNowCouponCode?: string;
+  buyNowSubtotal?: number;
+  buyNowDiscount?: number;
+  buyNowFinalTotal?: number;
 };
 
 export const paymentOptions = [

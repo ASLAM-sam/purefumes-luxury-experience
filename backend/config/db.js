@@ -13,7 +13,7 @@ const connectDB = async () => {
     autoIndex: process.env.MONGO_AUTO_INDEX === "true" || process.env.NODE_ENV !== "production",
   });
 
-  console.log(`MongoDB Atlas connected: ${connection.connection.host}`);
+  console.log("MongoDB Atlas connected");
   return connection;
 };
 

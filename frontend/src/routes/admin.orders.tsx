@@ -153,7 +153,7 @@ function AdminOrders() {
                   const productName = order.productName || "Order item";
                   const brand = order.brand || "";
                   const size = order.size || "-";
-                  const price = order.price ?? order.totalAmount ?? 0;
+                  const price = order.totalAmount ?? order.price ?? 0;
 
                   return (
                     <tr

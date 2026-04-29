@@ -608,6 +608,8 @@ export const ProductForm = memo(function ProductForm({
                   key={index}
                   src={preview}
                   alt={`Product preview ${index + 1}`}
+                  loading="lazy"
+                  decoding="async"
                   className="aspect-square w-full rounded-lg border border-border bg-beige object-cover"
                 />
               ) : (

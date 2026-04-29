@@ -165,6 +165,8 @@ export const BrandForm = memo(function BrandForm({
             <img
               src={preview}
               alt={form.name || "Brand logo preview"}
+              loading="lazy"
+              decoding="async"
               className="h-24 w-24 rounded-full object-cover"
             />
           ) : (

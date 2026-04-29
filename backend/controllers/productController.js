@@ -52,6 +52,162 @@ const setCachedProductList = (key, payload) => {
   });
 };
 
+const setNoStoreHeaders = (res) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  res.set("Surrogate-Control", "no-store");
+};
+
+const debugBestseller = (...args) => {
+  if (process.env.NODE_ENV !== "production") {
+    console.log("[bestsellers]", ...args);
+  }
+};
+
+const getRequestedBestsellerOrder = (body = {}) => {
+  const rawValue =
+    body.bestsellerOrder !== undefined && body.bestsellerOrder !== ""
+      ? body.bestsellerOrder
+      : body.displayOrder;
+
+  if (rawValue === undefined || rawValue === null || rawValue === "") {
+    return undefined;
+  }
+
+  const nextOrder = Number(rawValue);
+
+  if (!Number.isInteger(nextOrder) || nextOrder < 0) {
+    throw new ApiError(400, "bestsellerOrder must be a non-negative integer");
+  }
+
+  return nextOrder;
+};
+
+const compareBestsellerEntries = (left, right) => {
+  const orderDelta = Number(left.bestsellerOrder || 0) - Number(right.bestsellerOrder || 0);
+
+  if (orderDelta !== 0) {
+    return orderDelta;
+  }
+
+  const updatedAtDelta =
+    new Date(right.updatedAt || 0).getTime() - new Date(left.updatedAt || 0).getTime();
+
+  if (updatedAtDelta !== 0) {
+    return updatedAtDelta;
+  }
+
+  return String(left.name || "").localeCompare(String(right.name || ""));
+};
+
+const reindexBestsellerProducts = async () => {
+  const bestsellers = await Product.find({ isBestseller: true })
+    .select("_id name updatedAt bestsellerOrder")
+    .lean();
+
+  if (!bestsellers.length) {
+    return;
+  }
+
+  const operations = [...bestsellers]
+    .sort(compareBestsellerEntries)
+    .map((product, index) => ({
+      updateOne: {
+        filter: { _id: product._id },
+        update: {
+          $set: {
+            isBestseller: true,
+            bestsellerOrder: index + 1,
+          },
+        },
+      },
+    }));
+
+  await Product.bulkWrite(operations);
+};
+
+const persistBestsellerState = async (productId, updates = {}) => {
+  const existingProduct = await Product.findById(productId).select(
+    "_id name isBestseller bestsellerOrder updatedAt",
+  );
+
+  if (!existingProduct) {
+    throw new ApiError(404, "Product not found");
+  }
+
+  const hasStatusField = updates.isBestseller !== undefined;
+  const requestedOrder = getRequestedBestsellerOrder(updates);
+  const nextIsBestseller = hasStatusField
+    ? parseBooleanField(updates.isBestseller, "isBestseller")
+    : existingProduct.isBestseller;
+
+  const remainingBestsellers = await Product.find({
+    isBestseller: true,
+    _id: { $ne: existingProduct._id },
+  })
+    .select("_id name updatedAt bestsellerOrder")
+    .lean();
+
+  const orderedProducts = [...remainingBestsellers].sort(compareBestsellerEntries);
+
+  if (nextIsBestseller) {
+    const desiredOrder =
+      requestedOrder !== undefined
+        ? requestedOrder
+        : Number(existingProduct.bestsellerOrder || 0) || orderedProducts.length + 1;
+    const normalizedOrder = Math.min(
+      Math.max(1, desiredOrder || 1),
+      orderedProducts.length + 1,
+    );
+
+    orderedProducts.splice(normalizedOrder - 1, 0, {
+      _id: existingProduct._id,
+      name: existingProduct.name,
+      updatedAt: existingProduct.updatedAt,
+      bestsellerOrder: existingProduct.bestsellerOrder || 0,
+    });
+  }
+
+  const operations = orderedProducts.map((product, index) => ({
+    updateOne: {
+      filter: { _id: product._id },
+      update: {
+        $set: {
+          isBestseller: true,
+          bestsellerOrder: index + 1,
+        },
+      },
+    },
+  }));
+
+  if (!nextIsBestseller) {
+    operations.push({
+      updateOne: {
+        filter: { _id: existingProduct._id },
+        update: {
+          $set: {
+            isBestseller: false,
+            bestsellerOrder: 0,
+          },
+        },
+      },
+    });
+  }
+
+  if (operations.length > 0) {
+    await Product.bulkWrite(operations);
+  }
+
+  debugBestseller("Updated bestseller state", {
+    productId,
+    isBestseller: nextIsBestseller,
+    requestedOrder: requestedOrder ?? null,
+  });
+
+  return Product.findById(productId);
+};
+
 const parseArrayField = (value) => {
   if (value === undefined || value === null || value === "") {
     return undefined;
@@ -115,6 +271,31 @@ const parseImageField = (value) => {
   }
 
   return [];
+};
+
+const parseBooleanField = (value, fieldName = "value") => {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalizedValue = value.trim().toLowerCase();
+
+    if (["true", "1", "yes"].includes(normalizedValue)) {
+      return true;
+    }
+
+    if (["false", "0", "no"].includes(normalizedValue)) {
+      return false;
+    }
+  }
+
+  if (typeof value === "number") {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  throw new ApiError(400, `${fieldName} must be a boolean`);
 };
 
 const normalizeImagesFromBody = (body) => {
@@ -200,7 +381,7 @@ const buildProductPayload = (body, { isUpdate = false } = {}) => {
     }
   });
 
-  ["price", "stock", "originalPrice"].forEach((field) => {
+  ["price", "stock", "originalPrice", "bestsellerOrder"].forEach((field) => {
     if (body[field] !== undefined && body[field] !== "") {
       const value = Number(body[field]);
 
@@ -208,9 +389,30 @@ const buildProductPayload = (body, { isUpdate = false } = {}) => {
         throw new ApiError(400, `${field} must be a valid number`);
       }
 
-      payload[field] = field === "stock" ? Math.trunc(value) : value;
+      payload[field] =
+        field === "stock" || field === "bestsellerOrder"
+          ? Math.trunc(value)
+          : value;
     }
   });
+
+  if (
+    (body.bestsellerOrder === undefined || body.bestsellerOrder === "") &&
+    body.displayOrder !== undefined &&
+    body.displayOrder !== ""
+  ) {
+    const value = Number(body.displayOrder);
+
+    if (!Number.isFinite(value)) {
+      throw new ApiError(400, "displayOrder must be a valid number");
+    }
+
+    payload.bestsellerOrder = Math.trunc(value);
+  }
+
+  if (body.isBestseller !== undefined) {
+    payload.isBestseller = parseBooleanField(body.isBestseller, "isBestseller");
+  }
 
   try {
     [
@@ -278,6 +480,10 @@ const buildProductPayload = (body, { isUpdate = false } = {}) => {
 
   if (!payload.price && payload.sizes?.length && payload.sizes[0]?.price) {
     payload.price = Number(payload.sizes[0].price);
+  }
+
+  if (payload.isBestseller === false && payload.bestsellerOrder === undefined) {
+    payload.bestsellerOrder = 0;
   }
 
   return payload;
@@ -434,6 +640,9 @@ const normalizeProductResponse = (product) => {
     timeOfDay: raw.timeOfDay || raw.usage || "",
     bestTime: Array.isArray(raw.bestTime) ? raw.bestTime : [],
     sizes: Array.isArray(raw.sizes) ? raw.sizes : [],
+    isBestseller: Boolean(raw.isBestseller),
+    bestsellerOrder: Number(raw.bestsellerOrder || 0),
+    displayOrder: Number(raw.bestsellerOrder || 0),
   };
 };
 
@@ -492,6 +701,18 @@ export const getProductById = asyncHandler(async (req, res) => {
   }
 
   const [payload] = await attachBrandDetails([normalizeProductResponse(product)]);
+
+  res.json({ success: true, data: payload });
+});
+
+export const getBestsellerProducts = asyncHandler(async (_req, res) => {
+  setNoStoreHeaders(res);
+  debugBestseller("Fetching bestsellers from DB");
+
+  const products = await Product.find({ isBestseller: true })
+    .sort({ bestsellerOrder: 1, updatedAt: -1, name: 1 })
+    .lean({ virtuals: true });
+  const payload = await attachBrandDetails(products.map(normalizeProductResponse));
 
   res.json({ success: true, data: payload });
 });
@@ -562,6 +783,44 @@ export const updateProduct = asyncHandler(async (req, res) => {
   res.json({ success: true, data: response });
 });
 
+export const updateProductBestseller = asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    throw new ApiError(400, "Invalid product id");
+  }
+
+  const hasStatusField = req.body.isBestseller !== undefined;
+  const hasOrderField = getRequestedBestsellerOrder(req.body) !== undefined;
+
+  if (!hasStatusField && !hasOrderField) {
+    throw new ApiError(
+      400,
+      "Provide isBestseller or bestsellerOrder to update bestseller settings",
+    );
+  }
+
+  const product = await persistBestsellerState(req.params.id, req.body);
+
+  clearProductCache();
+  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+
+  res.json({ success: true, data: response });
+});
+
+export const removeProductBestseller = asyncHandler(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    throw new ApiError(400, "Invalid product id");
+  }
+
+  const product = await persistBestsellerState(req.params.id, {
+    isBestseller: false,
+  });
+
+  clearProductCache();
+  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+
+  res.json({ success: true, data: response });
+});
+
 export const deleteProduct = asyncHandler(async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
     throw new ApiError(400, "Invalid product id");
@@ -571,6 +830,10 @@ export const deleteProduct = asyncHandler(async (req, res) => {
 
   if (!product) {
     throw new ApiError(404, "Product not found");
+  }
+
+  if (product.isBestseller) {
+    await reindexBestsellerProducts();
   }
 
   clearProductCache();

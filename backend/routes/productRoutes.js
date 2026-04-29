@@ -4,10 +4,13 @@ import {
   bulkCreateProducts,
   createProduct,
   deleteProduct,
+  getBestsellerProducts,
   getLowStockProducts,
   getProductById,
   getProducts,
+  removeProductBestseller,
   updateProduct,
+  updateProductBestseller,
 } from "../controllers/productController.js";
 import {
   PRODUCT_BEST_TIMES,
@@ -216,7 +219,37 @@ const updateProductValidation = [
     .withMessage("Invalid best time"),
 ];
 
+const updateBestsellerValidation = [
+  productIdParam,
+  body("isBestseller")
+    .optional()
+    .isBoolean()
+    .withMessage("isBestseller must be a boolean"),
+  body("bestsellerOrder")
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage("bestsellerOrder must be a non-negative integer"),
+  body("displayOrder")
+    .optional()
+    .isInt({ min: 0 })
+    .withMessage("displayOrder must be a non-negative integer"),
+  body().custom((_, { req }) => {
+    if (
+      req.body.isBestseller === undefined &&
+      req.body.bestsellerOrder === undefined &&
+      req.body.displayOrder === undefined
+    ) {
+      throw new Error(
+        "Provide isBestseller or bestsellerOrder to update bestseller settings",
+      );
+    }
+
+    return true;
+  }),
+];
+
 router.get("/", productQueryValidation, validateRequest, getProducts);
+router.get("/bestsellers", getBestsellerProducts);
 router.get("/low-stock", adminAuth, getLowStockProducts);
 router.get("/:id", productIdParam, validateRequest, getProductById);
 router.post(
@@ -244,6 +277,27 @@ router.put(
   updateProductValidation,
   validateRequest,
   updateProduct,
+);
+router.patch(
+  "/:id/bestseller",
+  adminAuth,
+  updateBestsellerValidation,
+  validateRequest,
+  updateProductBestseller,
+);
+router.put(
+  "/:id/bestseller",
+  adminAuth,
+  updateBestsellerValidation,
+  validateRequest,
+  updateProductBestseller,
+);
+router.put(
+  "/:id/remove-bestseller",
+  adminAuth,
+  [productIdParam],
+  validateRequest,
+  removeProductBestseller,
 );
 router.delete(
   "/:id",

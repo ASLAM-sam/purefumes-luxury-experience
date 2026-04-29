@@ -6,12 +6,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ExternalLink,
+  Images,
   LayoutDashboard,
   LogOut,
+  MessageCircle,
   Menu,
   Package,
   ShoppingCart,
+  Star,
   Tag,
+  TicketPercent,
   X,
 } from "lucide-react";
 import { useNotification } from "@/context/NotificationContext";
@@ -20,8 +24,12 @@ import { auth, isUsingMock, ordersApi, type Order } from "@/services/api";
 const items = [
   { to: "/admin", label: "Dashboard", Icon: LayoutDashboard, exact: true },
   { to: "/admin/products", label: "Products", Icon: Package, exact: false },
+  { to: "/admin/bestsellers", label: "Bestsellers", Icon: Star, exact: false },
   { to: "/admin/brands", label: "Brands", Icon: Tag, exact: false },
+  { to: "/admin/banners", label: "Hero Banners", Icon: Images, exact: false },
+  { to: "/admin/coupons", label: "Coupons", Icon: TicketPercent, exact: false },
   { to: "/admin/orders", label: "Orders", Icon: ShoppingCart, exact: false },
+  { to: "/admin/requests", label: "Queries", Icon: MessageCircle, exact: false },
 ] as const;
 
 const ORDER_NOTIFICATION_REFRESH_MS = 10 * 60 * 1000;

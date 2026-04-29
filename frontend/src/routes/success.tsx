@@ -2,6 +2,7 @@ import { createFileRoute, Link, useLocation } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { Container } from "@/components/common/Container";
+import { OptimizedImage } from "@/components/common/OptimizedImage";
 import type { BuyNowSuccessState } from "@/lib/buy-now";
 
 export const Route = createFileRoute("/success")({
@@ -20,6 +21,10 @@ function SuccessPage() {
   const paymentGateway = state.buyNowPaymentGateway;
   const orderId = state.buyNowOrderId;
   const total = size ? size.price * quantity : 0;
+  const subtotal = state.buyNowSubtotal ?? total;
+  const discount = state.buyNowDiscount ?? 0;
+  const finalTotal = state.buyNowFinalTotal ?? total;
+  const couponCode = state.buyNowCouponCode ?? "";
 
   return (
     <SiteShell>
@@ -41,9 +46,12 @@ function SuccessPage() {
             {product && size ? (
               <div className="mt-10 grid gap-8 md:grid-cols-[8rem_minmax(0,1fr)]">
                 {product.image ? (
-                  <img
+                  <OptimizedImage
                     src={product.image}
                     alt={product.name}
+                    width={180}
+                    height={180}
+                    sizes="8rem"
                     className="aspect-square w-full rounded-xl bg-beige object-cover md:w-32"
                   />
                 ) : (
@@ -67,7 +75,10 @@ function SuccessPage() {
                       <div className="mt-3 space-y-2 text-sm text-navy/75">
                         <p>Size: {size.size}</p>
                         <p>Quantity: {quantity}</p>
-                        <p>Total: Rs. {total}</p>
+                        <p>Subtotal: Rs. {subtotal.toLocaleString("en-IN")}</p>
+                        <p>Discount: -Rs. {discount.toLocaleString("en-IN")}</p>
+                        <p>Final Total: Rs. {finalTotal.toLocaleString("en-IN")}</p>
+                        <p>Coupon: {couponCode || "-"}</p>
                         <p>Gateway: {paymentGateway || "Razorpay"}</p>
                         <p>Method: {paymentMethod || "Online Payment"}</p>
                         <p>Payment ID: {paymentId || "-"}</p>

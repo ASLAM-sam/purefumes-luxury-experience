@@ -36,6 +36,8 @@ export const PaymentOptions = memo(function PaymentOptions({ loading, onSelect }
                 <img
                   src={option.logo}
                   alt={option.name}
+                  loading="lazy"
+                  decoding="async"
                   className="h-10 w-auto object-contain"
                 />
               )}

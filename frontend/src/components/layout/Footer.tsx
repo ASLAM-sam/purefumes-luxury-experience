@@ -1,10 +1,23 @@
 import { memo } from "react";
 import { Container } from "@/components/common/Container";
-import { Instagram, Mail, MapPin } from "lucide-react";
+import { Facebook, Instagram, Mail, MapPin } from "lucide-react";
+
+const socialLinks = [
+  {
+    label: "Instagram",
+    href: "https://www.instagram.com/purefumeshyderabad",
+    Icon: Instagram,
+  },
+  {
+    label: "Facebook",
+    href: "https://www.facebook.com/purefumeshyderabad",
+    Icon: Facebook,
+  },
+];
 
 export const Footer = memo(function Footer() {
   return (
-    <footer className="mt-24 bg-navy py-16 text-beige">
+    <footer className="mt-16 bg-navy py-14 text-beige md:mt-24 md:py-16">
       <Container>
         <div className="grid gap-10 md:grid-cols-3 md:gap-12">
           <div>
@@ -16,17 +29,19 @@ export const Footer = memo(function Footer() {
               </span>
             </h3>
             <p className="mt-4 max-w-xs text-sm leading-7 text-beige/70">
-              Curators of authentic luxury fragrances. Decants, full bottles, niche houses - delivered with discretion.
+              Curators of authentic luxury fragrances. Decants, full bottles, niche houses -
+              delivered with discretion.
             </p>
           </div>
 
           <div>
             <p className="mb-4 text-[0.65rem] uppercase tracking-[0.4em] text-gold">Discover</p>
             <ul className="space-y-2 text-sm text-beige/70">
-              <li className="transition duration-300 ease-in-out hover:text-gold">Middle Eastern</li>
+              <li className="transition duration-300 ease-in-out hover:text-gold">
+                Middle Eastern
+              </li>
               <li className="transition duration-300 ease-in-out hover:text-gold">Designer</li>
               <li className="transition duration-300 ease-in-out hover:text-gold">Niche</li>
-              <li className="transition duration-300 ease-in-out hover:text-gold">New Arrivals</li>
             </ul>
           </div>
 
@@ -46,18 +61,22 @@ export const Footer = memo(function Footer() {
                   hello@purefumes.in
                 </a>
               </li>
-              <li className="flex items-start gap-3">
-                <Instagram className="mt-1 h-4 w-4 text-gold" />
-                <a
-                  href="https://instagram.com/purefumeshyderabad"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="transition duration-300 ease-in-out hover:text-gold"
-                >
-                  @purefumeshyderabad
-                </a>
-              </li>
             </ul>
+
+            <div className="footer-socials">
+              {socialLinks.map(({ label, href, Icon }) => (
+                <a
+                  key={label}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={label}
+                  className="footer-social-link"
+                >
+                  <Icon className="h-4 w-4" />
+                </a>
+              ))}
+            </div>
           </div>
         </div>
 

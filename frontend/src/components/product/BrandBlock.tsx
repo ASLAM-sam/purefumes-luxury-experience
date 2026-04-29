@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { Link } from "@tanstack/react-router";
 import { ArrowRight } from "lucide-react";
+import { OptimizedImage } from "@/components/common/OptimizedImage";
 import type { Product } from "@/data/products";
 
 const formatBrandCategory = (value: string) =>
@@ -23,10 +24,13 @@ export const BrandBlock = memo(function BrandBlock({ product }: { product: Produ
         <div className="flex items-center gap-5">
           <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-beige shadow-soft ring-1 ring-border sm:h-24 sm:w-24">
             {brandLogo ? (
-              <img
+              <OptimizedImage
                 src={brandLogo}
                 alt={product.brand}
-                loading="lazy"
+                width={112}
+                height={112}
+                sizes="6rem"
+                wrapperClassName="flex items-center justify-center"
                 className="h-14 w-14 rounded-full object-cover sm:h-16 sm:w-16"
               />
             ) : (

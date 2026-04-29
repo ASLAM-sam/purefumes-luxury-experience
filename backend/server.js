@@ -15,8 +15,12 @@ import productRoutes from "./routes/productRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
+import bannerRoutes from "./routes/bannerRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
+import perfumeRequestRoutes from "./routes/perfumeRequestRoutes.js";
+import couponRoutes from "./routes/couponRoutes.js";
+import { ensureDefaultBanners } from "./services/bannerService.js";
 
 dotenv.config();
 
@@ -75,11 +79,14 @@ app.use("/api", (req, res, next) => {
     req.method === "GET" &&
     (req.path.startsWith("/products") ||
       req.path.startsWith("/brands") ||
-      req.path.startsWith("/categories"));
+      req.path.startsWith("/categories") ||
+      req.path === "/banners");
 
   res.set(
     "Cache-Control",
-    isCatalogRead ? "public, max-age=30, stale-while-revalidate=120" : "no-store",
+    isCatalogRead
+      ? "public, max-age=30, stale-while-revalidate=120"
+      : "no-store",
   );
   next();
 });
@@ -105,8 +112,11 @@ app.use("/api/auth", authRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/products", catalogLimiter, productRoutes);
 app.use("/api/brands", catalogLimiter, brandRoutes);
+app.use("/api/banners", catalogLimiter, bannerRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/categories", catalogLimiter, categoryRoutes);
+app.use("/api/perfume-requests", perfumeRequestRoutes);
+app.use("/api/coupons", couponRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -114,10 +124,9 @@ app.use(errorHandler);
 const startServer = async () => {
   try {
     await connectDB();
+    await ensureDefaultBanners();
     const server = app.listen(PORT, () => {
-      console.log(
-        `Purefumes Hyderabad API running on http://localhost:${PORT}/api`,
-      );
+      console.log("Purefumes Hyderabad API running");
     });
 
     const shutdown = async (signal) => {

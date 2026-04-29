@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "reset:products": "node scripts/resetProducts.js"
   },
   "dependencies": {
     "cloudinary": "^2.5.1",

@@ -261,6 +261,8 @@ function AdminBrands() {
                     <img
                       src={brand.logo}
                       alt={brand.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-12 w-12 rounded-full object-cover"
                     />
                   ) : (
@@ -363,6 +365,8 @@ function AdminBrands() {
                           <img
                             src={brand.logo}
                             alt={brand.name}
+                            loading="lazy"
+                            decoding="async"
                             className="h-10 w-10 rounded-full object-cover"
                           />
                         ) : (

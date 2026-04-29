@@ -6,6 +6,7 @@ import { X, ArrowRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { useApp } from "@/context/AppContext";
 import { AccordBars } from "./AccordBars";
+import { OptimizedImage } from "@/components/common/OptimizedImage";
 
 export const ProductModal = memo(function ProductModal() {
   const { activeProduct, closeProduct } = useApp();
@@ -33,7 +34,14 @@ export const ProductModal = memo(function ProductModal() {
             </button>
             <div className="grid md:grid-cols-2">
               <div className="aspect-square md:aspect-auto bg-beige">
-                <img src={activeProduct.image} alt={activeProduct.name} className="w-full h-full object-cover" />
+                <OptimizedImage
+                  src={activeProduct.image}
+                  alt={activeProduct.name}
+                  width={900}
+                  height={900}
+                  sizes="(max-width: 768px) 92vw, 32rem"
+                  className="w-full h-full object-cover"
+                />
               </div>
               <div className="p-8 md:p-10 space-y-5">
                 <div>

@@ -1,13 +1,14 @@
 import { createFileRoute, Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { Container } from "@/components/common/Container";
 import { Button } from "@/components/common/Button";
+import { OptimizedImage } from "@/components/common/OptimizedImage";
 import { PaymentOptions } from "@/components/checkout/PaymentOptions";
 import { useNotification } from "@/context/NotificationContext";
 import type { BuyNowCustomer, BuyNowState } from "@/lib/buy-now";
-import { ordersApi, paymentsApi } from "@/services/api";
+import { couponsApi, ordersApi, paymentsApi } from "@/services/api";
 
 const RAZORPAY_URL = "https://checkout.razorpay.com/v1/checkout.js";
 
@@ -69,6 +70,15 @@ type RazorpayConstructor = new (options: RazorpayOptions) => RazorpayInstance;
 
 type RazorpayWindow = Window & {
   Razorpay?: RazorpayConstructor;
+};
+
+type CouponFeedbackTone = "success" | "error" | "info";
+
+type AppliedCoupon = {
+  code: string;
+  discount: number;
+  finalTotal: number;
+  subtotal: number;
 };
 
 let razorpayScriptPromise: Promise<boolean> | null = null;
@@ -161,13 +171,28 @@ function CheckoutPage() {
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponMessage, setCouponMessage] = useState("");
+  const [couponTone, setCouponTone] = useState<CouponFeedbackTone | null>(null);
+  const [couponLoading, setCouponLoading] = useState(false);
 
   const maxQuantity = Math.max(1, product?.stock || 1);
 
-  const total = useMemo(() => {
+  const subtotal = useMemo(() => {
     if (!size) return 0;
     return size.price * quantity;
   }, [quantity, size]);
+  const discount = appliedCoupon?.discount ?? 0;
+  const finalTotal = appliedCoupon?.finalTotal ?? subtotal;
+
+  useEffect(() => {
+    if (appliedCoupon && appliedCoupon.subtotal !== subtotal) {
+      setAppliedCoupon(null);
+      setCouponMessage("Coupon removed because order details changed. Apply it again to recalculate.");
+      setCouponTone("info");
+    }
+  }, [appliedCoupon, subtotal]);
 
   const updateForm = useCallback(
     (key: keyof BuyNowCustomer) =>
@@ -183,6 +208,60 @@ function CheckoutPage() {
 
   const decreaseQuantity = useCallback(() => {
     setQuantity((current) => Math.max(current - 1, 1));
+  }, []);
+
+  const applyCoupon = useCallback(async () => {
+    if (!product || !size) {
+      return;
+    }
+
+    const trimmedCode = couponCode.trim();
+
+    if (!trimmedCode) {
+      setAppliedCoupon(null);
+      setCouponMessage("Enter a coupon code.");
+      setCouponTone("error");
+      return;
+    }
+
+    setCouponLoading(true);
+
+    try {
+      const result = await couponsApi.apply({
+        code: trimmedCode,
+        items: [
+          {
+            productId: product.id,
+            quantity,
+            size: size.size,
+          },
+        ],
+      });
+
+      setAppliedCoupon({
+        code: result.code,
+        discount: result.discount,
+        finalTotal: result.finalTotal,
+        subtotal: result.subtotal,
+      });
+      setCouponMessage(result.message || "Coupon applied successfully");
+      setCouponTone("success");
+    } catch (couponError) {
+      setAppliedCoupon(null);
+      setCouponMessage(
+        couponError instanceof Error ? couponError.message : "Coupon could not be applied.",
+      );
+      setCouponTone("error");
+    } finally {
+      setCouponLoading(false);
+    }
+  }, [couponCode, product, quantity, size]);
+
+  const removeCoupon = useCallback(() => {
+    setCouponCode("");
+    setAppliedCoupon(null);
+    setCouponMessage("");
+    setCouponTone(null);
   }, []);
 
   const validateCustomerDetails = useCallback(() => {
@@ -228,6 +307,7 @@ function CheckoutPage() {
           customerName: customer.name,
           phone: customer.phone,
           address: customer.address,
+          couponCode: appliedCoupon?.code || undefined,
           items: [
             {
               productId: product.id,
@@ -254,6 +334,10 @@ function CheckoutPage() {
             buyNowPaymentId: paymentResponse.razorpay_payment_id,
             buyNowPaymentGateway: "Razorpay",
             buyNowOrderId: order.id || order._id,
+            buyNowCouponCode: order.couponCode || "",
+            buyNowSubtotal: order.subtotalAmount ?? subtotal,
+            buyNowDiscount: order.discountAmount ?? 0,
+            buyNowFinalTotal: order.totalAmount,
           },
         });
       } catch (ex) {
@@ -266,7 +350,18 @@ function CheckoutPage() {
         setLoading(null);
       }
     },
-    [addNotification, form.address, form.name, form.phone, nav, product, quantity, size],
+    [
+      addNotification,
+      appliedCoupon?.code,
+      form.address,
+      form.name,
+      form.phone,
+      nav,
+      product,
+      quantity,
+      size,
+      subtotal,
+    ],
   );
 
   const handlePayment = useCallback(
@@ -302,7 +397,7 @@ function CheckoutPage() {
 
       const paymentObject = new Razorpay({
         key: razorpayKey,
-        amount: Math.round(total * 100),
+        amount: Math.round(finalTotal * 100),
         currency: "INR",
         name: "Purefumes Hyderabad",
         description: `Order Payment - ${product.name}`,
@@ -319,6 +414,7 @@ function CheckoutPage() {
           productName: product.name,
           size: size.size,
           quantity: String(quantity),
+          couponCode: appliedCoupon?.code || "",
           paymentOption: paymentName,
         },
         modal: {
@@ -344,11 +440,12 @@ function CheckoutPage() {
       addNotification,
       form.name,
       form.phone,
+      finalTotal,
       handleOrderSuccess,
+      appliedCoupon?.code,
       product,
       quantity,
       size,
-      total,
       validateCustomerDetails,
     ],
   );
@@ -399,9 +496,12 @@ function CheckoutPage() {
             <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:p-8">
               <div className="grid gap-6 md:grid-cols-[8rem_minmax(0,1fr)] md:items-start">
                 {product.image ? (
-                  <img
+                  <OptimizedImage
                     src={product.image}
                     alt={product.name}
+                    width={180}
+                    height={180}
+                    sizes="8rem"
                     className="aspect-square w-full rounded-xl bg-beige object-cover md:w-32"
                   />
                 ) : (
@@ -506,10 +606,71 @@ function CheckoutPage() {
                   <span>Size</span>
                   <span>{size.size}</span>
                 </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Subtotal</span>
+                  <span>Rs. {subtotal.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Discount</span>
+                  <span className={discount > 0 ? "text-green-300" : ""}>
+                    -Rs. {discount.toLocaleString("en-IN")}
+                  </span>
+                </div>
               </div>
               <div className="mt-5 border-t border-beige/10 pt-5">
-                <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">Total</p>
-                <p className="mt-2 font-display text-4xl text-beige">Rs. {total}</p>
+                <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">
+                  Final Total
+                </p>
+                <p className="mt-2 font-display text-4xl text-beige">
+                  Rs. {finalTotal.toLocaleString("en-IN")}
+                </p>
+              </div>
+              <div className="mt-5 border-t border-beige/10 pt-5">
+                <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">
+                  Coupon Code
+                </p>
+                <div className="mt-3 flex flex-col gap-3">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                    placeholder="Coupon code"
+                    className="w-full rounded-lg border border-beige/20 bg-white/10 px-4 py-3 text-sm uppercase text-beige outline-none transition focus:border-gold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void applyCoupon()}
+                    disabled={couponLoading}
+                    className="rounded-lg bg-gold px-4 py-3 text-xs uppercase tracking-[0.2em] text-navy transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {couponLoading ? "Applying..." : "Apply Coupon"}
+                  </button>
+                </div>
+                {appliedCoupon?.code ? (
+                  <div className="mt-3 flex items-center justify-between gap-3 rounded-lg bg-white/10 px-4 py-3 text-sm text-beige/85">
+                    <span>Applied: {appliedCoupon.code}</span>
+                    <button
+                      type="button"
+                      onClick={removeCoupon}
+                      className="text-xs uppercase tracking-[0.2em] text-red-200 transition hover:text-red-100"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : null}
+                {couponMessage ? (
+                  <p
+                    className={`mt-3 text-sm ${
+                      couponTone === "error"
+                        ? "text-red-200"
+                        : couponTone === "info"
+                          ? "text-beige/60"
+                          : "text-green-300"
+                    }`}
+                  >
+                    {couponMessage}
+                  </p>
+                ) : null}
               </div>
             </aside>
           </div>

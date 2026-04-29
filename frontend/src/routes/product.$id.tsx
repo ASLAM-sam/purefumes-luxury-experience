@@ -91,7 +91,9 @@ function ProductPage() {
 
       try {
         const nextProducts = await productsApi.list(
-          product.brandId ? { brandId: product.brandId } : { brand: product.brand },
+          product.brandId
+            ? { brandId: product.brandId, page: 1, limit: 8 }
+            : { brand: product.brand, page: 1, limit: 8 },
         );
 
         if (!isActive) return;

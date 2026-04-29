@@ -1,5 +1,4 @@
-import { memo, useCallback, useRef } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { memo } from "react";
 import type { Product } from "@/data/products";
 import { ProductCard } from "@/components/product/ProductCard";
 
@@ -14,18 +13,8 @@ export const RelatedProducts = memo(function RelatedProducts({
   error: string;
   brandName: string;
 }) {
-  const scrollerRef = useRef<HTMLDivElement | null>(null);
-
-  const scrollByAmount = useCallback((direction: "prev" | "next") => {
-    const node = scrollerRef.current;
-    if (!node) return;
-
-    const amount = node.clientWidth * 0.85 * (direction === "next" ? 1 : -1);
-    node.scrollBy({ left: amount, behavior: "smooth" });
-  }, []);
-
   return (
-    <section>
+    <section className="related-products mx-auto max-w-[1200px]">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">Related Products</p>
@@ -33,27 +22,6 @@ export const RelatedProducts = memo(function RelatedProducts({
             More from {brandName}
           </h2>
         </div>
-
-        {products.length > 1 && !loading ? (
-          <div className="hidden items-center gap-2 sm:flex">
-            <button
-              type="button"
-              onClick={() => scrollByAmount("prev")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-navy shadow-soft transition hover:-translate-y-0.5 hover:border-gold/60"
-              aria-label="Scroll related products left"
-            >
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollByAmount("next")}
-              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-border bg-card text-navy shadow-soft transition hover:-translate-y-0.5 hover:border-gold/60"
-              aria-label="Scroll related products right"
-            >
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </div>
-        ) : null}
       </div>
 
       {error ? (
@@ -63,14 +31,14 @@ export const RelatedProducts = memo(function RelatedProducts({
       ) : null}
 
       {loading ? (
-        <div className="mt-8 flex gap-6 overflow-x-auto pb-4 no-scrollbar">
+        <div className="related-grid mt-8 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-5">
           {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
-              className="min-w-[78vw] shrink-0 snap-start sm:min-w-[20rem] lg:min-w-[22rem]"
+              className="min-w-0"
             >
               <div className="animate-pulse space-y-4">
-                <div className="aspect-[3/4] rounded-xl bg-[#f1ece6]" />
+                <div className="h-[240px] rounded-xl bg-[#f1ece6]" />
                 <div className="h-3 w-24 rounded bg-[#eee7de]" />
                 <div className="h-6 w-40 rounded bg-[#eee7de]" />
                 <div className="h-3 w-28 rounded bg-[#eee7de]" />
@@ -90,14 +58,11 @@ export const RelatedProducts = memo(function RelatedProducts({
       ) : null}
 
       {!loading && !error && products.length > 0 ? (
-        <div
-          ref={scrollerRef}
-          className="mt-8 flex gap-6 overflow-x-auto pb-4 no-scrollbar snap-x snap-mandatory"
-        >
+        <div className="related-grid mt-8 grid grid-cols-[repeat(auto-fit,minmax(220px,1fr))] gap-5">
           {products.map((product) => (
             <div
               key={product.id}
-              className="min-w-[78vw] shrink-0 snap-start sm:min-w-[20rem] lg:min-w-[22rem]"
+              className="min-w-0"
             >
               <ProductCard product={product} />
             </div>

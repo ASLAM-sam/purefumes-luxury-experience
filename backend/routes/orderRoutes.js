@@ -47,6 +47,11 @@ const createOrderValidation = [
     .optional({ values: "falsy" })
     .trim()
     .isLength({ max: 80 }),
+  body("couponCode")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 60 })
+    .withMessage("Coupon code cannot exceed 60 characters"),
   body("paymentId").optional({ values: "falsy" }).trim().isLength({ max: 200 }),
   body("paymentMethod").optional({ values: "falsy" }).trim().isLength({ max: 80 }),
   body("paymentGateway").optional({ values: "falsy" }).trim().isLength({ max: 80 }),

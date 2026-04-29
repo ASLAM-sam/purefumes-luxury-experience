@@ -1,19 +1,19 @@
 import { memo } from "react";
 import { motion } from "framer-motion";
-import heroImg from "@/assets/hero.jpg";
 import { Button } from "@/components/common/Button";
 import { Container } from "@/components/common/Container";
+import { HeroSlider } from "@/components/sections/HeroSlider";
 
 export const Hero = memo(function Hero() {
   return (
-    <section className="bg-navy text-beige">
-      <Container className="grid min-h-[80svh] items-center gap-12 py-16 md:py-20 lg:grid-cols-2 lg:gap-14">
-        <div className="max-w-xl">
+    <section className="hero bg-navy text-beige">
+      <Container className="hero-container grid items-center gap-8 py-[60px] text-center md:min-h-[80svh] md:gap-12 lg:grid-cols-[1.2fr_1fr] lg:gap-10 lg:text-left">
+        <div className="mx-auto max-w-xl lg:mx-0">
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.9 }}
-            className="font-display text-5xl leading-[0.92] text-beige sm:text-6xl md:text-7xl lg:text-[5.5rem]"
+            className="hero-title max-w-full font-display text-[clamp(2.25rem,9vw,5rem)] leading-[0.95] text-beige [overflow-wrap:anywhere] sm:text-[clamp(2.6rem,9vw,5rem)] md:text-7xl lg:text-[5.5rem]"
           >
             Purefumes
             <br />
@@ -23,7 +23,7 @@ export const Hero = memo(function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.15 }}
-            className="mt-6 max-w-lg text-base leading-8 text-beige/80 md:text-lg"
+            className="mt-5 max-w-lg text-[0.98rem] leading-7 text-beige/80 md:mt-6 md:text-lg md:leading-8"
           >
             Discover luxury fragrances crafted with rare ingredients and timeless elegance.
           </motion.p>
@@ -32,20 +32,20 @@ export const Hero = memo(function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.3 }}
-            className="mt-10 flex flex-col gap-4 sm:flex-row"
+            className="hero-actions mt-8 flex flex-col items-center gap-4 md:mt-10 md:flex-row md:justify-center lg:justify-start"
           >
-            <a href="#featured">
+            <a href="#featured" className="w-full max-w-[280px] md:w-auto md:max-w-none">
               <Button
                 variant="gold"
-                className="min-w-[190px] rounded-full px-8 py-4 text-[0.72rem] tracking-[0.32em]"
+                className="w-full rounded-full px-8 py-4 text-[0.72rem] tracking-[0.24em] md:min-w-[190px] md:w-auto md:tracking-[0.32em]"
               >
                 Explore Collection
               </Button>
             </a>
-            <a href="#categories">
+            <a href="#categories" className="w-full max-w-[280px] md:w-auto md:max-w-none">
               <Button
                 variant="outline"
-                className="min-w-[190px] rounded-full border-beige/40 bg-transparent px-8 py-4 text-[0.72rem] tracking-[0.32em] !text-beige hover:!bg-beige hover:!text-navy"
+                className="w-full rounded-full border-beige/40 bg-transparent px-8 py-4 text-[0.72rem] tracking-[0.24em] !text-beige hover:!bg-beige hover:!text-navy md:min-w-[190px] md:w-auto md:tracking-[0.32em]"
               >
                 Browse Categories
               </Button>
@@ -57,15 +57,9 @@ export const Hero = memo(function Hero() {
           initial={{ opacity: 0, x: 30 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.9, delay: 0.2 }}
-          className="mx-auto w-full max-w-[34rem] lg:ml-auto"
+          className="mx-auto mt-2 w-full max-w-[34rem] md:mt-0 lg:ml-auto"
         >
-          <img
-            src={heroImg}
-            alt="Luxury perfume"
-            width={1920}
-            height={1080}
-            className="h-[24rem] w-full rounded-[1.75rem] object-cover shadow-luxe sm:h-[28rem] lg:h-[32rem]"
-          />
+          <HeroSlider id="hero-slider-luxury-replace-image" />
         </motion.div>
       </Container>
     </section>

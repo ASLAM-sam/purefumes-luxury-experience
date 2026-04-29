@@ -9,7 +9,7 @@ export const WhatsAppFloat = memo(function WhatsAppFloat() {
       href={whatsappUrl}
       target="_blank"
       rel="noreferrer"
-      className="fixed bottom-8 left-4 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_20px_40px_-18px_rgba(37,211,102,0.8)] transition duration-300 ease-in-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#25D366]"
+      className="fixed bottom-[calc(var(--mobile-bottom-nav-height)+1rem)] left-4 z-50 inline-flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-[0_20px_40px_-18px_rgba(37,211,102,0.8)] transition duration-300 ease-in-out hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#25D366] md:bottom-8"
       aria-label={`Chat on WhatsApp at ${whatsappNumber}`}
     >
       <svg viewBox="0 0 32 32" className="h-7 w-7 fill-white" aria-hidden="true">

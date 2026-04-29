@@ -118,6 +118,16 @@ const productSchema = new mongoose.Schema(
     seasons: [{ type: String, trim: true }],
     sizes: { type: [sizeSchema], default: [] },
     originalPrice: { type: Number, min: 0 },
+    isBestseller: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    bestsellerOrder: {
+      type: Number,
+      min: [0, "Bestseller order cannot be negative"],
+      default: 0,
+    },
   },
   {
     timestamps: true,
@@ -131,6 +141,7 @@ productSchema.index({ category: 1, brand: 1 });
 productSchema.index({ brandId: 1, category: 1 });
 productSchema.index({ category: 1, price: 1 });
 productSchema.index({ stock: 1 });
+productSchema.index({ isBestseller: 1, bestsellerOrder: 1, updatedAt: -1 });
 
 productSchema.virtual("id").get(function getId() {
   return this._id.toString();

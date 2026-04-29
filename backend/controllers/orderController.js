@@ -1,35 +1,13 @@
 import mongoose from "mongoose";
 import Order, { ORDER_STATUSES } from "../models/Order.js";
-import Product from "../models/Product.js";
 import { ApiError, asyncHandler } from "../middlewares/errorMiddleware.js";
 import { clearProductCache } from "./productController.js";
 import { createPaginationMeta, getPagination } from "../utils/apiFeatures.js";
-
-const normalizeOrderItems = (body) => {
-  if (Array.isArray(body.items) && body.items.length > 0) {
-    return body.items;
-  }
-
-  return [];
-};
-
-const getItemPrice = (product, item) => {
-  if (item.size && product.sizes?.length) {
-    const selectedSize = product.sizes.find(
-      (size) => size.size?.toLowerCase() === String(item.size).toLowerCase(),
-    );
-
-    if (selectedSize?.price !== undefined) {
-      return Number(selectedSize.price);
-    }
-  }
-
-  if (product.price !== undefined) {
-    return Number(product.price);
-  }
-
-  return Number(item.price || 0);
-};
+import { applyCouponToSubtotal } from "../services/couponService.js";
+import {
+  buildPreparedOrderItems,
+  normalizeOrderItems,
+} from "../services/pricingService.js";
 
 const normalizeOrderResponse = (order) => {
   const raw =
@@ -63,6 +41,11 @@ const normalizeOrderResponse = (order) => {
     size: raw.size || firstItem.size || "",
     price: Number(raw.price || firstItem.price || raw.totalAmount || 0),
     totalAmount: Number(raw.totalAmount || raw.price || firstItem.price || 0),
+    subtotalAmount: Number(
+      raw.subtotalAmount || raw.totalAmount || raw.price || firstItem.price || 0,
+    ),
+    discountAmount: Number(raw.discountAmount || 0),
+    couponCode: raw.couponCode || "",
     paymentId: raw.paymentId || "",
     paymentMethod: raw.paymentMethod || "",
     paymentGateway: raw.paymentGateway || "",
@@ -84,46 +67,23 @@ export const placeOrder = asyncHandler(async (req, res) => {
 
   try {
     await session.withTransaction(async () => {
-      const preparedItems = [];
-      let totalAmount = 0;
+      const { preparedItems, subtotalAmount } = await buildPreparedOrderItems(
+        rawItems,
+        { reserveStock: true, session },
+      );
+      let discountAmount = 0;
+      let totalAmount = subtotalAmount;
+      let couponCode = "";
 
-      for (const item of rawItems) {
-        if (!mongoose.Types.ObjectId.isValid(item.productId)) {
-          throw new ApiError(400, "Invalid product id in order item");
-        }
-
-        const quantity = Number.parseInt(item.quantity, 10) || 1;
-        if (quantity < 1) {
-          throw new ApiError(400, "Order item quantity must be at least 1");
-        }
-
-        const product = await Product.findOneAndUpdate(
-          { _id: item.productId, stock: { $gte: quantity } },
-          { $inc: { stock: -quantity } },
-          { new: true, session },
-        );
-
-        if (!product) {
-          const existingProduct = await Product.findById(
-            item.productId,
-          ).session(session);
-          const message = existingProduct
-            ? `Insufficient stock for ${existingProduct.name}`
-            : "Product not found";
-          throw new ApiError(400, message);
-        }
-
-        const price = getItemPrice(product, item);
-        totalAmount += price * quantity;
-
-        preparedItems.push({
-          productId: product._id,
-          productName: product.name,
-          brand: product.brand,
-          quantity,
-          price,
-          size: item.size,
+      if (String(req.body.couponCode || "").trim()) {
+        const couponResult = await applyCouponToSubtotal({
+          code: req.body.couponCode,
+          subtotalAmount,
         });
+
+        couponCode = couponResult.code;
+        discountAmount = couponResult.discount;
+        totalAmount = couponResult.finalTotal;
       }
 
       const [order] = await Order.create(
@@ -139,6 +99,9 @@ export const placeOrder = asyncHandler(async (req, res) => {
             price: preparedItems[0]?.price || totalAmount,
             items: preparedItems,
             totalAmount,
+            subtotalAmount,
+            discountAmount,
+            couponCode,
             paymentId: String(req.body.paymentId || "").trim(),
             paymentMethod: String(req.body.paymentMethod || "").trim(),
             paymentGateway: String(req.body.paymentGateway || "").trim(),

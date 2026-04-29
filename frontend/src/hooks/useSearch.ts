@@ -1,19 +1,34 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import type { Product } from "@/data/products";
 
 export function useSearch(products: Product[]) {
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedQuery(query.trim().toLowerCase());
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [query]);
 
   const results = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return [];
+    if (!debouncedQuery) return [];
     return products.filter(
-      (p) => p.name.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q),
+      (p) =>
+        p.name.toLowerCase().includes(debouncedQuery) ||
+        p.brand.toLowerCase().includes(debouncedQuery),
     );
-  }, [query, products]);
+  }, [debouncedQuery, products]);
 
   const onChange = useCallback((v: string) => setQuery(v), []);
-  const clear = useCallback(() => setQuery(""), []);
+  const clear = useCallback(() => {
+    setQuery("");
+    setDebouncedQuery("");
+  }, []);
 
   return { query, setQuery: onChange, clear, results };
 }

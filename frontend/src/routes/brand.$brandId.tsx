@@ -1,10 +1,15 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { useState } from "react";
 import { ChevronLeft } from "lucide-react";
+import { Button } from "@/components/common/Button";
 import { Container } from "@/components/common/Container";
 import { SectionTitle } from "@/components/common/SectionTitle";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { ProductCard } from "@/components/product/ProductCard";
+import { OptimizedImage } from "@/components/common/OptimizedImage";
 import { brandsApi, productsApi } from "@/services/api";
+
+const PAGE_SIZE = 12;
 
 const formatCategory = (category: string) =>
   category
@@ -17,7 +22,7 @@ export const Route = createFileRoute("/brand/$brandId")({
     try {
       const [brand, products] = await Promise.all([
         brandsApi.get(params.brandId),
-        productsApi.list({ brandId: params.brandId }),
+        productsApi.listPaginated({ brandId: params.brandId, page: 1, limit: PAGE_SIZE }),
       ]);
 
       if (!brand) {
@@ -47,10 +52,48 @@ export const Route = createFileRoute("/brand/$brandId")({
 });
 
 function BrandPage() {
-  const { brand, products } = Route.useLoaderData();
+  const { brand, products: initialProducts } = Route.useLoaderData();
+  const [products, setProducts] = useState(initialProducts.products);
+  const [page, setPage] = useState(initialProducts.pagination.page);
+  const [totalPages, setTotalPages] = useState(initialProducts.pagination.pages);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState("");
   const subtitle = products.length
     ? `${products.length} perfume${products.length === 1 ? "" : "s"} from ${brand.name}.`
     : "No products under this brand yet.";
+
+  const handleLoadMore = async () => {
+    if (isLoadingMore || page >= totalPages) return;
+
+    setIsLoadingMore(true);
+    setLoadMoreError("");
+
+    try {
+      const response = await productsApi.listPaginated({
+        brandId: brand.id,
+        page: page + 1,
+        limit: PAGE_SIZE,
+      });
+
+      setProducts((currentProducts) => {
+        const seen = new Set(currentProducts.map((product) => product.id));
+        return [
+          ...currentProducts,
+          ...response.products.filter((product) => {
+            if (seen.has(product.id)) return false;
+            seen.add(product.id);
+            return true;
+          }),
+        ];
+      });
+      setPage(response.pagination.page);
+      setTotalPages(response.pagination.pages);
+    } catch (error) {
+      setLoadMoreError(error instanceof Error ? error.message : "Could not load more products.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
 
   return (
     <SiteShell>
@@ -67,10 +110,13 @@ function BrandPage() {
             <div className="flex flex-col items-start gap-5 sm:flex-row sm:items-center">
               <div className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-beige shadow-soft ring-1 ring-border md:h-28 md:w-28">
                 {brand.logo ? (
-                  <img
+                  <OptimizedImage
                     src={brand.logo}
                     alt={brand.name}
-                    loading="lazy"
+                    width={128}
+                    height={128}
+                    sizes="7rem"
+                    wrapperClassName="flex items-center justify-center"
                     className="h-16 w-16 rounded-full object-cover md:h-20 md:w-20"
                   />
                 ) : (
@@ -105,11 +151,33 @@ function BrandPage() {
               </p>
             </div>
           ) : (
-            <div className="mt-16 grid grid-cols-1 gap-x-8 gap-y-16 sm:grid-cols-2 lg:grid-cols-3">
-              {products.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
-            </div>
+            <>
+              <div className="product-grid mt-16 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-2 md:gap-x-8 md:gap-y-16 lg:grid-cols-3">
+                {products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+
+              {loadMoreError ? (
+                <div className="mx-auto mt-8 max-w-xl border border-red-200 bg-red-50 px-5 py-4 text-center text-sm text-red-700">
+                  {loadMoreError}
+                </div>
+              ) : null}
+
+              {page < totalPages ? (
+                <div className="mt-10 flex justify-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                    className="w-full max-w-xs rounded-full sm:w-auto"
+                  >
+                    {isLoadingMore ? "Loading..." : "Load More"}
+                  </Button>
+                </div>
+              ) : null}
+            </>
           )}
         </Container>
       </section>

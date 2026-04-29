@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as WishlistRouteImport } from './routes/wishlist'
 import { Route as SuccessRouteImport } from './routes/success'
 import { Route as CheckoutRouteImport } from './routes/checkout'
 import { Route as CartRouteImport } from './routes/cart'
@@ -19,13 +20,22 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as BrandBrandIdRouteImport } from './routes/brand.$brandId'
+import { Route as AdminRequestsRouteImport } from './routes/admin.requests'
 import { Route as AdminProductsRouteImport } from './routes/admin.products'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
+import { Route as AdminCouponsRouteImport } from './routes/admin.coupons'
 import { Route as AdminBrandsRouteImport } from './routes/admin.brands'
+import { Route as AdminBestsellersRouteImport } from './routes/admin.bestsellers'
+import { Route as AdminBannersRouteImport } from './routes/admin.banners'
 import { Route as AdminProductsNewRouteImport } from './routes/admin.products.new'
 import { Route as AdminProductsIdRouteImport } from './routes/admin.products.$id'
 
+const WishlistRoute = WishlistRouteImport.update({
+  id: '/wishlist',
+  path: '/wishlist',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SuccessRoute = SuccessRouteImport.update({
   id: '/success',
   path: '/success',
@@ -76,6 +86,11 @@ const BrandBrandIdRoute = BrandBrandIdRouteImport.update({
   path: '/brand/$brandId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRequestsRoute = AdminRequestsRouteImport.update({
+  id: '/requests',
+  path: '/requests',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminProductsRoute = AdminProductsRouteImport.update({
   id: '/products',
   path: '/products',
@@ -91,9 +106,24 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
   path: '/login',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminCouponsRoute = AdminCouponsRouteImport.update({
+  id: '/coupons',
+  path: '/coupons',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminBrandsRoute = AdminBrandsRouteImport.update({
   id: '/brands',
   path: '/brands',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBestsellersRoute = AdminBestsellersRouteImport.update({
+  id: '/bestsellers',
+  path: '/bestsellers',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBannersRoute = AdminBannersRouteImport.update({
+  id: '/banners',
+  path: '/banners',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminProductsNewRoute = AdminProductsNewRouteImport.update({
@@ -114,10 +144,15 @@ export interface FileRoutesByFullPath {
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
   '/success': typeof SuccessRoute
+  '/wishlist': typeof WishlistRoute
+  '/admin/banners': typeof AdminBannersRoute
+  '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
+  '/admin/coupons': typeof AdminCouponsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/products': typeof AdminProductsRouteWithChildren
+  '/admin/requests': typeof AdminRequestsRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/product/$id': typeof ProductIdRoute
@@ -131,10 +166,15 @@ export interface FileRoutesByTo {
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
   '/success': typeof SuccessRoute
+  '/wishlist': typeof WishlistRoute
+  '/admin/banners': typeof AdminBannersRoute
+  '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
+  '/admin/coupons': typeof AdminCouponsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/products': typeof AdminProductsRouteWithChildren
+  '/admin/requests': typeof AdminRequestsRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/product/$id': typeof ProductIdRoute
@@ -150,10 +190,15 @@ export interface FileRoutesById {
   '/cart': typeof CartRoute
   '/checkout': typeof CheckoutRoute
   '/success': typeof SuccessRoute
+  '/wishlist': typeof WishlistRoute
+  '/admin/banners': typeof AdminBannersRoute
+  '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
+  '/admin/coupons': typeof AdminCouponsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/products': typeof AdminProductsRouteWithChildren
+  '/admin/requests': typeof AdminRequestsRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/product/$id': typeof ProductIdRoute
@@ -170,10 +215,15 @@ export interface FileRouteTypes {
     | '/cart'
     | '/checkout'
     | '/success'
+    | '/wishlist'
+    | '/admin/banners'
+    | '/admin/bestsellers'
     | '/admin/brands'
+    | '/admin/coupons'
     | '/admin/login'
     | '/admin/orders'
     | '/admin/products'
+    | '/admin/requests'
     | '/brand/$brandId'
     | '/category/$slug'
     | '/product/$id'
@@ -187,10 +237,15 @@ export interface FileRouteTypes {
     | '/cart'
     | '/checkout'
     | '/success'
+    | '/wishlist'
+    | '/admin/banners'
+    | '/admin/bestsellers'
     | '/admin/brands'
+    | '/admin/coupons'
     | '/admin/login'
     | '/admin/orders'
     | '/admin/products'
+    | '/admin/requests'
     | '/brand/$brandId'
     | '/category/$slug'
     | '/product/$id'
@@ -205,10 +260,15 @@ export interface FileRouteTypes {
     | '/cart'
     | '/checkout'
     | '/success'
+    | '/wishlist'
+    | '/admin/banners'
+    | '/admin/bestsellers'
     | '/admin/brands'
+    | '/admin/coupons'
     | '/admin/login'
     | '/admin/orders'
     | '/admin/products'
+    | '/admin/requests'
     | '/brand/$brandId'
     | '/category/$slug'
     | '/product/$id'
@@ -224,6 +284,7 @@ export interface RootRouteChildren {
   CartRoute: typeof CartRoute
   CheckoutRoute: typeof CheckoutRoute
   SuccessRoute: typeof SuccessRoute
+  WishlistRoute: typeof WishlistRoute
   BrandBrandIdRoute: typeof BrandBrandIdRoute
   CategorySlugRoute: typeof CategorySlugRoute
   ProductIdRoute: typeof ProductIdRoute
@@ -231,6 +292,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/wishlist': {
+      id: '/wishlist'
+      path: '/wishlist'
+      fullPath: '/wishlist'
+      preLoaderRoute: typeof WishlistRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/success': {
       id: '/success'
       path: '/success'
@@ -301,6 +369,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrandBrandIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/requests': {
+      id: '/admin/requests'
+      path: '/requests'
+      fullPath: '/admin/requests'
+      preLoaderRoute: typeof AdminRequestsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/products': {
       id: '/admin/products'
       path: '/products'
@@ -322,11 +397,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminLoginRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/coupons': {
+      id: '/admin/coupons'
+      path: '/coupons'
+      fullPath: '/admin/coupons'
+      preLoaderRoute: typeof AdminCouponsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/brands': {
       id: '/admin/brands'
       path: '/brands'
       fullPath: '/admin/brands'
       preLoaderRoute: typeof AdminBrandsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/bestsellers': {
+      id: '/admin/bestsellers'
+      path: '/bestsellers'
+      fullPath: '/admin/bestsellers'
+      preLoaderRoute: typeof AdminBestsellersRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/banners': {
+      id: '/admin/banners'
+      path: '/banners'
+      fullPath: '/admin/banners'
+      preLoaderRoute: typeof AdminBannersRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/products/new': {
@@ -361,18 +457,26 @@ const AdminProductsRouteWithChildren = AdminProductsRoute._addFileChildren(
 )
 
 interface AdminRouteChildren {
+  AdminBannersRoute: typeof AdminBannersRoute
+  AdminBestsellersRoute: typeof AdminBestsellersRoute
   AdminBrandsRoute: typeof AdminBrandsRoute
+  AdminCouponsRoute: typeof AdminCouponsRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminProductsRoute: typeof AdminProductsRouteWithChildren
+  AdminRequestsRoute: typeof AdminRequestsRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
+  AdminBannersRoute: AdminBannersRoute,
+  AdminBestsellersRoute: AdminBestsellersRoute,
   AdminBrandsRoute: AdminBrandsRoute,
+  AdminCouponsRoute: AdminCouponsRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminOrdersRoute: AdminOrdersRoute,
   AdminProductsRoute: AdminProductsRouteWithChildren,
+  AdminRequestsRoute: AdminRequestsRoute,
   AdminIndexRoute: AdminIndexRoute,
 }
 
@@ -385,6 +489,7 @@ const rootRouteChildren: RootRouteChildren = {
   CartRoute: CartRoute,
   CheckoutRoute: CheckoutRoute,
   SuccessRoute: SuccessRoute,
+  WishlistRoute: WishlistRoute,
   BrandBrandIdRoute: BrandBrandIdRoute,
   CategorySlugRoute: CategorySlugRoute,
   ProductIdRoute: ProductIdRoute,

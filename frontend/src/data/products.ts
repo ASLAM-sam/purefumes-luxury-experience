@@ -32,6 +32,9 @@ export type Product = {
   sizes: Size[];
   stock: number;
   originalPrice?: number;
+  isBestseller?: boolean;
+  bestsellerOrder?: number;
+  displayOrder?: number;
   createdAt?: string;
   updatedAt?: string;
 };

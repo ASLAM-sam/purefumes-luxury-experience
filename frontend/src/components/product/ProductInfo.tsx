@@ -6,6 +6,7 @@ import type { Product, Size } from "@/data/products";
 import { Button } from "@/components/common/Button";
 import { SizeSelector } from "@/components/product/SizeSelector";
 import { StockBar } from "@/components/product/StockBar";
+import { WishlistButton } from "@/components/product/WishlistButton";
 
 const formatPrice = (value: number) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
 
@@ -25,7 +26,11 @@ function PurchaseButtons({
       <Button
         onClick={onAddToCart}
         disabled={disabled}
-        className={compact ? "px-4 py-3 text-[0.62rem]" : "!bg-beige !text-navy hover:!opacity-90"}
+        className={
+          compact
+            ? "add-to-cart-btn px-4 py-3 text-[0.62rem]"
+            : "add-to-cart-btn !bg-beige !text-navy hover:!opacity-90"
+        }
       >
         <ShoppingBag className="h-4 w-4" /> Add to Cart
       </Button>
@@ -33,7 +38,7 @@ function PurchaseButtons({
         variant="gold"
         onClick={onBuyNow}
         disabled={disabled}
-        className={compact ? "px-4 py-3 text-[0.62rem]" : ""}
+        className={compact ? "quick-shop-btn px-4 py-3 text-[0.62rem]" : "quick-shop-btn"}
       >
         <Sparkles className="h-4 w-4" /> Buy Now
       </Button>
@@ -70,22 +75,33 @@ export const ProductInfo = memo(function ProductInfo({
     <>
       <aside className="lg:sticky lg:top-28">
         <div className="rounded-[2rem] border border-border/60 bg-card p-6 shadow-soft sm:p-8">
-          <div className="flex flex-wrap items-center gap-3">
-            {product.brandId ? (
-              <Link
-                to="/brand/$brandId"
-                params={{ brandId: product.brandId }}
-                className="text-[0.65rem] uppercase tracking-[0.38em] text-gold transition hover:text-navy"
-              >
-                {product.brand}
-              </Link>
-            ) : (
-              <p className="text-[0.65rem] uppercase tracking-[0.38em] text-gold">{product.brand}</p>
-            )}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="flex flex-wrap items-center gap-3">
+              {product.brandId ? (
+                <Link
+                  to="/brand/$brandId"
+                  params={{ brandId: product.brandId }}
+                  className="text-[0.65rem] uppercase tracking-[0.38em] text-gold transition hover:text-navy"
+                >
+                  {product.brand}
+                </Link>
+              ) : (
+                <p className="text-[0.65rem] uppercase tracking-[0.38em] text-gold">
+                  {product.brand}
+                </p>
+              )}
 
-            <span className="rounded-full border border-border bg-beige/60 px-3 py-1 text-[0.6rem] uppercase tracking-[0.22em] text-navy/60">
-              {product.category}
-            </span>
+              <span className="rounded-full border border-border bg-beige/60 px-3 py-1 text-[0.6rem] uppercase tracking-[0.22em] text-navy/60">
+                {product.category}
+              </span>
+            </div>
+
+            <WishlistButton
+              product={product}
+              showLabel
+              variant="inline"
+              className="self-start"
+            />
           </div>
 
           <h1 className="mt-4 font-display text-4xl leading-[0.95] text-navy sm:text-5xl">
@@ -239,7 +255,9 @@ export const ProductInfo = memo(function ProductInfo({
               <p className="text-[0.58rem] uppercase tracking-[0.24em] text-navy/45">
                 {selectedSize.size}
               </p>
-              <p className="mt-1 font-display text-2xl text-navy">{formatPrice(selectedSize.price)}</p>
+              <p className="mt-1 font-display text-2xl text-navy">
+                {formatPrice(selectedSize.price)}
+              </p>
             </div>
             <span
               className={`rounded-full px-3 py-1 text-[0.58rem] uppercase tracking-[0.22em] ${

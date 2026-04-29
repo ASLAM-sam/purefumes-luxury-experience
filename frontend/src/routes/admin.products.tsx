@@ -326,6 +326,8 @@ function AdminProducts() {
                           <img
                             src={product.image}
                             alt={product.name}
+                            loading="lazy"
+                            decoding="async"
                             className="w-12 h-12 rounded-lg object-cover bg-beige"
                           />
                         ) : (
