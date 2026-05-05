@@ -18,14 +18,22 @@ export const Hero = memo(function Hero() {
             Purefumes
             <br />
             <span className="italic text-gold">Hyderabad</span>
+            <br />
+            {/* Redesign Your Appearance */}
+            <span className="hero-subline block mt-8 text-[clamp(1.2rem,3vw,2rem)] font-normal opacity-80">
+              Redesign Your Appearance
+            </span>
+
+
           </motion.h1>
+
           <motion.p
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.15 }}
             className="mt-5 max-w-lg text-[0.98rem] leading-7 text-beige/80 md:mt-6 md:text-lg md:leading-8"
           >
-            Discover luxury fragrances crafted with rare ingredients and timeless elegance.
+            {/* Discover luxury fragrances crafted with rare ingredients and timeless elegance. */}
           </motion.p>
 
           <motion.div
@@ -39,7 +47,7 @@ export const Hero = memo(function Hero() {
                 variant="gold"
                 className="w-full rounded-full px-8 py-4 text-[0.72rem] tracking-[0.24em] md:min-w-[190px] md:w-auto md:tracking-[0.32em]"
               >
-                Explore Collection
+                Explore Collections
               </Button>
             </a>
             <a href="#categories" className="w-full max-w-[280px] md:w-auto md:max-w-none">

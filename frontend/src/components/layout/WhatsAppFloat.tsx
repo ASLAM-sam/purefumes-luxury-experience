@@ -1,7 +1,7 @@
 import { memo } from "react";
 
-const whatsappUrl = "https://wa.me/918686003446";
-const whatsappNumber = "+91 86860 03446";
+const whatsappUrl = "https://wa.me/918341174677";
+const whatsappNumber = "+91 8341174677";
 
 export const WhatsAppFloat = memo(function WhatsAppFloat() {
   return (

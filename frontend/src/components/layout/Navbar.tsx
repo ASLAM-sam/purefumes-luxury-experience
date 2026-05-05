@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Menu, Search, ShoppingBag, Store, X } from "lucide-react";
+import purefumesLogo from "@/assets/purefumes-hyderabad-logo.svg";
 import { Container } from "@/components/common/Container";
 import { SearchBar } from "@/components/search/SearchBar";
 import type { Brand } from "@/data/brands";
@@ -93,12 +94,17 @@ export const Navbar = memo(function Navbar() {
         }`}
       >
         <Container className="hidden h-[5.5rem] items-center gap-3 md:flex">
-          <Link to="/" className="logo flex items-end gap-2">
-            <span className="text-beige">Pure</span>
-            <span className="logo-accent">fumes</span>
-            <span className="logo-location mb-1 ml-1 text-[0.65rem] tracking-[0.38em] uppercase text-beige/60 md:text-xs">
-              Hyderabad
-            </span>
+          <Link
+            to="/"
+            className="flex h-16 w-[9.5rem] flex-none items-center lg:w-[12rem] xl:w-[14rem]"
+            aria-label="Purefumes Hyderabad home"
+          >
+            <img
+              src={purefumesLogo}
+              alt="Purefumes Hyderabad"
+              className="h-full w-full rounded-md object-contain shadow-[0_12px_30px_-22px_rgba(255,255,255,0.8)]"
+              decoding="async"
+            />
           </Link>
 
           <nav className="hidden min-w-0 flex-1 items-center justify-center gap-4 whitespace-nowrap text-[0.68rem] uppercase tracking-[0.18em] md:flex lg:gap-5 xl:gap-7">
@@ -261,14 +267,18 @@ export const Navbar = memo(function Navbar() {
             {mobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
 
-          <Link to="/" className="justify-self-center text-center leading-none">
-            <div className="font-display text-[1.12rem] font-semibold tracking-[0.01em] text-beige sm:text-[1.28rem]">
-              <span>Pure</span>
-              <span className="text-gold">fumes</span>
-            </div>
-            <span className="mt-0.5 block text-[0.4rem] uppercase tracking-[0.18em] text-beige/60 sm:text-[0.43rem]">
-              Hyderabad
-            </span>
+          <Link
+            to="/"
+            className="flex h-11 min-w-0 justify-self-center"
+            aria-label="Purefumes Hyderabad home"
+            onClick={closeMobileMenu}
+          >
+            <img
+              src={purefumesLogo}
+              alt="Purefumes Hyderabad"
+              className="h-full w-[8.25rem] rounded-md object-contain sm:w-[9.5rem]"
+              decoding="async"
+            />
           </Link>
 
           <div className="flex items-center justify-end gap-1">

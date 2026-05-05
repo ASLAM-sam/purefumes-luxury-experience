@@ -29,14 +29,10 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
         }
       })
       .catch(() => {
-        if (isActive) {
-          setProducts([]);
-        }
+        if (isActive) setProducts([]);
       })
       .finally(() => {
-        if (isActive) {
-          setLoading(false);
-        }
+        if (isActive) setLoading(false);
       });
 
     return () => {
@@ -61,18 +57,23 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
     setLoadingMore(true);
 
     try {
-      const response = await productsApi.listPaginated({ page: nextPage, limit: PAGE_SIZE });
-      setProducts((currentProducts) => {
-        const seen = new Set(currentProducts.map((product) => product.id));
+      const response = await productsApi.listPaginated({
+        page: nextPage,
+        limit: PAGE_SIZE,
+      });
+
+      setProducts((current) => {
+        const seen = new Set(current.map((p) => p.id));
         return [
-          ...currentProducts,
-          ...response.products.filter((product) => {
-            if (seen.has(product.id)) return false;
-            seen.add(product.id);
+          ...current,
+          ...response.products.filter((p) => {
+            if (seen.has(p.id)) return false;
+            seen.add(p.id);
             return true;
           }),
         ];
       });
+
       setPage(response.pagination.page);
       setTotalPages(response.pagination.pages);
     } finally {
@@ -81,37 +82,36 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
   };
 
   return (
-    <section id="featured" className="bg-beige/30 py-14 md:py-20">
+    <section id="featured" className="bg-beige/30 py-12 md:py-20">
       <Container>
         <SectionTitle
           eyebrow="The Collection"
           title="Featured Fragrances"
           subtitle="One signature scent from every house we carry."
         />
+
         {loading ? (
-          <div className="product-grid mt-12 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-2 md:gap-x-8 md:gap-y-12 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, index) => (
-              <div key={index} className="space-y-4">
-                <Skeleton className="h-[240px] rounded-xl" />
+          <div className="mt-8 grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-40 rounded-lg" />
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="h-4 w-3/4" />
                 <Skeleton className="h-3 w-24" />
-                <Skeleton className="h-7 w-4/5" />
-                <Skeleton className="h-4 w-28" />
               </div>
             ))}
           </div>
         ) : (
-          <div className="product-grid mt-12 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-2 md:gap-x-8 md:gap-y-12 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
             {featured.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
           </div>
         )}
 
-        {!loading && page < totalPages ? (
-          <div className="mt-10 flex justify-center">
+        {!loading && page < totalPages && (
+          <div className="mt-8 flex justify-center">
             <Button
-              type="button"
-              variant="outline"
               onClick={handleLoadMore}
               disabled={loadingMore}
               className="w-full max-w-xs rounded-full sm:w-auto"
@@ -119,7 +119,7 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
               {loadingMore ? "Loading..." : "Load More"}
             </Button>
           </div>
-        ) : null}
+        )}
       </Container>
     </section>
   );
