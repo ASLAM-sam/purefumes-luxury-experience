@@ -2,7 +2,7 @@ import { memo, useState, useCallback, useEffect, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Menu, Search, ShoppingBag, Store, X } from "lucide-react";
-import purefumesLogo from "@/assets/purefumes-hyderabad-logo.svg";
+import purefumesLogo from "@/assets/purefumes-hyderabad-logo-circle.jpeg";
 import { Container } from "@/components/common/Container";
 import { SearchBar } from "@/components/search/SearchBar";
 import type { Brand } from "@/data/brands";
@@ -96,15 +96,17 @@ export const Navbar = memo(function Navbar() {
         <Container className="hidden h-[5.5rem] items-center gap-3 md:flex">
           <Link
             to="/"
-            className="flex h-16 w-[9.5rem] flex-none items-center lg:w-[12rem] xl:w-[14rem]"
+            className="flex h-16 w-16 flex-none items-center justify-center lg:h-[4.25rem] lg:w-[4.25rem]"
             aria-label="Purefumes Hyderabad home"
           >
-            <img
-              src={purefumesLogo}
-              alt="Purefumes Hyderabad"
-              className="h-full w-full rounded-md object-contain shadow-[0_12px_30px_-22px_rgba(255,255,255,0.8)]"
-              decoding="async"
-            />
+            <span className="relative block h-full w-full overflow-hidden rounded-full border-2 border-beige/80 bg-white shadow-[0_14px_34px_-22px_rgba(255,255,255,0.8)]">
+              <img
+                src={purefumesLogo}
+                alt="Purefumes Hyderabad"
+                className="h-full w-full scale-[1.52] object-cover object-[center_24%]"
+                decoding="async"
+              />
+            </span>
           </Link>
 
           <nav className="hidden min-w-0 flex-1 items-center justify-center gap-4 whitespace-nowrap text-[0.68rem] uppercase tracking-[0.18em] md:flex lg:gap-5 xl:gap-7">
@@ -257,7 +259,23 @@ export const Navbar = memo(function Navbar() {
           </div>
         </Container>
 
-        <Container className="grid h-[4.1rem] grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 md:hidden">
+        <Container className="flex h-[4.25rem] items-center justify-between md:hidden">
+          <Link
+            to="/"
+            className="flex h-11 w-11 items-center justify-center"
+            aria-label="Purefumes Hyderabad home"
+            onClick={closeMobileMenu}
+          >
+            <span className="relative block h-full w-full overflow-hidden rounded-full border-2 border-beige/80 bg-white shadow-[0_10px_24px_-16px_rgba(255,255,255,0.8)]">
+              <img
+                src={purefumesLogo}
+                alt="Purefumes Hyderabad"
+                className="h-full w-full scale-[1.52] object-cover object-[center_24%]"
+                decoding="async"
+              />
+            </span>
+          </Link>
+
           <button
             onClick={() => setMobile((value) => !value)}
             type="button"
@@ -266,59 +284,6 @@ export const Navbar = memo(function Navbar() {
           >
             {mobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </button>
-
-          <Link
-            to="/"
-            className="flex h-11 min-w-0 justify-self-center"
-            aria-label="Purefumes Hyderabad home"
-            onClick={closeMobileMenu}
-          >
-            <img
-              src={purefumesLogo}
-              alt="Purefumes Hyderabad"
-              className="h-full w-[8.25rem] rounded-md object-contain sm:w-[9.5rem]"
-              decoding="async"
-            />
-          </Link>
-
-          <div className="flex items-center justify-end gap-1">
-            <button
-              onClick={() => {
-                closeMobileMenu();
-                setSearch(true);
-              }}
-              aria-label="Search"
-              className="nav-icon flex h-8 w-8 items-center justify-center rounded-full border border-beige/10 bg-beige/5 text-beige/80 hover:border-gold/50 hover:bg-beige/10"
-            >
-              <Search className="h-3.5 w-3.5" />
-            </button>
-            <Link
-              to="/wishlist"
-              aria-label="Wishlist"
-              onClick={closeMobileMenu}
-              className="nav-icon relative flex h-8 w-8 items-center justify-center rounded-full border border-beige/10 bg-beige/5 text-beige/80 hover:border-gold/50 hover:bg-beige/10"
-            >
-              <Heart className="h-3.5 w-3.5" />
-              {wishlistCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-semibold leading-none text-navy shadow-[0_10px_18px_-10px_rgba(200,169,106,0.95)]">
-                  {wishlistCount}
-                </span>
-              )}
-            </Link>
-            <Link
-              to="/cart"
-              aria-label="Cart"
-              onClick={closeMobileMenu}
-              className="nav-icon relative flex h-8 w-8 items-center justify-center rounded-full border border-beige/10 bg-beige/5 text-beige/80 hover:border-gold/50 hover:bg-beige/10"
-            >
-              <ShoppingBag className="h-3.5 w-3.5" />
-              {cartCount > 0 && (
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-semibold leading-none text-navy shadow-[0_10px_18px_-10px_rgba(200,169,106,0.95)]">
-                  {cartCount}
-                </span>
-              )}
-            </Link>
-          </div>
         </Container>
 
         <AnimatePresence>

@@ -1,6 +1,7 @@
 import { memo } from "react";
+import { Link } from "@tanstack/react-router";
 import { Container } from "@/components/common/Container";
-import { Facebook, Instagram, Mail, MapPin } from "lucide-react";
+import { Facebook, Instagram } from "lucide-react";
 
 const socialLinks = [
   {
@@ -17,9 +18,9 @@ const socialLinks = [
 
 export const Footer = memo(function Footer() {
   return (
-    <footer className="mt-16 bg-navy py-14 text-beige md:mt-24 md:py-16">
+    <footer className="mt-16 bg-navy py-12 text-beige md:mt-24 md:py-14">
       <Container>
-        <div className="grid gap-10 md:grid-cols-3 md:gap-12">
+        <div className="grid gap-8 md:grid-cols-3 md:gap-10">
           <div>
             <h3 className="font-display text-2xl md:text-3xl">
               <span>Pure</span>
@@ -28,39 +29,53 @@ export const Footer = memo(function Footer() {
                 Hyderabad
               </span>
             </h3>
-            <p className="mt-4 max-w-xs text-sm leading-7 text-beige/70">
-              Curators of authentic luxury fragrances. Decants, full bottles, niche houses -
-              delivered with discretion.
+            <p className="mt-4 max-w-sm text-sm leading-7 text-beige/75">
+              Original niche, designer, and Middle Eastern fragrances with a trusted online shopping
+              experience.
             </p>
           </div>
 
           <div>
-            <p className="mb-4 text-[0.65rem] uppercase tracking-[0.4em] text-gold">Discover</p>
-            <ul className="space-y-2 text-sm text-beige/70">
-              <li className="transition duration-300 ease-in-out hover:text-gold">
-                Middle Eastern
+            <p className="mb-4 text-[0.65rem] uppercase tracking-[0.4em] text-gold">Information</p>
+            <ul className="space-y-2 text-sm text-beige/75">
+              <li>
+                <Link to="/about" className="transition duration-300 ease-in-out hover:text-gold">
+                  About Us
+                </Link>
               </li>
-              <li className="transition duration-300 ease-in-out hover:text-gold">Designer</li>
-              <li className="transition duration-300 ease-in-out hover:text-gold">Niche</li>
+              <li>
+                <Link to="/contact" className="transition duration-300 ease-in-out hover:text-gold">
+                  Contact
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/privacy-policy"
+                  className="transition duration-300 ease-in-out hover:text-gold"
+                >
+                  Privacy Policy
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/terms-and-conditions"
+                  className="transition duration-300 ease-in-out hover:text-gold"
+                >
+                  Terms & Conditions
+                </Link>
+              </li>
             </ul>
           </div>
 
           <div>
-            <p className="mb-4 text-[0.65rem] uppercase tracking-[0.4em] text-gold">Visit</p>
-            <ul className="space-y-3 text-sm text-beige/70">
-              <li className="flex items-start gap-3">
-                <MapPin className="mt-1 h-4 w-4 text-gold" />
-                <span>Banjara Hills, Hyderabad</span>
-              </li>
-              <li className="flex items-start gap-3">
-                <Mail className="mt-1 h-4 w-4 text-gold" />
-                <a
-                  href="mailto:hello@purefumes.in"
-                  className="transition duration-300 ease-in-out hover:text-gold"
-                >
-                  hello@purefumes.in
-                </a>
-              </li>
+            <p className="mb-4 text-[0.65rem] uppercase tracking-[0.4em] text-gold">Business Details</p>
+            <ul className="space-y-2 text-sm text-beige/75">
+              <li>Owner: Mohammed Ammar Ali</li>
+              <li>Business Type: Individual</li>
+              <li>Location: Hyderabad, Telangana, India</li>
+              <li>Email: purefumes.hyderabad@gmail.com</li>
+              <li>Phone: 8686003446</li>
+              <li>GST: Not Available</li>
             </ul>
 
             <div className="footer-socials">
@@ -80,8 +95,9 @@ export const Footer = memo(function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 border-t border-beige/10 pt-8 text-center text-[0.68rem] uppercase tracking-[0.34em] text-beige/55">
-          Copyright {new Date().getFullYear()} Purefumes Hyderabad - Crafted with intention
+        <div className="mt-8 border-t border-beige/10 pt-6 text-center text-xs text-beige/80">
+          © 2026 Purefumes Hyderabad. Owned and operated by Mohammed Ammar Ali, Hyderabad,
+          Telangana, India.
         </div>
       </Container>
     </footer>
