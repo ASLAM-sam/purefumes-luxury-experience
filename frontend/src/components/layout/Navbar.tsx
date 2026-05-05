@@ -270,7 +270,7 @@ export const Navbar = memo(function Navbar() {
               <img
                 src={purefumesLogo}
                 alt="Purefumes Hyderabad"
-                className="h-full w-full scale-[1.52] object-cover object-[center_24%]"
+                className="h-full w-full scale-[1.88] object-cover object-[center_15%]"
                 decoding="async"
               />
             </span>
