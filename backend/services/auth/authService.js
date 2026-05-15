@@ -16,7 +16,7 @@ import {
   findUserByUsername,
 } from "../../repositories/userRepository.js";
 
-const ACCESS_COOKIE = "accessToken";
+const ACCESS_COOKIE = "token";
 const REFRESH_COOKIE = "refreshToken";
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
@@ -140,14 +140,15 @@ const issueTokens = async ({ user, req, res, family = createRandomToken(12) }) =
     ACCESS_COOKIE,
     accessToken,
     getCookieOptions({
-      maxAge: parseDurationToMs(env.JWT_EXPIRE, 15 * 60 * 1000),
+      maxAge: 7 * 24 * 60 * 60 * 1000,
     }),
   );
+  res.clearCookie("accessToken", getCookieOptions());
   res.cookie(
     REFRESH_COOKIE,
     refreshToken,
     getCookieOptions({
-      maxAge: parseDurationToMs(env.REFRESH_EXPIRE, 30 * 86400000),
+      maxAge: 30 * 24 * 60 * 60 * 1000,
     }),
   );
   setCsrfCookie(res);

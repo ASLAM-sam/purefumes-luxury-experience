@@ -39,7 +39,11 @@ const apiUrl =
   resolveUrl(configuredApiUrl, frontendUrl || browserOrigin) ||
   (frontendUrl ? resolveUrl("/api", frontendUrl) : "");
 const apiOrigin = resolveOrigin(apiUrl, frontendUrl || browserOrigin) || frontendUrl;
-const authUrl = apiOrigin ? resolveUrl("/auth", apiOrigin) : "";
+const authUrl = apiUrl
+  ? `${apiUrl.replace(/\/$/, "")}/auth`
+  : apiOrigin
+    ? resolveUrl("/auth", apiOrigin)
+    : "";
 
 if (import.meta.env.PROD && apiUrl.startsWith("http://")) {
   throw new Error("VITE_API_URL must use HTTPS in production");

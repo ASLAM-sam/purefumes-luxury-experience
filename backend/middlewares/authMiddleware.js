@@ -7,7 +7,8 @@ const getBearerToken = (req) => {
   return authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
 };
 
-const getAccessToken = (req) => req.cookies?.accessToken || getBearerToken(req);
+const getAccessToken = (req) =>
+  req.cookies?.token || req.cookies?.accessToken || getBearerToken(req);
 
 export const optionalAuth = async (req, _res, next) => {
   const token = getAccessToken(req);

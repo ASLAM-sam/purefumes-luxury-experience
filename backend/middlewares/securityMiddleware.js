@@ -8,15 +8,21 @@ import { createRandomToken, timingSafeEqual } from "../utils/crypto.js";
 
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const csrfHeaderName = "X-CSRF-Token";
+const productionOrigins = [
+  "https://purefumeshyderabad.in",
+  "https://www.purefumeshyderabad.in",
+];
 
 export const getAllowedOrigins = () => {
-  return [...new Set(env.ALLOWED_ORIGINS || [])].filter(Boolean);
+  return [...new Set([...productionOrigins, ...(env.ALLOWED_ORIGINS || [])])]
+    .filter(Boolean)
+    .filter((origin) => origin !== "*");
 };
 
 export const getCookieOptions = ({ httpOnly = true, maxAge } = {}) => ({
   httpOnly,
-  secure: env.isProduction,
-  sameSite: env.COOKIE_SAME_SITE,
+  secure: true,
+  sameSite: "None",
   signed: false,
   maxAge,
   domain: env.COOKIE_DOMAIN,
@@ -31,7 +37,7 @@ export const setCsrfCookie = (res) => {
 };
 
 export const clearAuthCookies = (res) => {
-  ["accessToken", "refreshToken", "csrfToken"].forEach((name) => {
+  ["token", "accessToken", "refreshToken", "csrfToken"].forEach((name) => {
     res.clearCookie(name, getCookieOptions({ httpOnly: name !== "csrfToken" }));
   });
 };
@@ -41,7 +47,9 @@ export const csrfProtection = (req, res, next) => {
     return next();
   }
 
-  const usesCookieAuth = Boolean(req.cookies?.accessToken || req.cookies?.refreshToken);
+  const usesCookieAuth = Boolean(
+    req.cookies?.token || req.cookies?.accessToken || req.cookies?.refreshToken,
+  );
 
   if (!usesCookieAuth) {
     return next();
@@ -59,7 +67,7 @@ export const csrfProtection = (req, res, next) => {
     method: req.method,
     path: req.originalUrl,
     origin: req.get("origin") || "",
-    hasAccessCookie: Boolean(req.cookies?.accessToken),
+    hasAccessCookie: Boolean(req.cookies?.token || req.cookies?.accessToken),
     hasRefreshCookie: Boolean(req.cookies?.refreshToken),
     hasCsrfCookie: Boolean(csrfCookie),
     hasCsrfHeader: Boolean(csrfHeader),
@@ -74,7 +82,7 @@ export const csrfProtection = (req, res, next) => {
 export const applySecurityMiddleware = (app) => {
   const allowedOrigins = getAllowedOrigins();
 
-  app.set("trust proxy", env.isProduction ? 1 : false);
+  app.set("trust proxy", 1);
   app.set("etag", false);
   app.disable("x-powered-by");
 
@@ -113,15 +121,7 @@ export const applySecurityMiddleware = (app) => {
   );
   app.use(
     cors({
-      origin(origin, callback) {
-        if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
-          callback(null, true);
-          return;
-        }
-
-        logger.warn("CORS origin rejected", { origin });
-        callback(new Error("Not allowed by CORS"));
-      },
+      origin: allowedOrigins,
       credentials: true,
       allowedHeaders: ["Content-Type", "Authorization", csrfHeaderName, "X-Requested-With"],
       exposedHeaders: [csrfHeaderName, "X-Request-Id"],

@@ -30,7 +30,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const isProduction = env.isProduction;
+app.set("trust proxy", 1);
+
 const authSessionMiddleware = session({
   name: "purefumes.sid",
   secret: env.SESSION_SECRET,
@@ -38,11 +39,11 @@ const authSessionMiddleware = session({
   saveUninitialized: false,
   rolling: false,
   unset: "destroy",
-  proxy: isProduction,
+  proxy: true,
   cookie: {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: env.COOKIE_SAME_SITE,
+    secure: true,
+    sameSite: "None",
     domain: env.COOKIE_DOMAIN,
     path: "/",
     maxAge: 10 * 60 * 1000,

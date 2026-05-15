@@ -8,6 +8,8 @@ const DEFAULT_JWT_EXPIRE = "15m";
 const DEFAULT_REFRESH_EXPIRE = "30d";
 const DEFAULT_SMTP_PORT = 587;
 const DEFAULT_DEV_FRONTEND_URL = "http://localhost:8080";
+const DEFAULT_PRODUCTION_FRONTEND_URL = "https://purefumeshyderabad.in";
+const DEFAULT_PRODUCTION_BACKEND_URL = "https://hydpurefumes.onrender.com";
 const MIN_SECRET_LENGTH = 32;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,6 +79,10 @@ const localDevelopmentOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:5173",
 ];
+const productionOrigins = [
+  DEFAULT_PRODUCTION_FRONTEND_URL,
+  "https://www.purefumeshyderabad.in",
+];
 const port = Number(process.env.PORT || DEFAULT_PORT) || DEFAULT_PORT;
 const firstCorsOrigin = configuredCorsOrigins[0] || "";
 const frontendUrl = normalizeUrl(
@@ -84,25 +90,26 @@ const frontendUrl = normalizeUrl(
     read("FRONTEND_URL"),
     read("CLIENT_URL"),
     firstCorsOrigin,
-    !isProduction ? DEFAULT_DEV_FRONTEND_URL : "",
+    isProduction ? DEFAULT_PRODUCTION_FRONTEND_URL : DEFAULT_DEV_FRONTEND_URL,
   ),
 );
 const backendUrl = normalizeUrl(
   firstNonEmpty(
     read("BACKEND_URL"),
     safeOriginFromUrl(read("GOOGLE_CALLBACK_URL")),
-    !isProduction ? `http://localhost:${port}` : "",
+    isProduction ? DEFAULT_PRODUCTION_BACKEND_URL : `http://localhost:${port}`,
   ),
 );
 const googleCallbackUrl = normalizeUrl(
   firstNonEmpty(
     read("GOOGLE_CALLBACK_URL"),
-    backendUrl ? `${backendUrl}/auth/google/callback` : "",
+    backendUrl ? `${backendUrl}/api/auth/google/callback` : "",
   ),
 );
 const allowedOrigins = [
   ...new Set([
     ...(!isProduction ? localDevelopmentOrigins : []),
+    ...productionOrigins,
     frontendUrl,
     ...configuredCorsOrigins,
   ].filter(Boolean)),
@@ -126,7 +133,7 @@ export const env = {
   COOKIE_SECRET: read("COOKIE_SECRET"),
   SESSION_SECRET: firstNonEmpty(read("SESSION_SECRET"), read("COOKIE_SECRET")),
   COOKIE_DOMAIN: read("COOKIE_DOMAIN") || undefined,
-  COOKIE_SAME_SITE: firstNonEmpty(read("COOKIE_SAME_SITE"), isProduction ? "none" : "lax").toLowerCase(),
+  COOKIE_SAME_SITE: firstNonEmpty(read("COOKIE_SAME_SITE"), isProduction ? "None" : "Lax"),
   FRONTEND_URL: frontendUrl,
   BACKEND_URL: backendUrl,
   CORS_ORIGIN: read("CORS_ORIGIN"),
@@ -232,7 +239,7 @@ export const validateEnv = () => {
       throw new Error("CORS_ORIGIN cannot be '*' in production");
     }
 
-    if (env.COOKIE_SAME_SITE === "none" && !env.ENFORCE_HTTPS) {
+    if (env.COOKIE_SAME_SITE.toLowerCase() === "none" && !env.ENFORCE_HTTPS) {
       throw new Error("SameSite=None cookies require HTTPS enforcement in production");
     }
 
