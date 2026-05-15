@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 320" role="img" aria-labelledby="title desc">
+  <title id="title">Purefumes Hyderabad</title>
+  <desc id="desc">Purefumes Hyderabad logo with PH monogram and Redefine Your Presence tagline.</desc>
+  <rect width="1040" height="320" rx="28" fill="#ffffff"/>
+  <g fill="#070707">
+    <path d="M437 48h30v166h-30z"/>
+    <path d="M527 116h29v124h-29z"/>
+    <path d="M677 118h30v124h-30z"/>
+    <path d="M460 48h61c36 0 63 24 63 58 0 35-27 59-65 59h-28c-24 0-44-20-44-45V76h30v44c0 9 7 16 16 16h26c21 0 35-12 35-30 0-17-14-30-34-30h-60z"/>
+    <path d="M557 161c6 15 21 25 40 25h37c18 0 33 9 42 23l-13 8c-6-10-16-15-29-15h-37c-27 0-48-14-56-36z"/>
+    <path d="M465 66c0 39 20 74 55 87l-5 14c-42-16-65-54-65-101z"/>
+  </g>
+  <g fill="#070707" font-family="Didot, 'Playfair Display', 'Bodoni MT', 'Times New Roman', serif" font-weight="400" text-anchor="middle">
+    <text x="520" y="264" font-size="54" letter-spacing="6">PUREFUMES HYDERABAD</text>
+  </g>
+  <g fill="#070707" font-family="Inter, Arial, sans-serif" font-weight="700" text-anchor="middle">
+    <text x="520" y="303" font-size="24" letter-spacing="12">REDEFINE YOUR PRESENCE</text>
+  </g>
+</svg>

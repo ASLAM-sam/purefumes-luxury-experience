@@ -1,0 +1,134 @@
+import compression from "compression";
+import cors from "cors";
+import helmet from "helmet";
+import mongoSanitize from "express-mongo-sanitize";
+import env from "../config/env.js";
+import logger from "../config/logger.js";
+import { createRandomToken, timingSafeEqual } from "../utils/crypto.js";
+
+const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
+const csrfHeaderName = "X-CSRF-Token";
+
+export const getAllowedOrigins = () => {
+  return [...new Set(env.ALLOWED_ORIGINS || [])].filter(Boolean);
+};
+
+export const getCookieOptions = ({ httpOnly = true, maxAge } = {}) => ({
+  httpOnly,
+  secure: env.isProduction,
+  sameSite: env.COOKIE_SAME_SITE,
+  signed: false,
+  maxAge,
+  domain: env.COOKIE_DOMAIN,
+  path: "/",
+});
+
+export const setCsrfCookie = (res) => {
+  const csrfToken = createRandomToken(24);
+  res.cookie("csrfToken", csrfToken, getCookieOptions({ httpOnly: false }));
+  res.set(csrfHeaderName, csrfToken);
+  return csrfToken;
+};
+
+export const clearAuthCookies = (res) => {
+  ["accessToken", "refreshToken", "csrfToken"].forEach((name) => {
+    res.clearCookie(name, getCookieOptions({ httpOnly: name !== "csrfToken" }));
+  });
+};
+
+export const csrfProtection = (req, res, next) => {
+  if (safeMethods.has(req.method)) {
+    return next();
+  }
+
+  const usesCookieAuth = Boolean(req.cookies?.accessToken || req.cookies?.refreshToken);
+
+  if (!usesCookieAuth) {
+    return next();
+  }
+
+  const csrfCookie = req.cookies?.csrfToken;
+  const csrfHeader = req.get("x-csrf-token");
+
+  if (csrfCookie && csrfHeader && timingSafeEqual(csrfCookie, csrfHeader)) {
+    return next();
+  }
+
+  logger.warn("CSRF token validation failed", {
+    requestId: req.id,
+    method: req.method,
+    path: req.originalUrl,
+    origin: req.get("origin") || "",
+    hasAccessCookie: Boolean(req.cookies?.accessToken),
+    hasRefreshCookie: Boolean(req.cookies?.refreshToken),
+    hasCsrfCookie: Boolean(csrfCookie),
+    hasCsrfHeader: Boolean(csrfHeader),
+  });
+
+  return res.status(403).json({
+    success: false,
+    message: "CSRF token validation failed",
+  });
+};
+
+export const applySecurityMiddleware = (app) => {
+  const allowedOrigins = getAllowedOrigins();
+
+  app.set("trust proxy", env.isProduction ? 1 : false);
+  app.set("etag", false);
+  app.disable("x-powered-by");
+
+  app.use((req, res, next) => {
+    if (!env.ENFORCE_HTTPS || req.secure || req.get("x-forwarded-proto") === "https") {
+      return next();
+    }
+
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      return res.status(426).json({
+        success: false,
+        message: "HTTPS is required",
+      });
+    }
+
+    return res.redirect(308, `https://${req.get("host")}${req.originalUrl}`);
+  });
+
+  app.use(
+    helmet({
+      crossOriginResourcePolicy: { policy: "cross-origin" },
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          defaultSrc: ["'none'"],
+          baseUri: ["'none'"],
+          frameAncestors: ["'none'"],
+          formAction: ["'none'"],
+          imgSrc: ["'self'", "data:", "blob:", "https:"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          connectSrc: ["'self'", ...allowedOrigins],
+        },
+      },
+      referrerPolicy: { policy: "no-referrer" },
+    }),
+  );
+  app.use(
+    cors({
+      origin(origin, callback) {
+        if (!origin || allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+          callback(null, true);
+          return;
+        }
+
+        logger.warn("CORS origin rejected", { origin });
+        callback(new Error("Not allowed by CORS"));
+      },
+      credentials: true,
+      allowedHeaders: ["Content-Type", "Authorization", csrfHeaderName, "X-Requested-With"],
+      exposedHeaders: [csrfHeaderName, "X-Request-Id"],
+      methods: ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
+      optionsSuccessStatus: 204,
+    }),
+  );
+  app.use(compression());
+  app.use(mongoSanitize({ replaceWith: "_" }));
+};

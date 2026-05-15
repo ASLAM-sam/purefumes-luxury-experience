@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 56" role="img" aria-labelledby="paytmTitle">
+  <title id="paytmTitle">Paytm</title>
+  <rect width="180" height="56" rx="12" fill="#eef8ff"/>
+  <text x="90" y="36" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" text-anchor="middle" fill="#00baf2">Paytm</text>
+</svg>
