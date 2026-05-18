@@ -18,7 +18,7 @@ import {
 
 type PreviewRow = BulkProductImportRow & {
   rowNumber: number;
-  detectedCategory: Product["category"] | "";
+  detectedCategory: string;
   status: "ready" | "skipped" | "failed";
   reason: string;
 };
@@ -29,6 +29,7 @@ type ManualEntryRow = {
   id: string;
   name: string;
   brand: string;
+  category: string;
   price: string;
   stock: string;
   description: string;
@@ -45,6 +46,7 @@ const createManualEntryRow = (): ManualEntryRow => ({
   id: `product-row-${(manualRowSeed += 1)}`,
   name: "",
   brand: "",
+  category: "",
   price: "",
   stock: "",
   description: "",
@@ -62,7 +64,7 @@ const normalizeHeader = (value = "") =>
 
 const normalizeName = (value = "") => String(value).trim().toLowerCase().replace(/\s+/g, " ");
 
-const getProductCategoryFromBrand = (brand: Brand | undefined): Product["category"] | "" => {
+const getProductCategoryFromBrand = (brand: Brand | undefined): string => {
   if (!brand) return "";
   if (brand.category === "middle-eastern") return "Middle Eastern";
   if (brand.category === "designer") return "Designer";
@@ -169,6 +171,9 @@ const parseProductCsvText = (text = ""): BulkProductImportRow[] => {
   const priceIndex = findHeader("price", "selling_price");
   const stockIndex = findHeader("stock", "quantity");
   const descriptionIndex = findHeader("description", "details");
+  const categoryIndex = findHeader("category", "product_category");
+  const imageIndex = findHeader("image", "image_url", "primary_image");
+  const sizesIndex = findHeader("sizes", "size_options");
 
   if (nameIndex < 0 || brandIndex < 0 || priceIndex < 0 || stockIndex < 0) {
     throw new Error(
@@ -182,19 +187,22 @@ const parseProductCsvText = (text = ""): BulkProductImportRow[] => {
       rowNumber: index + 2,
       name: String(row[nameIndex] || "").trim(),
       brand: String(row[brandIndex] || "").trim(),
+      category: categoryIndex >= 0 ? String(row[categoryIndex] || "").trim() : "",
       price: String(row[priceIndex] || "").trim(),
       stock: String(row[stockIndex] || "").trim(),
       description: descriptionIndex >= 0 ? String(row[descriptionIndex] || "").trim() : "",
+      image: imageIndex >= 0 ? String(row[imageIndex] || "").trim() : "",
+      sizes: sizesIndex >= 0 ? String(row[sizesIndex] || "").trim() : "",
     }))
     .filter((row) => row.name || row.brand || String(row.price).trim() || String(row.stock).trim());
 };
 
 function downloadTemplate() {
   const csv = [
-    "name,brand,price,stock,description",
-    "9PM,Afnan,2499,18,Fruity vanilla evening scent",
-    "Club De Nuit Intense Man,Armaf,3299,12,Citrus smoky bestseller",
-    "Red Tobacco,Mancera,5999,6,Powerful niche tobacco fragrance",
+    "name,brand,category,price,stock,description,image,sizes",
+    "9PM,Afnan,Designer,2499,18,Fruity vanilla evening scent,https://example.com/9pm.jpg,Standard:2499|100ml:3299",
+    "Club De Nuit Intense Man,Armaf,Designer,3299,12,Citrus smoky bestseller,https://example.com/cdnim.jpg,Standard:3299",
+    "Red Tobacco,Mancera,Niche,5999,6,Powerful niche tobacco fragrance,https://example.com/red-tobacco.jpg,60ml:5999|120ml:8999",
   ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -254,16 +262,18 @@ export function BulkProductUploadDialog({
     }
 
     return manualRows.flatMap((row, index) =>
-      row.name.trim() ||
-      row.brand.trim() ||
-      row.price.trim() ||
-      row.stock.trim() ||
-      row.description.trim()
+              row.name.trim() ||
+              row.brand.trim() ||
+              row.category.trim() ||
+              row.price.trim() ||
+              row.stock.trim() ||
+              row.description.trim()
         ? [
             {
               rowNumber: index + 1,
               name: row.name.trim(),
               brand: row.brand.trim(),
+              category: row.category.trim(),
               price: row.price.trim(),
               stock: row.stock.trim(),
               description: row.description.trim(),
@@ -288,7 +298,7 @@ export function BulkProductUploadDialog({
       const brandName = String(row.brand || "").trim();
       const description = String(row.description || "").trim();
       const matchedBrand = brandMap.get(normalizeName(brandName));
-      const detectedCategory = getProductCategoryFromBrand(matchedBrand);
+      const detectedCategory = row.category?.trim() || getProductCategoryFromBrand(matchedBrand);
 
       if (!name) {
         return {
@@ -317,16 +327,6 @@ export function BulkProductUploadDialog({
           detectedCategory,
           status: "failed",
           reason: "Brand is required.",
-        };
-      }
-
-      if (!matchedBrand) {
-        return {
-          ...row,
-          rowNumber: row.rowNumber || 0,
-          detectedCategory,
-          status: "failed",
-          reason: "Brand must already exist before importing products.",
         };
       }
 
@@ -362,7 +362,7 @@ export function BulkProductUploadDialog({
         };
       }
 
-      const productKey = `${normalizeName(matchedBrand.name)}::${normalizeName(name)}`;
+      const productKey = `${normalizeName(brandName)}::${normalizeName(name)}`;
 
       if (seenUploadKeys.has(productKey)) {
         return {
@@ -375,12 +375,19 @@ export function BulkProductUploadDialog({
       }
 
       if (existingProductKeys.has(productKey)) {
+        const matched = existingProducts.find((p) => {
+          const key = `${normalizeName(p.brandDetails?.name || p.brand)}::${normalizeName(p.name)}`;
+          return key === productKey;
+        });
+
         return {
           ...row,
           rowNumber: row.rowNumber || 0,
           detectedCategory,
           status: "skipped",
-          reason: "Product already exists for this brand.",
+          reason: matched
+            ? `Product already exists: ${matched.name}${matched.id ? ` (id: ${matched.id})` : ""}`
+            : "Product already exists for this brand.",
         };
       }
 
@@ -391,7 +398,7 @@ export function BulkProductUploadDialog({
         detectedCategory,
         status: "ready",
         reason:
-          "Ready to import. Category will follow the selected brand and a Standard size will use the entered price.",
+          "Ready to import. Missing brands will be created automatically and exact duplicate products will be skipped.",
       };
     });
   }, [activeRows, brandMap, existingProducts]);
@@ -403,6 +410,7 @@ export function BulkProductUploadDialog({
     (row) =>
       row.name.trim() ||
       row.brand.trim() ||
+      row.category.trim() ||
       row.price.trim() ||
       row.stock.trim() ||
       row.description.trim(),
@@ -439,7 +447,7 @@ export function BulkProductUploadDialog({
     setManualRows((current) =>
       current.map((row) =>
         row.id === id
-          ? { ...row, name: "", brand: "", price: "", stock: "", description: "" }
+          ? { ...row, name: "", brand: "", category: "", price: "", stock: "", description: "" }
           : row,
       ),
     );
@@ -484,7 +492,8 @@ export function BulkProductUploadDialog({
           <DialogDescription className="text-navy/60">
             Import base catalog data with either a CSV file or a manual 20-row grid. Use{" "}
             <code>name</code>, <code>brand</code>, <code>price</code>, <code>stock</code>, and
-            optional <code>description</code>. Images can be managed on each product after import.
+            optional <code>category</code>, <code>description</code>, <code>image</code>, or{" "}
+            <code>sizes</code>.
           </DialogDescription>
         </DialogHeader>
 
@@ -539,8 +548,8 @@ export function BulkProductUploadDialog({
                     <>
                       <p className="font-medium text-navy">Upload a products CSV</p>
                       <p className="mt-1 text-sm text-navy/60">
-                        This step creates product records only. Product category comes from the
-                        matched brand, and images can be added later from each product page.
+                        This step creates product records only. Missing brands are auto-created, and
+                        exact duplicate products for the same brand are skipped safely.
                       </p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <button
@@ -575,8 +584,8 @@ export function BulkProductUploadDialog({
                     <>
                       <p className="font-medium text-navy">Manually add up to 20 products</p>
                       <p className="mt-1 text-sm text-navy/60">
-                        Select an existing brand for each row so category mapping stays clean and
-                        predictable.
+                        Add multiple perfumes under the same brand freely. Category is optional, and
+                        missing brands will be created during import.
                       </p>
                       <div className="mt-4 flex flex-wrap gap-3">
                         <button
@@ -634,10 +643,10 @@ export function BulkProductUploadDialog({
             <div className="overflow-hidden rounded-2xl border border-border/70 bg-card">
               <div className="border-b border-border/70 px-5 py-4">
                 <h3 className="font-display text-2xl text-navy">20-Product Entry Grid</h3>
-                <p className="mt-1 text-sm text-navy/60">
-                  Blank rows are ignored. Each saved product gets a Standard size based on the
-                  entered price.
-                </p>
+                  <p className="mt-1 text-sm text-navy/60">
+                    Blank rows are ignored. Each saved product gets a Standard size based on the
+                    entered price unless you provide custom sizes in CSV.
+                  </p>
               </div>
 
               <div className="max-h-[24rem] overflow-auto">
@@ -657,7 +666,7 @@ export function BulkProductUploadDialog({
                   <tbody className="divide-y divide-border">
                     {manualRows.map((row, index) => {
                       const matchedBrand = brandMap.get(normalizeName(row.brand));
-                      const detectedCategory = getProductCategoryFromBrand(matchedBrand);
+                      const detectedCategory = row.category.trim() || getProductCategoryFromBrand(matchedBrand);
 
                       return (
                         <tr key={row.id}>
@@ -673,23 +682,24 @@ export function BulkProductUploadDialog({
                             />
                           </td>
                           <td className="px-5 py-3">
-                            <select
+                            <input
                               value={row.brand}
                               onChange={(event) =>
                                 updateManualRow(row.id, "brand", event.target.value)
                               }
+                              placeholder="Brand name"
                               className="w-full rounded-lg border border-border bg-beige/35 px-3 py-2.5 text-sm text-navy outline-none focus:border-navy"
-                            >
-                              <option value="">Select brand</option>
-                              {existingBrands.map((brand) => (
-                                <option key={brand.id} value={brand.name}>
-                                  {brand.name}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </td>
-                          <td className="px-5 py-3 text-navy/70">
-                            {detectedCategory || "Brand decides category"}
+                          <td className="px-5 py-3">
+                            <input
+                              value={row.category}
+                              onChange={(event) =>
+                                updateManualRow(row.id, "category", event.target.value)
+                              }
+                              placeholder={detectedCategory || "Optional"}
+                              className="w-full rounded-lg border border-border bg-beige/35 px-3 py-2.5 text-sm text-navy outline-none focus:border-navy"
+                            />
                           </td>
                           <td className="px-5 py-3">
                             <input
@@ -748,7 +758,8 @@ export function BulkProductUploadDialog({
                 {uploadMode === "csv" ? "CSV Preview" : "Batch Preview"}
               </h3>
               <p className="mt-1 text-sm text-navy/60">
-                Review the rows before importing. Category is detected from the matched brand.
+                Review the rows before importing. Categories can come from the file, or the importer
+                will fall back to legacy brand mapping when needed.
               </p>
             </div>
 

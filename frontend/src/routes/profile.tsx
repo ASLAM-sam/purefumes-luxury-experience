@@ -25,14 +25,15 @@ import { SiteShell } from "@/components/layout/SiteShell";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import type { Product } from "@/data/products";
 import {
   accountApi,
   type Address,
   type AuthUser,
   type DashboardStats,
   type Order,
-  type Product,
 } from "@/services/api";
+import { setRedirectAfterLogin } from "@/lib/auth-redirect";
 import { frontendMediator } from "@/lib/performance/mediator";
 
 export const Route = createFileRoute("/profile")({
@@ -196,7 +197,7 @@ function ProfilePage() {
 
   useEffect(() => {
     if (authReady && !user) {
-      window.localStorage.setItem("purefumes_redirect_after_login", "/profile");
+      setRedirectAfterLogin("/profile");
       nav({ to: "/login" });
     }
   }, [authReady, nav, user]);
@@ -765,7 +766,7 @@ function ProfilePage() {
                   <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {wishlist.slice(0, 6).map((product) => (
                       <div key={product.id} className="rounded-lg bg-beige/30 p-3">
-                        <Link to={`/product/${product.id}`} className="group block">
+                        <Link to="/product/$id" params={{ id: product.id }} className="group block">
                           <div className="product-fit-frame aspect-square rounded-lg">
                             <OptimizedImage
                               src={product.image || product.images?.[0] || ""}
@@ -782,7 +783,7 @@ function ProfilePage() {
                         <div className="mt-2 flex items-center justify-between gap-2">
                           <div>
                             <p className="text-sm font-medium text-navy">
-                              {formatCurrency(product.price)}
+                              {formatCurrency(product.price ?? 0)}
                             </p>
                             <p className="text-xs text-navy/55">
                               {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}

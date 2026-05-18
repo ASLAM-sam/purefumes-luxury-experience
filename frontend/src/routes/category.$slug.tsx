@@ -1,37 +1,26 @@
-import { createFileRoute, notFound } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { Container } from "@/components/common/Container";
 import { SectionTitle } from "@/components/common/SectionTitle";
 import { Button } from "@/components/common/Button";
+import { CategoryRail } from "@/components/category/CategoryRail";
 import { ProductCard } from "@/components/product/ProductCard";
-import { productsApi } from "@/services/api";
+import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
+import { filterStorefrontCategories, isGenderCategory } from "@/lib/categories";
+import { categoriesApi, productsApi } from "@/services/api";
 
 const PAGE_SIZE = 12;
 
-const slugMap: Record<string, Product["category"]> = {
-  "middle-eastern": "Middle Eastern",
-  designer: "Designer",
-  niche: "Niche",
-};
-
 export const Route = createFileRoute("/category/$slug")({
-  loader: ({ params }) => {
-    const category = slugMap[params.slug];
-    if (!category) throw notFound();
-    return { category };
-  },
   component: CategoryPage,
-  notFoundComponent: () => (
-    <SiteShell>
-      <div className="py-40 text-center font-display text-3xl">Category not found</div>
-    </SiteShell>
-  ),
 });
 
 function CategoryPage() {
-  const { category } = Route.useLoaderData();
+  const { slug } = Route.useParams();
+  const [category, setCategory] = useState<Category | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -49,16 +38,32 @@ function CategoryPage() {
       setTotalPages(1);
 
       try {
-        const response = await productsApi.listPaginated({ category, page: 1, limit: PAGE_SIZE });
+        const [categoryResponse, productsResponse, categoriesResponse] = await Promise.all([
+          categoriesApi.getBySlug(slug),
+          productsApi.listPaginated({ category: slug, page: 1, limit: PAGE_SIZE }),
+          categoriesApi.list(),
+        ]);
 
         if (!isActive) return;
 
-        setProducts(response.products);
-        setPage(response.pagination.page);
-        setTotalPages(response.pagination.pages);
+        if (isGenderCategory(categoryResponse)) {
+          setCategory(null);
+          setCategories(filterStorefrontCategories(categoriesResponse));
+          setProducts([]);
+          setError("This collection is no longer available.");
+          return;
+        }
+
+        setCategory(categoryResponse);
+        setCategories(filterStorefrontCategories(categoriesResponse));
+        setProducts(productsResponse.products);
+        setPage(productsResponse.pagination.page);
+        setTotalPages(productsResponse.pagination.pages);
       } catch (err) {
         if (!isActive) return;
 
+        setCategory(null);
+        setCategories([]);
         setProducts([]);
         setError(err instanceof Error ? err.message : "Could not load this category.");
       } finally {
@@ -68,12 +73,12 @@ function CategoryPage() {
       }
     };
 
-    loadCategory();
+    void loadCategory();
 
     return () => {
       isActive = false;
     };
-  }, [category]);
+  }, [slug]);
 
   const handleLoadMore = async () => {
     if (isLoadingMore || page >= totalPages) return;
@@ -82,7 +87,7 @@ function CategoryPage() {
 
     try {
       const response = await productsApi.listPaginated({
-        category,
+        category: slug,
         page: page + 1,
         limit: PAGE_SIZE,
       });
@@ -109,13 +114,43 @@ function CategoryPage() {
 
   const subtitle = isLoading
     ? "Loading fragrances from the collection."
-    : `${products.length} fragrances curated within this realm.`;
+    : category
+      ? `${category.productCount} fragrances currently flow through this category.`
+      : "Category details could not be loaded.";
+
+  const heroImage = category?.image || "";
 
   return (
     <SiteShell>
-      <section className="py-20">
+      <section className="py-[var(--section-space)]">
         <Container>
-          <SectionTitle eyebrow="Category" title={category} subtitle={subtitle} />
+          {heroImage ? (
+            <div className="relative overflow-hidden rounded-[var(--radius-panel)] border border-border/70 bg-[#efe7dc] shadow-soft">
+              <img
+                src={heroImage}
+                alt={category?.name || "Category"}
+                className="h-[clamp(15rem,36vw,24rem)] w-full object-cover object-center"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18]/72 via-[#1e1b18]/18 to-transparent" />
+              <div className="absolute inset-x-0 bottom-0 p-6 text-white sm:p-8">
+                <p className="fluid-eyebrow uppercase text-[#e6c79c]">Home / Category</p>
+                <h1 className="mt-3 font-display text-[clamp(2rem,4vw,4rem)]">
+                  {category?.name || "Category"}
+                </h1>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-white/82">
+                  {category?.description || subtitle}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <SectionTitle eyebrow="Category" title={category?.name || "Category"} subtitle={subtitle} />
+          )}
+
+          {categories.length ? (
+            <div className="mt-4 rounded-[1.25rem] border border-border/70 bg-[#fffaf4] px-4 py-4 shadow-soft">
+              <CategoryRail categories={categories} activeSlug={slug} allLabel="Shop All" allHref="/shop" />
+            </div>
+          ) : null}
 
           {error ? (
             <div className="mx-auto mt-10 max-w-xl border border-red-200 bg-red-50 px-5 py-4 text-center text-sm text-red-700">
@@ -124,7 +159,7 @@ function CategoryPage() {
           ) : null}
 
           {isLoading ? (
-          <div className="product-grid mt-16 grid grid-cols-1 gap-5 sm:grid-cols-2 md:gap-8 lg:grid-cols-4">
+            <div className="product-grid mt-16">
               {Array.from({ length: 3 }).map((_, index) => (
                 <div key={index} className="animate-pulse space-y-4">
                   <div className="aspect-square bg-[#f1ece6]" />
@@ -139,14 +174,14 @@ function CategoryPage() {
             <div className="mx-auto mt-16 max-w-xl text-center">
               <p className="font-display text-2xl text-ink">No fragrances found</p>
               <p className="mt-3 text-sm leading-6 text-muted">
-                Products added under {category} will appear here automatically.
+                Products added under {category?.name || "this category"} will appear here automatically.
               </p>
             </div>
           ) : null}
 
           {!isLoading && !error && products.length > 0 ? (
             <>
-              <div className="product-grid mt-16 grid grid-cols-1 gap-x-5 gap-y-8 sm:grid-cols-2 md:gap-x-8 md:gap-y-16 lg:grid-cols-4">
+              <div className="product-grid mt-16">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}

@@ -23,6 +23,7 @@ export const errorHandler = (error, req, res, _next) => {
   const response = {
     success: false,
     message: error.message || "Internal server error",
+    data: null,
   };
 
   if (error.details) {

@@ -6,17 +6,16 @@ import { BulkProductUploadDialog } from "@/components/admin/BulkProductUploadDia
 import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { useNotification } from "@/context/NotificationContext";
 import type { Brand } from "@/data/brands";
+import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
-import { brandsApi, productsApi } from "@/services/api";
+import { brandsApi, categoriesApi, productsApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/products")({
   component: AdminProducts,
 });
 
-type CategoryFilter = "all" | Product["category"];
+type CategoryFilter = "all" | string;
 type ProductSortMode = "name-asc" | "name-desc" | "price-asc" | "price-desc" | "stock-asc";
-
-const productCategories: Product["category"][] = ["Middle Eastern", "Designer", "Niche"];
 
 const getProductPrice = (product: Product) => product.price ?? product.sizes[0]?.price ?? 0;
 
@@ -25,8 +24,10 @@ function AdminProducts() {
   const { addNotification } = useNotification();
   const [list, setList] = useState<Product[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [brandsLoading, setBrandsLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [latestUpdatingId, setLatestUpdatingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -90,12 +91,39 @@ function AdminProducts() {
     [addNotification],
   );
 
+  const loadCategories = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setCategoriesLoading(true);
+      }
+
+      try {
+        const nextCategories = await categoriesApi.listAdmin();
+        setCategories(nextCategories);
+      } catch (ex) {
+        if (!silent) {
+          addNotification(
+            ex instanceof Error ? ex.message : "Categories could not be loaded.",
+            "error",
+          );
+        }
+        setCategories([]);
+      } finally {
+        if (!silent) {
+          setCategoriesLoading(false);
+        }
+      }
+    },
+    [addNotification],
+  );
+
   useEffect(() => {
     if (pathname === "/admin/products") {
       load();
       loadBrands();
+      loadCategories();
     }
-  }, [load, loadBrands, pathname]);
+  }, [load, loadBrands, loadCategories, pathname]);
 
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return;
@@ -115,8 +143,8 @@ function AdminProducts() {
   }, [addNotification, deleteTarget, load]);
 
   const handleImported = useCallback(async () => {
-    await Promise.all([load(true), loadBrands(true)]);
-  }, [load, loadBrands]);
+    await Promise.all([load(true), loadBrands(true), loadCategories(true)]);
+  }, [load, loadBrands, loadCategories]);
 
   const toggleLatest = useCallback(
     async (product: Product) => {
@@ -139,15 +167,10 @@ function AdminProducts() {
   );
 
   const categoryCounts = useMemo(() => {
-    const counts: Record<CategoryFilter, number> = {
-      all: list.length,
-      "Middle Eastern": 0,
-      Designer: 0,
-      Niche: 0,
-    };
+    const counts: Record<string, number> = { all: list.length };
 
     list.forEach((product) => {
-      counts[product.category] += 1;
+      counts[product.category] = (counts[product.category] || 0) + 1;
     });
 
     return counts;
@@ -191,8 +214,8 @@ function AdminProducts() {
     <AdminShell>
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[0.65rem] tracking-[0.4em] uppercase text-navy/50">Catalog</p>
-          <h1 className="font-display text-4xl text-navy mt-1">Products</h1>
+          <p className="fluid-eyebrow uppercase text-navy/50">Catalog</p>
+          <h1 className="mt-1 font-display text-[clamp(2rem,2vw+1.2rem,3rem)] text-navy">Products</h1>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
           <button
@@ -213,21 +236,21 @@ function AdminProducts() {
         </div>
       </header>
 
-      <section className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="adaptive-admin-grid mt-8">
         <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
           <p className="text-xs uppercase tracking-[0.18em] text-navy/50">All Products</p>
           <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.all}</p>
         </div>
-        {productCategories.map((category) => (
-          <div key={category} className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
-            <p className="text-xs uppercase tracking-[0.18em] text-navy/50">{category}</p>
-            <p className="mt-2 font-display text-4xl text-navy">{categoryCounts[category]}</p>
+        {categories.map((category) => (
+          <div key={category.id} className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
+            <p className="text-xs uppercase tracking-[0.18em] text-navy/50">{category.name}</p>
+            <p className="mt-2 font-display text-4xl text-navy">{categoryCounts[category.name] || 0}</p>
           </div>
         ))}
       </section>
 
-      <section className="mt-6 rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
+      <section className="mt-6 rounded-[var(--radius-panel)] border border-border/70 bg-card p-4 shadow-soft sm:p-5">
+        <div className="grid gap-4 xl:grid-cols-[1fr_1fr_auto]">
           <label className="block">
             <span className="text-xs uppercase tracking-[0.18em] text-navy/55">
               Category Filter
@@ -238,12 +261,15 @@ function AdminProducts() {
               className={`${controlCls} mt-2`}
             >
               <option value="all">All Categories</option>
-              {productCategories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+              {categories.map((category) => (
+                <option key={category.id} value={category.name}>
+                  {category.name}
                 </option>
               ))}
             </select>
+            {!categoriesLoading && categories.length === 0 ? (
+              <p className="mt-2 text-xs text-navy/55">No categories available yet.</p>
+            ) : null}
           </label>
 
           <label className="block">
@@ -270,8 +296,8 @@ function AdminProducts() {
         </div>
       </section>
 
-      <div className="mt-8 bg-card rounded-2xl shadow-soft border border-border/60 overflow-hidden">
-        <div className="overflow-x-auto">
+      <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-border/60 bg-card shadow-soft">
+        <div className="admin-table-shell">
           <table className="w-full text-sm">
             <thead className="bg-beige/50 text-navy/70 text-xs uppercase tracking-[0.2em]">
               <tr>

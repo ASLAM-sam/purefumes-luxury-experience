@@ -11,6 +11,13 @@ export const Route = createFileRoute("/refund-policy")({
         content:
           "Understand Purefumes Hyderabad refund and cancellation rules, including cancellation windows, refund eligibility, processing time, damaged product handling, and payment reversals.",
       },
+      { property: "og:title", content: "Refund & Cancellation Policy | Purefumes Hyderabad" },
+      {
+        property: "og:description",
+        content:
+          "Purefumes Hyderabad refund timelines, cancellation windows, payment reversals, and damaged or missing item verification.",
+      },
+      { property: "og:type", content: "website" },
     ],
   }),
   component: RefundPolicyPage,

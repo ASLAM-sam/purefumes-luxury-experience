@@ -32,6 +32,23 @@ const Testimonials = lazy(() =>
 );
 
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Purefumes Hyderabad | Authentic Perfumes Online" },
+      {
+        name: "description",
+        content:
+          "Shop authentic perfumes and personal care products from Purefumes Hyderabad with secure checkout, customer support, and fast delivery across India.",
+      },
+      { property: "og:title", content: "Purefumes Hyderabad | Authentic Perfumes Online" },
+      {
+        property: "og:description",
+        content:
+          "Discover authentic fragrances, bestsellers, latest arrivals, and trusted ecommerce support from Purefumes Hyderabad.",
+      },
+      { property: "og:type", content: "website" },
+    ],
+  }),
   component: Index,
 });
 
@@ -110,27 +127,27 @@ function Index() {
           <PerfumeRequestSection />
         </Suspense>
       </DeferredSection>
-      <section className="bg-[#f7f3ed] py-16 md:py-24">
+      <section className="bg-[#f7f3ed] py-[var(--section-space)]">
         <Container>
           <form
             onSubmit={(event) => event.preventDefault()}
-            className="mx-auto max-w-3xl border border-border bg-[#fffaf4] px-6 py-10 text-center shadow-soft md:px-12"
+            className="mx-auto max-w-3xl rounded-[var(--radius-panel)] border border-border bg-[#fffaf4] px-5 py-8 text-center shadow-soft sm:px-6 md:px-12 md:py-10"
           >
-            <p className="text-[0.68rem] uppercase tracking-[0.36em] text-gold">
+            <p className="fluid-eyebrow uppercase text-gold">
               Join the Inner Circle
             </p>
-            <h2 className="mt-4 font-display text-3xl text-foreground md:text-4xl">
+            <h2 className="mt-4 font-display text-[clamp(1.7rem,2vw+1.2rem,2.8rem)] text-foreground">
               Private fragrance notes, arrivals and edits
             </h2>
             <div className="mx-auto mt-8 flex max-w-lg flex-col gap-3 sm:flex-row">
               <input
                 type="email"
                 placeholder="your@email.com"
-                className="min-h-12 flex-1 border border-border bg-[#f7f3ed] px-4 text-sm text-foreground outline-none transition focus:border-gold"
+                className="min-h-12 flex-1 rounded-full border border-border bg-[#f7f3ed] px-4 text-sm text-foreground outline-none transition focus:border-gold"
               />
               <button
                 type="submit"
-                className="min-h-12 bg-[#8b5f3d] px-6 text-[0.68rem] uppercase tracking-[0.26em] text-[#fffaf4] transition hover:bg-[#5b3a29]"
+                className="min-h-12 rounded-full bg-[#8b5f3d] px-6 fluid-button-label uppercase tracking-[0.26em] text-[#fffaf4] transition hover:bg-[#5b3a29]"
               >
                 Subscribe
               </button>

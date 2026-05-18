@@ -6,6 +6,11 @@ import { Container } from "@/components/common/Container";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import {
+  clearRedirectAfterLogin,
+  getRedirectAfterLogin,
+  setRedirectAfterLogin,
+} from "@/lib/auth-redirect";
 import { accountApi } from "@/services/api";
 
 export const Route = createFileRoute("/login")({
@@ -15,10 +20,7 @@ export const Route = createFileRoute("/login")({
 const getRedirectPath = () => {
   if (typeof window === "undefined") return "/";
 
-  const fromUrl = new URLSearchParams(window.location.search).get("redirect");
-  const fromStorage = window.localStorage.getItem("purefumes_redirect_after_login");
-  const redirect = fromUrl || fromStorage || "/";
-  return redirect.startsWith("/") ? redirect : "/";
+  return getRedirectAfterLogin("/");
 };
 
 function LoginPage() {
@@ -42,7 +44,7 @@ function LoginPage() {
 
   useEffect(() => {
     if (!user) return;
-    window.localStorage.removeItem("purefumes_redirect_after_login");
+    clearRedirectAfterLogin();
     nav({ to: redirectPath });
   }, [nav, redirectPath, user]);
 
@@ -80,7 +82,7 @@ function LoginPage() {
 
       try {
         await login(identifier, password);
-        window.localStorage.removeItem("purefumes_redirect_after_login");
+        clearRedirectAfterLogin();
         addNotification("Signed in successfully.");
         nav({ to: redirectPath });
       } catch (ex) {
@@ -94,21 +96,21 @@ function LoginPage() {
 
   const startGoogleLogin = useCallback(() => {
     const googleLoginUrl = accountApi.googleUrl(redirectPath);
-    console.log("Starting Google OAuth login", { redirectPath, googleLoginUrl });
-    window.location.href = googleLoginUrl;
+    setRedirectAfterLogin(redirectPath);
+    window.location.assign(googleLoginUrl);
   }, [redirectPath]);
 
   return (
     <SiteShell>
-      <section className="py-16 md:py-20">
+      <section className="py-12 sm:py-16 md:py-20">
         <Container>
-          <div className="mx-auto max-w-md rounded-lg border border-border bg-card p-8 shadow-soft">
+          <div className="mx-auto max-w-md rounded-lg border border-border bg-card p-5 shadow-soft sm:p-8">
             <div className="text-center">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gold/15 text-gold">
                 <LogIn className="h-5 w-5" />
               </div>
               <p className="mt-5 text-[0.65rem] uppercase tracking-[0.4em] text-gold">Account</p>
-              <h1 className="mt-2 font-display text-4xl text-navy">Login</h1>
+              <h1 className="mt-2 font-display text-3xl text-navy sm:text-4xl">Login</h1>
             </div>
 
             <form onSubmit={submit} className="mt-8 space-y-4">
@@ -158,7 +160,7 @@ function LoginPage() {
               <p className="mt-3 text-sm text-amber-700">{googleAuthMessage}</p>
             ) : null}
 
-            <div className="mt-6 flex items-center justify-between text-sm text-navy/65">
+            <div className="mt-6 flex flex-col gap-3 text-sm text-navy/65 sm:flex-row sm:items-center sm:justify-between">
               <Link to="/forgot-password" className="hover:text-navy">
                 Forgot password?
               </Link>

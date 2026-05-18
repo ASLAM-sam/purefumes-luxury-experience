@@ -44,11 +44,9 @@ const buildTimeBucket = ({ rangeKey, startDate, endDate }) => {
   return rangeKey === "6m" || rangeKey === "1y" || daysInRange > 120
     ? {
         format: "%Y-%m",
-        unit: "month",
       }
     : {
         format: "%Y-%m-%d",
-        unit: "day",
       };
 };
 
@@ -87,8 +85,8 @@ const getTrendPipeline = ({ startDate, endDate, rangeKey }) => {
   ];
 };
 
-const buildRecentActivity = ({ recentOrders, recentUsers }) =>
-  [...recentOrders, ...recentUsers]
+const buildRecentActivity = ({ recentOrders, recentUsers, analyticsEvents }) =>
+  [...recentOrders, ...recentUsers, ...analyticsEvents]
     .filter((item) => item.at)
     .sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
     .slice(0, 12);
@@ -124,12 +122,10 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     revenueTrend,
     userGrowth,
     topProductsResult,
-    categoryPerformance,
     topCustomers,
     recentOrdersRaw,
     recentUsersRaw,
-    salesByStatus,
-    lowStockProductsRaw,
+    analyticsEventsRaw,
   ] = await Promise.all([
     User.countDocuments({ role: "user" }),
     User.countDocuments({ role: "user", lastLogin: { $gte: startDate, $lte: endDate } }),
@@ -233,28 +229,6 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       },
       { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
     ]),
-    Order.aggregate([
-      { $match: rangeOrderMatch },
-      { $unwind: "$items" },
-      {
-        $lookup: {
-          from: "products",
-          localField: "items.productId",
-          foreignField: "_id",
-          as: "product",
-        },
-      },
-      { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
-      {
-        $group: {
-          _id: "$product.category",
-          revenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } },
-          orders: { $sum: 1 },
-          quantity: { $sum: "$items.quantity" },
-        },
-      },
-      { $sort: { revenue: -1 } },
-    ]),
     User.find({ role: "user" })
       .sort({ totalSpent: -1, totalOrders: -1 })
       .limit(8)
@@ -270,22 +244,10 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       .limit(6)
       .select("name email createdAt")
       .lean(),
-    Order.aggregate([
-      { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
-      {
-        $group: {
-          _id: "$status",
-          orders: { $sum: 1 },
-          revenue: { $sum: "$totalAmount" },
-        },
-      },
-      { $sort: { orders: -1 } },
-    ]),
-    Product.find({ stock: { $lte: LOW_STOCK_THRESHOLD } })
-      .sort({ stock: 1, updatedAt: -1 })
-      .limit(8)
-      .select("name brand stock category image images")
-      .lean({ virtuals: true }),
+    AnalyticsEvent.find({ createdAt: { $gte: startDate, $lte: endDate } })
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .lean(),
   ]);
 
   const repeatCustomers = toSafeNumber(repeatCustomersResult[0]?.total);
@@ -307,7 +269,7 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
   const recentOrders = recentOrdersRaw.map((order) => ({
     id: order.id || order._id?.toString?.() || String(order._id || ""),
     title: `Order from ${order.customerName || "Customer"}`,
-    description: `${order.status || order.orderStatus || "Pending"} • ${order.paymentStatus || "pending"}`,
+    description: `${order.status || order.orderStatus || "Pending"} | ${order.paymentStatus || "pending"}`,
     amount: toSafeNumber(order.totalAmount),
     at: order.createdAt || null,
     type: "order",
@@ -322,13 +284,7 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     type: "signup",
   }));
 
-  const recentActivity = buildRecentActivity({ recentOrders, recentUsers });
-  const recentAnalyticsEvents = await AnalyticsEvent.find({ createdAt: { $gte: startDate, $lte: endDate } })
-    .sort({ createdAt: -1 })
-    .limit(6)
-    .lean();
-
-  const activityFeed = [...recentActivity, ...recentAnalyticsEvents.map((event) => ({
+  const analyticsEvents = analyticsEventsRaw.map((event) => ({
     id: `event-${event._id?.toString?.() || ""}`,
     title: String(event.type || "activity").replace(/[-_]/g, " "),
     description:
@@ -338,7 +294,7 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     amount: toSafeNumber(event.revenue),
     at: event.createdAt || null,
     type: String(event.type || "activity"),
-  }))].sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime()).slice(0, 12);
+  }));
 
   return {
     range: {
@@ -371,27 +327,12 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
         revenue: toSafeNumber(item.revenue),
         orders: toSafeNumber(item.orders),
       })),
-      orders: revenueTrend.map((item) => ({
-        label: item._id,
-        value: toSafeNumber(item.orders),
-      })),
       users: userGrowth.map((item) => ({
         label: item._id,
         value: toSafeNumber(item.users),
       })),
     },
-    salesByStatus: salesByStatus.map((item) => ({
-      status: item._id || "Unknown",
-      orders: toSafeNumber(item.orders),
-      revenue: toSafeNumber(item.revenue),
-    })),
     topProducts,
-    categoryPerformance: categoryPerformance.map((item) => ({
-      category: item._id || "Uncategorised",
-      revenue: toSafeNumber(item.revenue),
-      orders: toSafeNumber(item.orders),
-      quantity: toSafeNumber(item.quantity),
-    })),
     topCustomers: topCustomers.map((customer) => ({
       id: customer._id?.toString?.() || String(customer._id || ""),
       name: customer.name || "Customer",
@@ -404,38 +345,10 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       emailVerified: Boolean(customer.emailVerified),
       isBanned: Boolean(customer.isBanned),
     })),
-    lowStockProducts: lowStockProductsRaw.map((product) => ({
-      id: product.id || product._id?.toString?.() || String(product._id || ""),
-      name: product.name || "Product",
-      brand: product.brand || "",
-      category: product.category || "",
-      stock: toSafeNumber(product.stock),
-      image: product.image || product.images?.[0] || "",
-    })),
-    recentActivity: activityFeed,
-
-    // Backward-compatible fields used elsewhere in the admin.
-    totalUsers,
-    activeUsers,
-    blockedUsers,
-    revenue: totalRevenue,
-    totalOrders,
-    pendingOrders,
-    repeatCustomers,
-    topProducts,
-    topCustomers: topCustomers.map((customer) => ({
-      id: customer._id?.toString?.() || String(customer._id || ""),
-      name: customer.name || "Customer",
-      email: customer.email || "",
-      mobile: customer.mobile || "",
-      totalOrders: toSafeNumber(customer.totalOrders),
-      totalSpent: toSafeNumber(customer.totalSpent),
-      lastLogin: customer.lastLogin || null,
-    })),
-    dailySales: revenueTrend.map((item) => ({
-      date: item._id,
-      orders: toSafeNumber(item.orders),
-      revenue: toSafeNumber(item.revenue),
-    })),
+    recentActivity: buildRecentActivity({
+      recentOrders,
+      recentUsers,
+      analyticsEvents,
+    }),
   };
 };

@@ -8,6 +8,7 @@ import { OptimizedImage } from "@/components/common/OptimizedImage";
 import { AutoCouponSuggestion } from "@/components/common/AutoCouponSuggestion";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
+import { setRedirectAfterLogin } from "@/lib/auth-redirect";
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
@@ -55,7 +56,7 @@ function CartPage() {
 
   const proceedToCheckout = () => {
     if (!user) {
-      window.localStorage.setItem("purefumes_redirect_after_login", "/checkout");
+      setRedirectAfterLogin("/checkout");
       nav({ to: "/login" });
       return;
     }
@@ -70,7 +71,7 @@ function CartPage() {
           <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[0.65rem] uppercase tracking-[0.4em] text-gold">Cart</p>
-              <h1 className="font-display mt-2 text-5xl text-navy">Your Selection</h1>
+              <h1 className="mt-2 font-display text-4xl text-navy sm:text-5xl">Your Selection</h1>
             </div>
             <Link
               to="/"
@@ -130,7 +131,9 @@ function CartPage() {
                       <p className="text-[0.65rem] uppercase tracking-[0.3em] text-gold">
                         {item.product.brand}
                       </p>
-                      <h2 className="font-display mt-1 text-2xl text-navy">{item.product.name}</h2>
+                      <h2 className="mt-1 font-display text-xl text-navy sm:text-2xl">
+                        {item.product.name}
+                      </h2>
                       <p className="mt-2 text-sm text-navy/60">{item.size.size}</p>
                       <p className="mt-2 font-medium text-gold">{formatCurrency(item.size.price)}</p>
                     </div>
@@ -178,7 +181,7 @@ function CartPage() {
                 })}
               </div>
 
-              <aside className="h-fit rounded-lg border border-border bg-card p-6 shadow-soft">
+              <aside className="h-fit rounded-lg border border-border bg-card p-5 shadow-soft sm:p-6 lg:sticky lg:top-28">
                 <p className="text-[0.65rem] uppercase tracking-[0.3em] text-navy/60">Summary</p>
                 <div className="mt-5 space-y-3 text-sm text-navy/70">
                   <div className="flex justify-between">

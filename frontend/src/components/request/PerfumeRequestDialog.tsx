@@ -17,6 +17,13 @@ const BUDGET_OPTIONS = [
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_FILES = 3;
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const DISPLAY_BUDGET_OPTIONS = [
+  "Under Rs. 500",
+  "Rs. 500 - Rs. 1000",
+  "Rs. 1000 - Rs. 2000",
+  "Rs. 2000+",
+  "Not sure",
+] as const;
 
 type FormState = {
   perfumeName: string;
@@ -329,7 +336,7 @@ export function PerfumeRequestDialog({
                       className={fieldCls}
                     >
                       <option value="">Select budget range</option>
-                      {BUDGET_OPTIONS.map((budget) => (
+                      {DISPLAY_BUDGET_OPTIONS.map((budget) => (
                         <option key={budget} value={budget}>
                           {budget}
                         </option>
@@ -390,7 +397,7 @@ export function PerfumeRequestDialog({
                       Drag photos here or tap to choose from your gallery
                     </span>
                     <span className="mt-1 text-xs uppercase tracking-[0.18em] text-navy/45">
-                      JPG, PNG, WEBP · Max 5MB each
+                      JPG, PNG, WEBP | Max 5MB each
                     </span>
                     <input
                       ref={inputRef}
@@ -405,7 +412,7 @@ export function PerfumeRequestDialog({
                   {errors.images ? <p className="text-sm text-red-600">{errors.images}</p> : null}
 
                   {previews.length > 0 ? (
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                       {previews.map((preview, index) => (
                         <div
                           key={`${preview.name}-${index}`}

@@ -10,7 +10,9 @@ import { ProductInfo } from "@/components/product/ProductInfo";
 import { ProductPageSkeleton } from "@/components/product/ProductPageSkeleton";
 import { RelatedProducts } from "@/components/product/RelatedProducts";
 import type { Product } from "@/data/products";
+import { rememberCurrentPageForLogin } from "@/lib/auth-redirect";
 import { saveBuyNowCheckoutState } from "@/lib/buy-now";
+import { useAuth } from "@/context/AuthContext";
 import { productsApi } from "@/services/api";
 import { useApp } from "@/context/AppContext";
 import { useNotification } from "@/context/NotificationContext";
@@ -125,18 +127,31 @@ function ProductPage() {
     };
   }, [product.brand, product.brandId, product.id]);
 
+  const { user } = useAuth();
+
   const onAddToCart = useCallback(() => {
     addToCart(product, size);
     addNotification("Added to cart.");
   }, [addNotification, addToCart, product, size]);
 
   const handleBuyNow = useCallback(() => {
+    if (!user) {
+      rememberCurrentPageForLogin();
+      saveBuyNowCheckoutState({
+        buyNowProduct: product,
+        buyNowSize: size,
+      });
+
+      nav({ to: "/login" });
+      return;
+    }
+
     saveBuyNowCheckoutState({
       buyNowProduct: product,
       buyNowSize: size,
     });
     nav({ to: "/checkout" });
-  }, [nav, product, size]);
+  }, [nav, product, size, user]);
 
   const baseGalleryPrice = product.sizes[0]?.price ?? product.price ?? 0;
   const galleryDiscount =

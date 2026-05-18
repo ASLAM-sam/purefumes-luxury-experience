@@ -11,6 +11,13 @@ export const Route = createFileRoute("/return-policy")({
         content:
           "Read the Purefumes Hyderabad Return Policy for return eligibility, timelines, product condition rules, non-returnable items, replacements, and return shipping.",
       },
+      { property: "og:title", content: "Return Policy | Purefumes Hyderabad" },
+      {
+        property: "og:description",
+        content:
+          "Purefumes Hyderabad return eligibility, replacement rules, inspection requirements, cancellations, refunds, and support details.",
+      },
+      { property: "og:type", content: "website" },
     ],
   }),
   component: ReturnPolicyPage,

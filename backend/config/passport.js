@@ -40,7 +40,9 @@ export const configurePassport = () => {
         clientID: env.GOOGLE_CLIENT_ID,
         clientSecret: env.GOOGLE_CLIENT_SECRET,
         callbackURL: env.GOOGLE_CALLBACK_URL,
+        proxy: true,
         passReqToCallback: true,
+        state: true,
       },
       (req, _accessToken, _refreshToken, profile, done) => {
         const email = profile.emails?.[0]?.value?.toLowerCase() || "";

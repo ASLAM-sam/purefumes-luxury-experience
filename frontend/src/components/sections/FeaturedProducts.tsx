@@ -84,7 +84,7 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
   };
 
   return (
-    <section id="featured" className="bg-beige/30 py-12 md:py-20">
+    <section id="featured" className="bg-beige/30 py-[var(--section-space)]">
       <Container>
         <SectionTitle
           eyebrow="The Collection"
@@ -93,7 +93,7 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
         />
 
         {loading ? (
-          <div className="mt-8 grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className="adaptive-product-grid mt-8">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="space-y-2">
                 <Skeleton className="h-40 rounded-lg" />
@@ -104,7 +104,7 @@ export const FeaturedProducts = memo(function FeaturedProducts() {
             ))}
           </div>
         ) : (
-          <div className="mt-8 grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+          <div className="adaptive-product-grid mt-8">
             {featured.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}

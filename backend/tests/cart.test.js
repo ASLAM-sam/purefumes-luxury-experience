@@ -1,4 +1,5 @@
 import request from "supertest";
+import Category from "../models/Category.js";
 import Product from "../models/Product.js";
 import app from "../app.js";
 
@@ -8,12 +9,27 @@ const signupAndGetCsrf = async (agent, payload) => {
   return csrfResponse.body.data.csrfToken;
 };
 
+const createCategoryBackedProduct = async ({
+  categoryName,
+  ...product
+}) => {
+  const category = await Category.create({ name: categoryName });
+
+  return Product.create({
+    ...product,
+    categories: [category._id],
+    primaryCategory: category._id,
+    categoryNames: [category.name],
+    categorySlugs: [category.slug],
+  });
+};
+
 describe("Cart API", () => {
   it("keeps carts isolated per authenticated user and recalculates totals from products", async () => {
-    const product = await Product.create({
+    const product = await createCategoryBackedProduct({
       name: "Oud Reserve",
       brand: "Purefumes",
-      category: "Middle Eastern",
+      categoryName: "Middle Eastern",
       price: 2499,
       stock: 20,
       sizes: [{ size: "50ml", price: 2499 }],
@@ -76,10 +92,10 @@ describe("Cart API", () => {
   });
 
   it("merges guest items into the authenticated cart without duplicating variants", async () => {
-    const product = await Product.create({
+    const product = await createCategoryBackedProduct({
       name: "Amber Silk",
       brand: "Purefumes",
-      category: "Designer",
+      categoryName: "Designer",
       price: 1999,
       stock: 10,
       sizes: [{ size: "100ml", price: 1999 }],

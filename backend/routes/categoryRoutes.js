@@ -1,26 +1,57 @@
 import express from "express";
-import { body, param } from "express-validator";
-import { createCategory, deleteCategory, getCategories } from "../controllers/categoryController.js";
+import {
+  createCategory,
+  deleteCategory,
+  getAdminCategories,
+  getCategories,
+  getCategoryDetails,
+  reorderCategories,
+  updateCategory,
+} from "../controllers/categoryController.js";
 import { adminAuth } from "../middlewares/authMiddleware.js";
+import { uploadCategoryAssets } from "../middlewares/uploadMiddleware.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
+import {
+  adminCategoryListValidation,
+  categoryCreateValidation,
+  categoryIdParamValidation,
+  categoryListValidation,
+  categoryReorderValidation,
+  categoryUpdateValidation,
+} from "../validators/categoryValidation.js";
 
 const router = express.Router();
 
-router.get("/", getCategories);
+router.get("/", categoryListValidation, validateRequest, getCategories);
+router.get("/manage", adminAuth, adminCategoryListValidation, validateRequest, getAdminCategories);
+router.get("/slug/:slug", getCategoryDetails);
 router.post(
   "/",
   adminAuth,
-  [
-    body("name").trim().notEmpty().withMessage("Category name is required").isLength({ max: 80 }),
-    body("slug").optional().trim().isLength({ max: 100 }),
-  ],
+  uploadCategoryAssets,
+  categoryCreateValidation,
   validateRequest,
   createCategory,
+);
+router.put(
+  "/:id",
+  adminAuth,
+  uploadCategoryAssets,
+  categoryUpdateValidation,
+  validateRequest,
+  updateCategory,
+);
+router.patch(
+  "/reorder",
+  adminAuth,
+  categoryReorderValidation,
+  validateRequest,
+  reorderCategories,
 );
 router.delete(
   "/:id",
   adminAuth,
-  [param("id").isMongoId().withMessage("Valid category id is required")],
+  categoryIdParamValidation,
   validateRequest,
   deleteCategory,
 );

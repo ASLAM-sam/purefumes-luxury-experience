@@ -7,9 +7,14 @@ import passport, { configurePassport } from "./config/passport.js";
 import env, { validateEnv } from "./config/env.js";
 import { adminLimiter, apiLimiter, catalogLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler, notFound } from "./middlewares/errorMiddleware.js";
-import { applySecurityMiddleware, csrfProtection } from "./middlewares/securityMiddleware.js";
+import {
+  applySecurityMiddleware,
+  csrfProtection,
+  getCookieOptions,
+} from "./middlewares/securityMiddleware.js";
 import { attachRequestId, requestLogger } from "./middlewares/requestLogger.js";
 import productRoutes from "./routes/productRoutes.js";
+import bestsellerRoutes from "./routes/bestsellerRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import brandRoutes from "./routes/brandRoutes.js";
@@ -41,11 +46,9 @@ const authSessionMiddleware = session({
   unset: "destroy",
   proxy: true,
   cookie: {
-    httpOnly: true,
-    secure: true,
-    sameSite: "None",
-    domain: env.COOKIE_DOMAIN,
-    path: "/",
+    ...getCookieOptions({
+      maxAge: 10 * 60 * 1000,
+    }),
     maxAge: 10 * 60 * 1000,
   },
 });
@@ -58,12 +61,49 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(authSessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
+app.use((req, res, next) => {
+  const originalJson = res.json.bind(res);
+
+  res.json = (payload) => {
+    if (payload && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "success")) {
+      const normalizedPayload = {
+        success: Boolean(payload.success),
+        message:
+          typeof payload.message === "string" && payload.message.trim()
+            ? payload.message
+            : payload.success
+              ? "Request completed successfully"
+              : "Request failed",
+        data: Object.prototype.hasOwnProperty.call(payload, "data") ? payload.data : null,
+      };
+
+      if (Object.prototype.hasOwnProperty.call(payload, "errors")) {
+        normalizedPayload.errors = payload.errors;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(payload, "stack")) {
+        normalizedPayload.stack = payload.stack;
+      }
+
+      return originalJson(normalizedPayload);
+    }
+
+    return originalJson({
+      success: true,
+      message: "Request completed successfully",
+      data: payload ?? null,
+    });
+  };
+
+  next();
+});
 app.use(requestLogger);
 
 app.use("/api", (req, res, next) => {
   const isCatalogRead =
     req.method === "GET" &&
     (req.path.startsWith("/products") ||
+      req.path.startsWith("/bestsellers") ||
       req.path.startsWith("/brands") ||
       req.path.startsWith("/categories") ||
       req.path === "/banners");
@@ -112,6 +152,7 @@ app.use("/api/admin", adminLimiter, adminRoutes);
 app.use("/api/analytics", adminLimiter, analyticsRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/products", catalogLimiter, productRoutes);
+app.use("/api/bestsellers", catalogLimiter, bestsellerRoutes);
 app.use("/api/brands", catalogLimiter, brandRoutes);
 app.use("/api/banners", catalogLimiter, bannerRoutes);
 app.use("/api/orders", orderRoutes);

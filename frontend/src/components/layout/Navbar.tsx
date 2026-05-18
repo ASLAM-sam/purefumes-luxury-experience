@@ -3,35 +3,29 @@ import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ChevronDown,
+  House,
   Heart,
+  LogIn,
   LogOut,
   Menu,
   Search,
   ShoppingBag,
   Store,
+  UserRound,
   X,
 } from "lucide-react";
 import { Container } from "@/components/common/Container";
+import { CategoryRail } from "@/components/category/CategoryRail";
 import { SearchBar } from "@/components/search/SearchBar";
 import type { Brand, BrandCategory } from "@/data/brands";
-import { brandsApi } from "@/services/api";
+import type { Category } from "@/data/categories";
+import { brandsApi, categoriesApi } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
+import { filterStorefrontCategories } from "@/lib/categories";
+import { rememberCurrentPageForLogin } from "@/lib/auth-redirect";
 import { throttle } from "@/lib/performance/scheduler";
 import { useNavbarCounters } from "@/lib/performance/state-observers";
-
-const categoryLinks = [
-  { label: "Middle Eastern", slug: "middle-eastern", note: "Oud, amber, saffron" },
-  { label: "Designer", slug: "designer", note: "Iconic house names" },
-  { label: "Niche", slug: "niche", note: "Rare and artisanal" },
-] as const;
-
-const collectionLinks = [
-  { label: "All Fragrances", href: "/shop", note: "Complete collection" },
-  { label: "Best Sellers", href: "/shop?sort=bestseller", note: "Loved by connoisseurs" },
-  { label: "Latest Arrivals", href: "/shop?sort=latest", note: "New in boutique" },
-  { label: "Niche Collection", href: "/shop?category=niche", note: "Selective houses" },
-] as const;
 
 const brandCategoryLabels: Record<BrandCategory, string> = {
   "middle-eastern": "Middle Eastern",
@@ -46,21 +40,33 @@ const dropdownVariants = {
 
 const getBrandHref = (brand: Brand) => `/brand/${brand.id || brand._id || ""}`;
 
-const BrandWordmark = memo(function BrandWordmark({ compact = false }: { compact?: boolean }) {
+const BrandWordmark = memo(function BrandWordmark({
+  compact = false,
+  inline = false,
+}: {
+  compact?: boolean;
+  inline?: boolean;
+}) {
+  if (inline) {
+    return (
+      <span className="mobile-brand-wordmark whitespace-nowrap font-display uppercase text-[#7d5437]">
+        Purefumes Hyderabad
+      </span>
+    );
+  }
+
   return (
     <span className="block min-w-0 text-left leading-none">
       <span
         className={`block truncate font-display uppercase tracking-[0.28em] text-[#8b5f3d] ${
-          compact ? "text-[1.08rem]" : "text-[1.3rem] lg:text-[1.5rem]"
+          compact
+            ? "text-[clamp(1rem,1vw+0.8rem,1.22rem)]"
+            : "text-[clamp(1.15rem,1vw+0.95rem,1.6rem)]"
         }`}
       >
         Purefumes
       </span>
-      <span
-        className={`mt-1 block truncate text-[0.5rem] uppercase tracking-[0.5em] text-[#8b6b56] ${
-          compact ? "" : "lg:text-[0.55rem]"
-        }`}
-      >
+      <span className="block text-[clamp(0.62rem,0.18vw+0.58rem,0.74rem)] tracking-[0.2em] text-[#8b6b56]">
         Hyderabad
       </span>
     </span>
@@ -71,17 +77,23 @@ export const Navbar = memo(function Navbar() {
   useRenderInstrumentation("Navbar");
   const { cartCount, wishlistCount } = useNavbarCounters();
   const { user, logout } = useAuth();
-  const [megaOpen, setMegaOpen] = useState<"shop" | "brands" | null>(null);
+  const [megaOpen, setMegaOpen] = useState<"brands" | null>(null);
   const [mobile, setMobile] = useState(false);
   const [search, setSearch] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [mobileBrandQuery, setMobileBrandQuery] = useState("");
 
   const closeMobileMenu = useCallback(() => {
     setMobile(false);
     setMobileBrandQuery("");
   }, []);
+  const rememberLoginRedirect = useCallback(() => {
+    if (!user) {
+      rememberCurrentPageForLogin();
+    }
+  }, [user]);
 
   const handleSectionNavigation = useCallback(
     (sectionId: "bestsellers" | "latest-arrivals") => {
@@ -128,11 +140,31 @@ export const Navbar = memo(function Navbar() {
     return brands.filter((brand) => brand.name.toLowerCase().includes(query)).slice(0, 6);
   }, [brands, mobileBrandQuery]);
 
+  const navigationCategories = useMemo(
+    () =>
+      filterStorefrontCategories(categories).sort(
+        (left, right) => left.sortOrder - right.sortOrder,
+      ),
+    [categories],
+  );
+
+  const quickCategories = useMemo(() => {
+    const featured = navigationCategories.filter((category) => category.featured);
+    return (featured.length ? featured : navigationCategories).slice(0, 7);
+  }, [navigationCategories]);
+
   useEffect(() => {
     brandsApi
       .list()
       .then((nextBrands) => setBrands([...nextBrands].sort((a, b) => a.name.localeCompare(b.name))))
       .catch(() => setBrands([]));
+  }, []);
+
+  useEffect(() => {
+    categoriesApi
+      .list()
+      .then((nextCategories) => setCategories(nextCategories))
+      .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
@@ -147,6 +179,50 @@ export const Navbar = memo(function Navbar() {
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof document === "undefined" || !mobile) {
+      return undefined;
+    }
+
+    const scrollY = window.scrollY;
+    const previousPosition = document.body.style.position;
+    const previousTop = document.body.style.top;
+    const previousWidth = document.body.style.width;
+    const previousOverflow = document.body.style.overflow;
+    const previousOverscroll = document.body.style.overscrollBehavior;
+
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = "100%";
+    document.body.style.overflow = "hidden";
+    document.body.style.overscrollBehavior = "none";
+
+    return () => {
+      document.body.style.position = previousPosition;
+      document.body.style.top = previousTop;
+      document.body.style.width = previousWidth;
+      document.body.style.overflow = previousOverflow;
+      document.body.style.overscrollBehavior = previousOverscroll;
+      window.scrollTo(0, scrollY);
+    };
+  }, [mobile]);
+
+  useEffect(() => {
+    if (!mobile) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeMobileMenu();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeMobileMenu, mobile]);
+
   return (
     <>
       <header
@@ -155,7 +231,7 @@ export const Navbar = memo(function Navbar() {
         }`}
         onMouseLeave={() => setMegaOpen(null)}
       >
-        <Container className="hidden h-[4.9rem] items-center gap-4 md:flex">
+        <Container className="hidden h-[5.1rem] items-center gap-5 xl:flex">
           <Link
             to="/"
             className="flex h-14 w-[13.5rem] flex-none items-center justify-start"
@@ -164,7 +240,7 @@ export const Navbar = memo(function Navbar() {
             <BrandWordmark />
           </Link>
 
-          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-4 whitespace-nowrap text-[0.68rem] uppercase tracking-[0.14em] md:flex lg:gap-5 xl:gap-7">
+          <nav className="hidden min-w-0 flex-1 items-center justify-center gap-4 whitespace-nowrap text-[0.68rem] uppercase tracking-[0.14em] xl:flex xl:gap-6">
             <Link
               to="/"
               className="nav-link font-medium uppercase"
@@ -173,15 +249,6 @@ export const Navbar = memo(function Navbar() {
             >
               Home
             </Link>
-            <div
-              className="relative"
-              onMouseEnter={() => setMegaOpen("shop")}
-            >
-              <a href="/shop" className="nav-link inline-flex items-center gap-1 font-medium">
-                Shop
-                <ChevronDown className="h-3.5 w-3.5" />
-              </a>
-            </div>
             <div
               className="relative"
               onMouseEnter={() => setMegaOpen("brands")}
@@ -209,9 +276,7 @@ export const Navbar = memo(function Navbar() {
             >
               Latest Arrivals
             </button>
-            <a href="/shop?category=niche" className="nav-link font-medium">
-              Niche Collection
-            </a>
+            {/* Niche Collection removed per product spec */}
             <Link to="/about" className="nav-link font-medium uppercase">
               About
             </Link>
@@ -220,20 +285,28 @@ export const Navbar = memo(function Navbar() {
             </Link>
           </nav>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-2.5">
+            <Link
+              to={user ? "/profile" : "/login"}
+              onClick={rememberLoginRedirect}
+              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#5b3a29]/12 bg-[#fffaf4]/70 px-4 text-[0.64rem] font-medium uppercase tracking-[0.2em] text-[#5b3a29] transition hover:border-[#c89b63] hover:text-[#c89b63]"
+            >
+              {user ? <UserRound className="h-4.5 w-4.5" /> : <LogIn className="h-4.5 w-4.5" />}
+              {user ? "Account" : "Login"}
+            </Link>
             <button
               onClick={() => setSearch(true)}
               aria-label="Search"
-              className="nav-icon flex h-10 w-10 items-center justify-center border border-[#5b3a29]/10 bg-[#fffaf4]/45 text-[#5b3a29] hover:border-[#c89b63] hover:text-[#c89b63]"
+              className="nav-icon touch-target flex h-11 w-11 items-center justify-center border border-[#5b3a29]/10 bg-[#fffaf4]/45 text-[#5b3a29] hover:border-[#c89b63] hover:text-[#c89b63]"
             >
-              <Search className="h-4 w-4" />
+              <Search className="h-4.5 w-4.5" />
             </button>
             <Link
               to="/wishlist"
               aria-label="Wishlist"
-              className="nav-icon relative flex h-10 w-10 items-center justify-center border border-[#5b3a29]/10 bg-[#fffaf4]/45 text-[#5b3a29] hover:border-[#c89b63] hover:text-[#c89b63]"
+              className="nav-icon touch-target relative flex h-11 w-11 items-center justify-center border border-[#5b3a29]/10 bg-[#fffaf4]/45 text-[#5b3a29] hover:border-[#c89b63] hover:text-[#c89b63]"
             >
-              <Heart className="h-4 w-4" />
+              <Heart className="h-4.5 w-4.5" />
               {wishlistCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-semibold leading-none text-[#1e1b18]">
                   {wishlistCount}
@@ -243,9 +316,9 @@ export const Navbar = memo(function Navbar() {
             <Link
               to="/cart"
               aria-label="Cart"
-              className="nav-icon relative flex h-10 w-10 items-center justify-center border border-[#5b3a29]/10 bg-[#fffaf4]/45 text-[#5b3a29] hover:border-[#c89b63] hover:text-[#c89b63]"
+              className="nav-icon touch-target relative flex h-11 w-11 items-center justify-center border border-[#5b3a29]/10 bg-[#fffaf4]/45 text-[#5b3a29] hover:border-[#c89b63] hover:text-[#c89b63]"
             >
-              <ShoppingBag className="h-4 w-4" />
+              <ShoppingBag className="h-4.5 w-4.5" />
               {cartCount > 0 && (
                 <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-gold px-1 text-[0.6rem] font-semibold leading-none text-[#1e1b18]">
                   {cartCount}
@@ -263,218 +336,231 @@ export const Navbar = memo(function Navbar() {
               animate="show"
               exit="hidden"
               transition={{ duration: 0.22 }}
-              className="absolute left-1/2 top-full z-40 hidden w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2 border border-[#5b3a29]/10 bg-[#fffaf4]/95 p-6 text-[#5b3a29] shadow-[0_26px_70px_-38px_rgba(91,58,41,0.38)] backdrop-blur-xl md:block"
+              className="absolute left-1/2 top-full z-40 hidden w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2 border border-[#5b3a29]/10 bg-[#fffaf4]/95 p-6 text-[#5b3a29] shadow-[0_26px_70px_-38px_rgba(91,58,41,0.38)] backdrop-blur-xl xl:block"
             >
-              {megaOpen === "shop" ? (
-                <div className="grid gap-8 lg:grid-cols-[1fr_1fr_1.4fr]">
-                  <div>
+              <div className="grid gap-8 lg:grid-cols-3">
+                {(Object.keys(groupedBrands) as BrandCategory[]).map((category) => (
+                  <div key={category}>
                     <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[#c89b63]">
-                      Categories
+                      {brandCategoryLabels[category]}
                     </p>
-                    <div className="mt-4 space-y-1">
-                      {categoryLinks.map((category) => (
-                        <a
-                          key={category.slug}
-                          href={`/shop?category=${category.slug}`}
-                          className="block border-b border-[#5b3a29]/10 py-3 transition hover:text-[#c89b63]"
-                        >
-                          <span className="block font-display text-xl">{category.label}</span>
-                          <span className="mt-1 block text-xs uppercase tracking-[0.22em] text-[#8b6b56]">
-                            {category.note}
-                          </span>
-                        </a>
-                      ))}
+                    <div className="mt-4 max-h-72 space-y-1 overflow-y-auto pr-2">
+                      {groupedBrands[category].length ? (
+                        groupedBrands[category].map((brand) => (
+                          <a
+                            key={brand.id}
+                            href={getBrandHref(brand)}
+                            className="block border-b border-[#5b3a29]/10 py-2 text-sm text-[#5b3a29]/82 transition hover:text-[#c89b63]"
+                          >
+                            {brand.name}
+                          </a>
+                        ))
+                      ) : (
+                        <p className="py-2 text-sm text-[#8b6b56]">No brands yet.</p>
+                      )}
                     </div>
                   </div>
-
-                  <div>
-                    <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[#c89b63]">
-                      Collections
-                    </p>
-                    <div className="mt-4 space-y-1">
-                      {collectionLinks.map((collection) => (
-                        <a
-                          key={collection.href}
-                          href={collection.href}
-                          className="block border-b border-[#5b3a29]/10 py-3 transition hover:text-[#c89b63]"
-                        >
-                          <span className="block font-display text-xl">{collection.label}</span>
-                          <span className="mt-1 block text-xs uppercase tracking-[0.22em] text-[#8b6b56]">
-                            {collection.note}
-                          </span>
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[#c89b63]">
-                      Featured Houses
-                    </p>
-                    <div className="mt-4 grid max-h-72 grid-cols-2 gap-x-6 gap-y-2 overflow-y-auto pr-2">
-                      {brands.slice(0, 16).map((brand) => (
-                        <a
-                          key={brand.id}
-                          href={getBrandHref(brand)}
-                          className="border-b border-[#5b3a29]/10 py-2 text-sm text-[#5b3a29]/82 transition hover:text-[#c89b63]"
-                        >
-                          {brand.name}
-                        </a>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid gap-8 lg:grid-cols-3">
-                  {(Object.keys(groupedBrands) as BrandCategory[]).map((category) => (
-                    <div key={category}>
-                      <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[#c89b63]">
-                        {brandCategoryLabels[category]}
-                      </p>
-                      <div className="mt-4 max-h-72 space-y-1 overflow-y-auto pr-2">
-                        {groupedBrands[category].length ? (
-                          groupedBrands[category].map((brand) => (
-                            <a
-                              key={brand.id}
-                              href={getBrandHref(brand)}
-                              className="block border-b border-[#5b3a29]/10 py-2 text-sm text-[#5b3a29]/82 transition hover:text-[#c89b63]"
-                            >
-                              {brand.name}
-                            </a>
-                          ))
-                        ) : (
-                          <p className="py-2 text-sm text-[#8b6b56]">No brands yet.</p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                ))}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <Container className="flex h-[4.35rem] items-center justify-between md:hidden">
+        <Container className="mobile-header-bar xl:hidden">
           <Link
             to="/"
-            className="flex h-11 min-w-0 max-w-[13rem] items-center justify-start"
+            className="flex min-w-0 flex-1 items-center justify-start"
             aria-label="Purefumes Hyderabad home"
             onClick={closeMobileMenu}
           >
-            <BrandWordmark compact />
+            <BrandWordmark inline />
           </Link>
 
           <button
             onClick={() => setMobile((value) => !value)}
             type="button"
-            className="flex h-9 w-9 items-center justify-center border border-[#5b3a29]/12 bg-[#fffaf4]/70 text-[#5b3a29] transition hover:border-[#c89b63] hover:text-[#c89b63]"
+            className="mobile-menu-trigger touch-target flex shrink-0 items-center justify-center rounded-full border border-[#5b3a29]/12 bg-[#fffaf4] text-[#5b3a29] transition hover:border-[#c89b63] hover:text-[#c89b63]"
             aria-label="Menu"
           >
-            {mobile ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            {mobile ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </Container>
 
         <AnimatePresence>
           {mobile && (
             <motion.div
-              initial={{ height: 0 }}
-              animate={{ height: "auto" }}
-              exit={{ height: 0 }}
-              className="max-h-[calc(100dvh_-_4.35rem_-_var(--promo-offset))] overflow-y-auto overscroll-contain border-t border-[#5b3a29]/10 bg-[#fffaf4]/98 text-[#5b3a29] backdrop-blur-xl md:hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="fixed inset-0 z-[2500] h-[100dvh] overflow-hidden bg-[#1e1b18]/55 backdrop-blur-sm xl:hidden"
+              onClick={closeMobileMenu}
             >
-              <div className="space-y-1.5 p-4 text-sm uppercase tracking-[0.2em]">
-                <label className="relative block border border-[#5b3a29]/12 bg-[#f7f3ed] p-3">
-                  <Search className="pointer-events-none absolute left-7 top-1/2 h-4 w-4 -translate-y-1/2 text-[#8b6b56]" />
-                  <input
-                    value={mobileBrandQuery}
-                    onChange={(event) => setMobileBrandQuery(event.target.value)}
-                    placeholder="Search brands..."
-                    className="w-full border border-[#5b3a29]/10 bg-[#fffaf4] py-3 pl-11 pr-4 text-[0.78rem] normal-case tracking-[0.04em] text-[#5b3a29] outline-none transition focus:border-[#c89b63]"
-                  />
-                </label>
+              <motion.aside
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 30, stiffness: 260 }}
+                className="mobile-menu-panel ml-auto flex h-[100dvh] max-h-[100dvh] w-[min(92vw,26rem)] min-w-0 flex-col overflow-hidden bg-[#fffaf4] text-[#5b3a29] shadow-[0_28px_90px_-28px_rgba(30,27,24,0.72)]"
+                onClick={(event) => event.stopPropagation()}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Mobile menu"
+              >
+                <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#5b3a29]/10 bg-[#fffaf4]/95 px-5 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] backdrop-blur">
+                  <BrandWordmark compact />
+                  <button
+                    type="button"
+                    onClick={closeMobileMenu}
+                    className="touch-target inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#5b3a29]/12 bg-[#f7f3ed] text-[#5b3a29] transition hover:border-[#c89b63] hover:text-[#c89b63]"
+                    aria-label="Close menu"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
 
-                {mobileBrandQuery.trim() ? (
-                  <div className="border border-[#5b3a29]/10 bg-[#fffaf4] p-2">
-                    {mobileBrandMatches.length > 0 ? (
-                      mobileBrandMatches.map((brand) => (
-                        <a
-                          key={brand.id}
-                          href={getBrandHref(brand)}
+                <div className="mobile-menu-scroll flex-1 overflow-y-auto overscroll-contain px-5 pb-[calc(7.5rem+env(safe-area-inset-bottom))] pt-5 text-sm uppercase tracking-[0.2em]">
+                  <div className="space-y-3">
+                    <label className="relative block rounded-[1.25rem] border border-[#5b3a29]/12 bg-[#f7f3ed] p-3 shadow-[0_18px_44px_-34px_rgba(91,58,41,0.5)]">
+                      <Search className="pointer-events-none absolute left-7 top-1/2 h-4.5 w-4.5 -translate-y-1/2 text-[#8b6b56]" />
+                      <input
+                        value={mobileBrandQuery}
+                        onChange={(event) => setMobileBrandQuery(event.target.value)}
+                        placeholder="Search brands..."
+                        className="min-h-11 w-full rounded-xl border border-[#5b3a29]/10 bg-[#fffaf4] py-3 pl-11 pr-4 text-[0.82rem] normal-case tracking-[0.04em] text-[#5b3a29] outline-none transition focus:border-[#c89b63]"
+                      />
+                    </label>
+
+                    {mobileBrandQuery.trim() ? (
+                      <div className="rounded-[1.25rem] border border-[#5b3a29]/10 bg-[#fffaf4] p-2 shadow-soft">
+                        {mobileBrandMatches.length > 0 ? (
+                          mobileBrandMatches.map((brand) => (
+                            <a
+                              key={brand.id}
+                              href={getBrandHref(brand)}
+                              onClick={closeMobileMenu}
+                              className="block rounded-xl px-4 py-3 text-[0.72rem] tracking-[0.18em] text-[#5b3a29]/78 transition hover:bg-[#efe7dc] hover:text-[#c89b63]"
+                            >
+                              {brand.name}
+                            </a>
+                          ))
+                        ) : (
+                          <p className="px-4 py-3 text-[0.72rem] text-[#8b6b56]">
+                            No matching brands found.
+                          </p>
+                        )}
+                      </div>
+                    ) : null}
+
+                    {[
+                      { label: "Home", href: "/" },
+                      { label: "Shop", href: "/shop" },
+                      { label: "Brands", href: "/brands" },
+                      { label: "Best Sellers", href: "/shop?sort=bestseller" },
+                      { label: "Latest Arrivals", href: "/shop?sort=latest" },
+                      { label: "About", href: "/about" },
+                      { label: "Contact", href: "/contact" },
+                    ].map((item) => (
+                      <a
+                        key={item.href}
+                        href={item.href}
+                        onClick={closeMobileMenu}
+                        className="block rounded-[1.15rem] border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3.5 text-[0.74rem] tracking-[0.22em] text-[#5b3a29]/82 shadow-[0_10px_28px_-24px_rgba(91,58,41,0.55)] transition hover:border-[#c89b63] hover:text-[#c89b63]"
+                      >
+                        {item.label}
+                      </a>
+                    ))}
+
+                    {quickCategories.length ? (
+                      <div className="pt-2">
+                        <p className="px-1 pb-2 text-[0.62rem] tracking-[0.28em] text-[#c89b63]">
+                          Collections
+                        </p>
+                        <div className="space-y-3">
+                          {quickCategories.map((category) => (
+                            <a
+                              key={category.id}
+                              href={`/category/${category.slug}`}
+                              onClick={closeMobileMenu}
+                              className="block rounded-[1.15rem] border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3.5 text-[0.74rem] tracking-[0.22em] text-[#5b3a29]/82 shadow-[0_10px_28px_-24px_rgba(91,58,41,0.55)] transition hover:border-[#c89b63] hover:text-[#c89b63]"
+                            >
+                              {category.name}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {user ? (
+                      <>
+                        <Link
+                          to="/profile"
                           onClick={closeMobileMenu}
-                          className="block px-4 py-2.5 text-[0.7rem] tracking-[0.18em] text-[#5b3a29]/78 transition hover:bg-[#efe7dc] hover:text-[#c89b63]"
+                          className="block rounded-[1.15rem] border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3.5 text-[0.74rem] tracking-[0.22em] text-[#5b3a29]/82 shadow-[0_10px_28px_-24px_rgba(91,58,41,0.55)] transition hover:border-[#c89b63] hover:text-[#c89b63]"
                         >
-                          {brand.name}
-                        </a>
-                      ))
+                          My Account
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            closeMobileMenu();
+                            void logout();
+                          }}
+                          className="flex min-h-11 w-full items-center gap-3 rounded-[1.15rem] border border-[#c89b63]/35 bg-[#1e1b18] px-4 py-3.5 text-left text-[0.74rem] tracking-[0.22em] text-[#fffaf4] shadow-[0_20px_42px_-30px_rgba(30,27,24,0.8)] transition hover:border-[#c89b63] hover:text-[#e3c69e]"
+                        >
+                          <LogOut className="h-4.5 w-4.5" /> Logout
+                        </button>
+                      </>
                     ) : (
-                      <p className="px-4 py-3 text-[0.68rem] text-[#8b6b56]">
-                        No matching brands found.
-                      </p>
+                      <Link
+                        to="/login"
+                        onClick={() => {
+                          closeMobileMenu();
+                          rememberLoginRedirect();
+                        }}
+                        className="block rounded-[1.15rem] border border-[#c89b63]/35 bg-[#1e1b18] px-4 py-3.5 text-[0.74rem] tracking-[0.22em] text-[#fffaf4] shadow-[0_20px_42px_-30px_rgba(30,27,24,0.8)] transition hover:border-[#c89b63] hover:text-[#e3c69e]"
+                      >
+                        Login
+                      </Link>
                     )}
                   </div>
-                ) : null}
-
-                {[
-                  { label: "Home", href: "/" },
-                  { label: "Shop", href: "/shop" },
-                  { label: "Brands", href: "/brands" },
-                  { label: "Best Sellers", href: "/shop?sort=bestseller" },
-                  { label: "Latest Arrivals", href: "/shop?sort=latest" },
-                  { label: "Niche Collection", href: "/shop?category=niche" },
-                  { label: "About", href: "/about" },
-                  { label: "Contact", href: "/contact" },
-                  { label: "Wishlist", href: "/wishlist" },
-                ].map((item) => (
-                  <a
-                    key={item.href}
-                    href={item.href}
-                    onClick={closeMobileMenu}
-                    className="block border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3 text-[0.72rem] tracking-[0.22em] text-[#5b3a29]/82 transition hover:border-[#c89b63] hover:text-[#c89b63]"
-                  >
-                    {item.label}
-                  </a>
-                ))}
-
-                {user ? (
-                  <>
-                    <Link
-                      to="/profile"
-                      onClick={closeMobileMenu}
-                      className="block border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3 text-[0.72rem] tracking-[0.22em] text-[#5b3a29]/82 transition hover:border-[#c89b63] hover:text-[#c89b63]"
-                    >
-                      My Account
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        closeMobileMenu();
-                        void logout();
-                      }}
-                      className="flex w-full items-center gap-3 border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3 text-left text-[0.72rem] tracking-[0.22em] text-[#5b3a29]/82 transition hover:border-[#c89b63] hover:text-[#c89b63]"
-                    >
-                      <LogOut className="h-4 w-4" /> Logout
-                    </button>
-                  </>
-                ) : (
-                  <Link
-                    to="/login"
-                    onClick={closeMobileMenu}
-                    className="block border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3 text-[0.72rem] tracking-[0.22em] text-[#5b3a29]/82 transition hover:border-[#c89b63] hover:text-[#c89b63]"
-                  >
-                    Login
-                  </Link>
-                )}
-              </div>
+                </div>
+              </motion.aside>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {quickCategories.length ? (
+          <div className="hidden border-t border-[#5b3a29]/10 bg-[#f7f3ed]/85 backdrop-blur xl:block">
+            <Container className="py-3">
+              <CategoryRail categories={quickCategories} allLabel="Shop All" allHref="/shop" />
+            </Container>
+          </div>
+        ) : null}
       </header>
 
-      <nav className="mobile-bottom-nav md:hidden" aria-label="Mobile">
-        <a href="/shop" aria-label="Shop" onClick={closeMobileMenu} className="mobile-bottom-nav__item">
+      <nav className="mobile-bottom-nav xl:hidden" aria-label="Mobile">
+        <Link
+          to="/"
+          aria-label="Home"
+          onClick={closeMobileMenu}
+          className="mobile-bottom-nav__item"
+          activeProps={{ className: "mobile-bottom-nav__item mobile-bottom-nav__item--active" }}
+          activeOptions={{ exact: true }}
+        >
+          <House />
+          <span>Home</span>
+        </Link>
+        <Link
+          to="/shop"
+          aria-label="Shop"
+          onClick={closeMobileMenu}
+          className="mobile-bottom-nav__item"
+          activeProps={{ className: "mobile-bottom-nav__item mobile-bottom-nav__item--active" }}
+        >
           <Store />
           <span>Shop</span>
-        </a>
+        </Link>
         <button
           type="button"
           aria-label="Search"
@@ -488,15 +574,17 @@ export const Navbar = memo(function Navbar() {
           <span>Search</span>
         </button>
         <Link
-          to="/wishlist"
-          aria-label="Wishlist"
-          onClick={closeMobileMenu}
+          to={user ? "/profile" : "/login"}
+          aria-label="Account"
+          onClick={() => {
+            closeMobileMenu();
+            rememberLoginRedirect();
+          }}
           className="mobile-bottom-nav__item"
           activeProps={{ className: "mobile-bottom-nav__item mobile-bottom-nav__item--active" }}
         >
-          <Heart />
-          <span>Wishlist</span>
-          {wishlistCount > 0 && <span className="mobile-bottom-nav__badge">{wishlistCount}</span>}
+          {user ? <UserRound /> : <LogIn />}
+          <span>Account</span>
         </Link>
         <Link
           to="/cart"

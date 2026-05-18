@@ -35,8 +35,8 @@ function EditProduct() {
         <ProductForm
           initial={product}
           submitLabel="Save Changes"
-          onSubmit={async (payload) => {
-            await productsApi.updateWithImages(product.id, payload);
+          onSubmit={async (payload, options) => {
+            await productsApi.updateWithImages(product.id, payload, options);
             nav({ to: "/admin/products" });
           }}
         />

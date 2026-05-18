@@ -37,11 +37,13 @@ import { Route as LoginSuccessRouteImport } from './routes/login.success'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as BrandBrandIdRouteImport } from './routes/brand.$brandId'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminRequestsRouteImport } from './routes/admin.requests'
 import { Route as AdminProductsRouteImport } from './routes/admin.products'
 import { Route as AdminOrdersRouteImport } from './routes/admin.orders'
 import { Route as AdminLoginRouteImport } from './routes/admin.login'
 import { Route as AdminCouponsRouteImport } from './routes/admin.coupons'
+import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as AdminBrandsRouteImport } from './routes/admin.brands'
 import { Route as AdminBestsellersRouteImport } from './routes/admin.bestsellers'
 import { Route as AdminBannersRouteImport } from './routes/admin.banners'
@@ -189,6 +191,11 @@ const AdminUsersRoute = AdminUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminRequestsRoute = AdminRequestsRouteImport.update({
   id: '/requests',
   path: '/requests',
@@ -212,6 +219,11 @@ const AdminLoginRoute = AdminLoginRouteImport.update({
 const AdminCouponsRoute = AdminCouponsRouteImport.update({
   id: '/coupons',
   path: '/coupons',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminCategoriesRoute = AdminCategoriesRouteImport.update({
+  id: '/categories',
+  path: '/categories',
   getParentRoute: () => AdminRoute,
 } as any)
 const AdminBrandsRoute = AdminBrandsRouteImport.update({
@@ -272,11 +284,13 @@ export interface FileRoutesByFullPath {
   '/admin/banners': typeof AdminBannersRoute
   '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
+  '/admin/categories': typeof AdminCategoriesRoute
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/products': typeof AdminProductsRouteWithChildren
   '/admin/requests': typeof AdminRequestsRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -312,11 +326,13 @@ export interface FileRoutesByTo {
   '/admin/banners': typeof AdminBannersRoute
   '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
+  '/admin/categories': typeof AdminCategoriesRoute
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/products': typeof AdminProductsRouteWithChildren
   '/admin/requests': typeof AdminRequestsRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -354,11 +370,13 @@ export interface FileRoutesById {
   '/admin/banners': typeof AdminBannersRoute
   '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
+  '/admin/categories': typeof AdminCategoriesRoute
   '/admin/coupons': typeof AdminCouponsRoute
   '/admin/login': typeof AdminLoginRoute
   '/admin/orders': typeof AdminOrdersRoute
   '/admin/products': typeof AdminProductsRouteWithChildren
   '/admin/requests': typeof AdminRequestsRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
@@ -397,11 +415,13 @@ export interface FileRouteTypes {
     | '/admin/banners'
     | '/admin/bestsellers'
     | '/admin/brands'
+    | '/admin/categories'
     | '/admin/coupons'
     | '/admin/login'
     | '/admin/orders'
     | '/admin/products'
     | '/admin/requests'
+    | '/admin/settings'
     | '/admin/users'
     | '/brand/$brandId'
     | '/category/$slug'
@@ -437,11 +457,13 @@ export interface FileRouteTypes {
     | '/admin/banners'
     | '/admin/bestsellers'
     | '/admin/brands'
+    | '/admin/categories'
     | '/admin/coupons'
     | '/admin/login'
     | '/admin/orders'
     | '/admin/products'
     | '/admin/requests'
+    | '/admin/settings'
     | '/admin/users'
     | '/brand/$brandId'
     | '/category/$slug'
@@ -478,11 +500,13 @@ export interface FileRouteTypes {
     | '/admin/banners'
     | '/admin/bestsellers'
     | '/admin/brands'
+    | '/admin/categories'
     | '/admin/coupons'
     | '/admin/login'
     | '/admin/orders'
     | '/admin/products'
     | '/admin/requests'
+    | '/admin/settings'
     | '/admin/users'
     | '/brand/$brandId'
     | '/category/$slug'
@@ -719,6 +743,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUsersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/requests': {
       id: '/admin/requests'
       path: '/requests'
@@ -752,6 +783,13 @@ declare module '@tanstack/react-router' {
       path: '/coupons'
       fullPath: '/admin/coupons'
       preLoaderRoute: typeof AdminCouponsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/categories': {
+      id: '/admin/categories'
+      path: '/categories'
+      fullPath: '/admin/categories'
+      preLoaderRoute: typeof AdminCategoriesRouteImport
       parentRoute: typeof AdminRoute
     }
     '/admin/brands': {
@@ -818,11 +856,13 @@ interface AdminRouteChildren {
   AdminBannersRoute: typeof AdminBannersRoute
   AdminBestsellersRoute: typeof AdminBestsellersRoute
   AdminBrandsRoute: typeof AdminBrandsRoute
+  AdminCategoriesRoute: typeof AdminCategoriesRoute
   AdminCouponsRoute: typeof AdminCouponsRoute
   AdminLoginRoute: typeof AdminLoginRoute
   AdminOrdersRoute: typeof AdminOrdersRoute
   AdminProductsRoute: typeof AdminProductsRouteWithChildren
   AdminRequestsRoute: typeof AdminRequestsRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
   AdminUsersRoute: typeof AdminUsersRoute
   AdminIndexRoute: typeof AdminIndexRoute
 }
@@ -832,11 +872,13 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminBannersRoute: AdminBannersRoute,
   AdminBestsellersRoute: AdminBestsellersRoute,
   AdminBrandsRoute: AdminBrandsRoute,
+  AdminCategoriesRoute: AdminCategoriesRoute,
   AdminCouponsRoute: AdminCouponsRoute,
   AdminLoginRoute: AdminLoginRoute,
   AdminOrdersRoute: AdminOrdersRoute,
   AdminProductsRoute: AdminProductsRouteWithChildren,
   AdminRequestsRoute: AdminRequestsRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
   AdminUsersRoute: AdminUsersRoute,
   AdminIndexRoute: AdminIndexRoute,
 }

@@ -21,7 +21,13 @@ function PurchaseButtons({
   onBuyNow: () => void;
 }) {
   return (
-    <div className={compact ? "grid grid-cols-2 gap-2 min-[380px]:gap-3" : "grid gap-3 sm:grid-cols-2"}>
+    <div
+      className={
+        compact
+          ? "grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 min-[380px]:gap-3"
+          : "grid gap-3 sm:grid-cols-2"
+      }
+    >
       <Button
         onClick={onAddToCart}
         disabled={disabled}
@@ -106,7 +112,7 @@ export const ProductInfo = memo(function ProductInfo({
             />
           </div>
 
-          <h1 className="mt-4 font-display text-4xl leading-[0.95] text-navy sm:text-5xl">
+          <h1 className="mt-4 font-display text-3xl leading-[0.95] text-navy sm:text-5xl">
             {product.name}
           </h1>
 

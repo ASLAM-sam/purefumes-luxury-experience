@@ -31,24 +31,7 @@ export const Bestsellers = memo(function Bestsellers() {
         }
 
         const nextProducts = await productsApi.listBestsellers({ forceFresh });
-        const combinedProducts = [...nextProducts];
-
-        if (combinedProducts.length < 4) {
-          const fallbackProducts = await productsApi.list(
-            { page: 1, limit: 4 },
-            { forceFresh: false },
-          );
-          const existingIds = new Set(combinedProducts.map((product) => product.id));
-
-          fallbackProducts.forEach((product) => {
-            if (!existingIds.has(product.id) && combinedProducts.length < 4) {
-              combinedProducts.push(product);
-              existingIds.add(product.id);
-            }
-          });
-        }
-
-        setProducts(combinedProducts);
+        setProducts(nextProducts);
         setError("");
       } catch (nextError) {
         if (!silent) {
@@ -114,9 +97,9 @@ export const Bestsellers = memo(function Bestsellers() {
   return (
     <section
       id="bestsellers"
-      className="bestsellers bg-[linear-gradient(180deg,rgba(235,222,212,0.28),rgba(247,243,239,0.96))] py-[60px] md:py-20"
+      className="bestsellers bg-[linear-gradient(180deg,rgba(235,222,212,0.28),rgba(247,243,239,0.96))] py-[var(--section-space)]"
     >
-      <Container className="max-w-[1100px]">
+      <Container>
         <SectionTitle
           eyebrow="Most Loved"
           title="Bestsellers"
@@ -124,7 +107,7 @@ export const Bestsellers = memo(function Bestsellers() {
         />
 
         {loading ? (
-          <div className="product-grid mt-12 grid grid-cols-2 justify-center gap-x-3 gap-y-8 md:grid-cols-2 md:gap-x-8 md:gap-y-12 xl:grid-cols-4">
+          <div className="product-grid mt-12">
             {Array.from({ length: 4 }).map((_, index) => (
               <div
                 key={index}
@@ -141,7 +124,7 @@ export const Bestsellers = memo(function Bestsellers() {
             ))}
           </div>
         ) : showcaseProducts.length > 0 ? (
-          <div className="product-grid mt-12 grid grid-cols-2 justify-center gap-x-3 gap-y-8 md:grid-cols-2 md:gap-x-8 md:gap-y-12 xl:grid-cols-4">
+          <div className="product-grid mt-12">
             {showcaseProducts.map((product) => (
               <ProductCard key={product.id} product={product} showSize variant="bestseller" />
             ))}

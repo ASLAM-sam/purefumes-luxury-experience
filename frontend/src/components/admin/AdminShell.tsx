@@ -9,10 +9,12 @@ import {
   ExternalLink,
   Images,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   MessageCircle,
   Menu,
   Package,
+  Settings,
   ShoppingCart,
   Star,
   Tag,
@@ -29,12 +31,14 @@ const items = [
   { to: "/admin/users", label: "Users", Icon: Users, exact: false },
   { to: "/admin/analytics", label: "Analytics", Icon: BarChart3, exact: false },
   { to: "/admin/products", label: "Products", Icon: Package, exact: false },
+  { to: "/admin/categories", label: "Categories", Icon: LayoutGrid, exact: false },
   { to: "/admin/bestsellers", label: "Bestsellers", Icon: Star, exact: false },
   { to: "/admin/brands", label: "Brands", Icon: Tag, exact: false },
   { to: "/admin/banners", label: "Hero Banners", Icon: Images, exact: false },
   { to: "/admin/coupons", label: "Coupons", Icon: TicketPercent, exact: false },
   { to: "/admin/orders", label: "Orders", Icon: ShoppingCart, exact: false },
   { to: "/admin/requests", label: "Queries", Icon: MessageCircle, exact: false },
+  { to: "/admin/settings", label: "Settings", Icon: Settings, exact: false },
 ] as const;
 
 const ORDER_NOTIFICATION_REFRESH_MS = 10 * 60 * 1000;
@@ -162,6 +166,19 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
     window.localStorage.setItem(ADMIN_SIDEBAR_STORAGE_KEY, String(desktopSidebarCollapsed));
   }, [desktopSidebarCollapsed]);
 
+  useEffect(() => {
+    if (typeof document === "undefined" || !mobileMenuOpen) {
+      return undefined;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [mobileMenuOpen]);
+
   const markAsSeen = useCallback(
     async (order: Order) => {
       const id = getOrderId(order);
@@ -185,10 +202,10 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
   );
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="flex min-h-screen min-w-0 bg-background">
       <aside
-        className={`hidden md:flex shrink-0 flex-col bg-navy text-beige sticky top-0 h-screen transition-all duration-300 ${
-          desktopSidebarCollapsed ? "w-24 px-3 py-5" : "w-64 p-6"
+        className={`sticky top-0 hidden h-screen shrink-0 flex-col bg-navy text-beige transition-all duration-300 xl:flex ${
+          desktopSidebarCollapsed ? "w-24 px-3 py-5" : "w-[17rem] p-6"
         }`}
       >
         <div
@@ -309,7 +326,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
             Express backend.
           </div>
         )}
-        <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-4 backdrop-blur md:hidden">
+        <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-4 backdrop-blur xl:hidden">
           <div className="flex items-center justify-between gap-3">
             <Link to="/admin" className="font-display text-2xl text-navy">
               <span>Pure</span>
@@ -326,7 +343,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
                   setNotificationOpen((open) => !open);
                   setMobileMenuOpen(false);
                 }}
-                className="relative rounded-xl border border-border bg-card p-3 text-navy transition hover:border-navy/30"
+                className="relative touch-target rounded-xl border border-border bg-card p-3 text-navy transition hover:border-navy/30"
                 aria-label="Toggle order notifications"
               >
                 <Bell className="h-4 w-4" />
@@ -343,7 +360,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
                   setMobileMenuOpen((open) => !open);
                   setNotificationOpen(false);
                 }}
-                className="rounded-xl border border-border bg-card p-3 text-navy transition hover:border-navy/30"
+                className="touch-target rounded-xl border border-border bg-card p-3 text-navy transition hover:border-navy/30"
                 aria-label="Toggle admin navigation"
               >
                 {mobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
@@ -361,46 +378,71 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
             </div>
           )}
 
-          {mobileMenuOpen && (
-            <div className="mt-4 space-y-2 rounded-2xl border border-border bg-card p-3 shadow-soft">
-              {items.map(({ to, label, Icon, exact }) => {
-                const active = exact ? loc.pathname === to : loc.pathname.startsWith(to);
-
-                return (
-                  <Link
-                    key={to}
-                    to={to}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition-colors ${
-                      active
-                        ? "bg-navy text-beige"
-                        : "text-navy/70 hover:bg-beige/60 hover:text-navy"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" /> {label}
-                  </Link>
-                );
-              })}
-
-              <Link
-                to="/"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/60 hover:text-navy"
-              >
-                <ExternalLink className="h-4 w-4" /> View site
-              </Link>
-
-              <button
-                type="button"
-                onClick={() => void onLogout()}
-                className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/60 hover:text-navy"
-              >
-                <LogOut className="h-4 w-4" /> Sign out
-              </button>
-            </div>
-          )}
         </div>
-        <div className="p-4 sm:p-6 md:p-10">{children}</div>
+        {mobileMenuOpen && (
+          <div
+            className="fixed inset-0 z-30 bg-[#1e1b18]/30 backdrop-blur-sm xl:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          >
+            <div
+              className="ml-auto flex h-full w-full max-w-sm min-w-0 flex-col overflow-y-auto bg-card px-4 pb-6 pt-4 shadow-[0_20px_60px_-24px_rgba(7,31,63,0.28)]"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
+                <div>
+                  <p className="font-display text-2xl text-navy">Pure<span className="text-gold">fumes</span></p>
+                  <p className="mt-1 text-[0.6rem] uppercase tracking-[0.3em] text-navy/45">Admin</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="touch-target rounded-xl border border-border bg-beige/30 p-3 text-navy transition hover:border-navy/30"
+                  aria-label="Close admin navigation"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-2">
+                {items.map(({ to, label, Icon, exact }) => {
+                  const active = exact ? loc.pathname === to : loc.pathname.startsWith(to);
+
+                  return (
+                    <Link
+                      key={to}
+                      to={to}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm transition-colors ${
+                        active
+                          ? "bg-navy text-beige"
+                          : "text-navy/70 hover:bg-beige/60 hover:text-navy"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" /> {label}
+                    </Link>
+                  );
+                })}
+
+                <Link
+                  to="/"
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/60 hover:text-navy"
+                >
+                  <ExternalLink className="h-4 w-4" /> View site
+                </Link>
+
+                <button
+                  type="button"
+                  onClick={() => void onLogout()}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/60 hover:text-navy"
+                >
+                  <LogOut className="h-4 w-4" /> Sign out
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        <div className="p-4 sm:p-6 lg:p-8 2xl:p-10">{children}</div>
       </main>
     </div>
   );

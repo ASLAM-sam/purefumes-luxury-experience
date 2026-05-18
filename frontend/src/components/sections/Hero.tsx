@@ -1,158 +1,156 @@
 import { memo, useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { ArrowRight, Sparkles } from "lucide-react";
-import { Button } from "@/components/common/Button";
-import { Container } from "@/components/common/Container";
-import { OptimizedImage } from "@/components/common/OptimizedImage";
-import type { Product } from "@/data/products";
-import { productsApi } from "@/services/api";
 
-const getHeroImage = (product?: Product | null) =>
-  product?.images?.find(Boolean) || product?.image || "";
+import fallbackHeroImage from "@/assets/hero.jpg?url";
+import fallbackPerfumeImage from "@/assets/perfume-1.jpg?url";
+import { bannersApi, type Banner } from "@/services/api";
+
+type HeroSlide = {
+  id: string;
+  category: string;
+  heading: string;
+  image: string;
+  link: string;
+};
+
+const fallbackSlides: HeroSlide[] = [
+  {
+    id: "purefumes-signature",
+    category: "Premium Collection",
+    heading: "Signature Scents",
+    image: fallbackHeroImage,
+    link: "/shop",
+  },
+  {
+    id: "purefumes-arrivals",
+    category: "New Arrivals",
+    heading: "Luxury Perfumes",
+    image: fallbackPerfumeImage,
+    link: "/shop?sort=latest",
+  },
+];
+
+const toHeroSlide = (banner: Banner): HeroSlide => ({
+  id: banner.id || banner._id,
+  category: banner.title?.trim() || "Premium Collection",
+  heading: banner.subtitle?.trim() || banner.title?.trim() || "Luxury Perfumes",
+  image: banner.image,
+  link: banner.link?.trim() || "/shop",
+});
 
 export const Hero = memo(function Hero() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [index, setIndex] = useState(0);
+  const [documentHidden, setDocumentHidden] = useState(false);
 
   useEffect(() => {
     let active = true;
 
-    const loadHeroProduct = async () => {
+    const loadBanners = async () => {
       try {
-        const latestProducts = await productsApi.listLatest();
-        const nextProducts = latestProducts.length
-          ? latestProducts
-          : await productsApi.list({ page: 1, limit: 6 });
+        const next = await bannersApi.listActive();
 
         if (active) {
-          setProducts(nextProducts);
+          setBanners([...next].sort((a, b) => (a.order || 0) - (b.order || 0)));
         }
-      } catch (_error) {
+      } catch {
         if (active) {
-          setProducts([]);
+          setBanners([]);
         }
       }
     };
 
-    void loadHeroProduct();
+    void loadBanners();
 
     return () => {
       active = false;
     };
   }, []);
 
-  const heroProduct = useMemo(
-    () => products.find((product) => getHeroImage(product)) || products[0] || null,
-    [products],
-  );
-  const heroImage = getHeroImage(heroProduct);
+  const slides = useMemo(() => {
+    const adminSlides = banners.map(toHeroSlide).filter((slide) => slide.image);
+    return adminSlides.length > 0 ? adminSlides : fallbackSlides;
+  }, [banners]);
+
+  useEffect(() => {
+    setIndex(0);
+  }, [slides.length]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return undefined;
+
+    const handleVisibility = () => {
+      setDocumentHidden(document.visibilityState === "hidden");
+    };
+
+    handleVisibility();
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (slides.length <= 1 || documentHidden) return undefined;
+
+    const timer = window.setInterval(() => {
+      setIndex((current) => (current + 1) % slides.length);
+    }, 4000);
+
+    return () => window.clearInterval(timer);
+  }, [documentHidden, slides.length]);
+
+  if (slides.length === 0) {
+    return null;
+  }
 
   return (
-    <section className="hero overflow-hidden bg-[#f7f3ed] text-[#5b3a29]">
-      <Container className="grid min-h-[calc(100svh-7rem)] items-center gap-10 py-14 md:grid-cols-[0.94fr_1.06fr] md:py-20 lg:gap-16">
-        <div className="max-w-2xl">
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75 }}
-            className="inline-flex items-center gap-2 border border-white/80 bg-white/60 px-5 py-2 text-[0.65rem] uppercase tracking-[0.32em] text-[#8b6b56] shadow-soft"
+    <section className="home-hero-slider bg-[#f7f3ed] md:py-6 lg:py-8">
+      <div className="w-full md:px-[var(--page-gutter)]">
+        <div className="home-hero-slider__frame relative isolate mx-auto w-full overflow-hidden bg-[#17110f] md:max-w-[var(--container-max)]">
+          <div
+            className="home-hero-slider__track flex h-full transform-gpu transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform"
+            style={{ transform: `translate3d(-${index * 100}%, 0, 0)` }}
           >
-            <Sparkles className="h-3.5 w-3.5 text-[#c89b63]" />
-            Luxury Perfume House
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.9, delay: 0.06 }}
-            className="mt-8 font-display text-[clamp(3.25rem,9vw,6.8rem)] leading-[0.92] text-[#5b3a29]"
-          >
-            Purefumes
-            <span className="block italic text-[#8b5f3d]">Hyderabad</span>
-          </motion.h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.16 }}
-            className="mt-6 font-display text-2xl italic text-[#c89b63] md:text-3xl"
-          >
-            Redesign Your Appearance
-          </motion.p>
-
-          <motion.p
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.24 }}
-            className="mt-6 max-w-xl text-sm leading-8 text-[#8b6b56] md:text-base"
-          >
-            An exclusive curation of Middle Eastern, designer and niche fragrances,
-            handpicked for connoisseurs of timeless elegance.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 18 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.75, delay: 0.32 }}
-            className="mt-10 flex flex-col gap-4 sm:flex-row"
-          >
-            <a href="/shop" className="w-full sm:w-auto">
-              <Button className="w-full min-w-[14rem] rounded-none bg-[#8b5f3d] py-4 text-[#fffaf4] hover:bg-[#5b3a29] sm:w-auto">
-                Explore Collection
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </a>
-            <a href="/shop?sort=bestseller" className="w-full sm:w-auto">
-              <Button
-                variant="outline"
-                className="w-full min-w-[14rem] rounded-none border-[#8b5f3d] bg-transparent py-4 text-[#5b3a29] hover:bg-[#8b5f3d] hover:text-[#fffaf4] sm:w-auto"
+            {slides.map((slide, slideIndex) => (
+              <article
+                key={slide.id || slideIndex}
+                className="relative min-w-full overflow-hidden bg-[#17110f]"
+                aria-hidden={slideIndex !== index}
               >
-                Shop Best Sellers
-              </Button>
-            </a>
-          </motion.div>
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, x: 36 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.9, delay: 0.14 }}
-          className="relative mx-auto w-full max-w-[40rem]"
-        >
-          <div className="aspect-[4/4.6] overflow-hidden bg-[#efe7dc] shadow-[0_30px_80px_-44px_rgba(91,58,41,0.42)]">
-            {heroImage ? (
-              <OptimizedImage
-                src={heroImage}
-                alt={heroProduct?.name || "Purefumes Hyderabad fragrance"}
-                width={1200}
-                height={1380}
-                loading="eager"
-                fetchPriority="high"
-                sizes="(max-width: 767px) 92vw, 42vw"
-                wrapperClassName="h-full w-full"
-                className="h-full w-full object-contain object-center p-6 transition duration-700 ease-out hover:scale-[1.025] md:p-10"
-              />
-            ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center bg-[#efe7dc] px-8 text-center">
-                <p className="font-display text-5xl text-[#5b3a29]/35">Purefumes</p>
-                <p className="mt-4 text-[0.68rem] uppercase tracking-[0.34em] text-[#8b6b56]">
-                  Product imagery appears here automatically
-                </p>
-              </div>
-            )}
+                <img
+                  src={slide.image}
+                  alt={slide.heading}
+                  width={1600}
+                  height={900}
+                  loading={slideIndex === 0 ? "eager" : "lazy"}
+                  decoding="async"
+                  fetchPriority={slideIndex === 0 ? "high" : "auto"}
+                  sizes="100vw"
+                  className="home-hero-slider__image absolute inset-0 h-full w-full object-cover object-center"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,11,10,0.9)_0%,rgba(15,11,10,0.68)_36%,rgba(15,11,10,0.18)_70%,rgba(15,11,10,0.04)_100%)]" />
+                <div className="absolute inset-0 flex items-center">
+                  <div className="home-hero-slider__copy px-5 py-5 text-[#fffaf4] sm:px-8 md:px-10 lg:px-14">
+                    <p className="text-[0.58rem] font-semibold uppercase leading-none tracking-[0.28em] text-[#d4a462] sm:text-[0.68rem]">
+                      {slide.category}
+                    </p>
+                    <h1 className="mt-2 max-w-[11.5rem] font-display text-[clamp(1.65rem,8vw,2.9rem)] leading-[0.9] tracking-[0.01em] text-white sm:max-w-[18rem] md:max-w-[28rem] md:text-[clamp(2.9rem,5vw,5rem)]">
+                      {slide.heading}
+                    </h1>
+                    <a
+                      href={slide.link}
+                      className="mt-4 inline-flex min-h-10 items-center justify-center bg-[#d4a462] px-5 text-[0.66rem] font-semibold uppercase tracking-[0.22em] text-[#17110f] shadow-[0_18px_36px_-22px_rgba(212,164,98,0.95)] transition hover:bg-[#e3bd83] sm:mt-6 sm:min-h-11 sm:px-7"
+                    >
+                      Shop Now
+                    </a>
+                  </div>
+                </div>
+              </article>
+            ))}
           </div>
-
-          {heroProduct ? (
-            <div className="absolute bottom-5 left-5 right-5 bg-[#fffaf4]/88 p-4 shadow-soft backdrop-blur">
-              <p className="text-[0.58rem] uppercase tracking-[0.28em] text-[#c89b63]">
-                {heroProduct.brand}
-              </p>
-              <p className="mt-1 truncate font-display text-2xl text-[#5b3a29]">
-                {heroProduct.name}
-              </p>
-            </div>
-          ) : null}
-        </motion.div>
-      </Container>
+        </div>
+      </div>
     </section>
   );
 });

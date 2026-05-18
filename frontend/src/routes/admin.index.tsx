@@ -44,17 +44,17 @@ function AdminDashboard() {
 
   return (
     <AdminShell>
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.95),rgba(243,237,226,0.88))] p-6 shadow-[0_20px_60px_rgba(7,31,63,0.08)] md:p-8">
+      <div className="relative overflow-hidden rounded-[var(--radius-panel)] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.95),rgba(243,237,226,0.88))] p-5 shadow-[0_20px_60px_rgba(7,31,63,0.08)] sm:p-6 lg:p-8">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(201,161,74,0.18),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(7,31,63,0.12),transparent_34%)]" />
         <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <p className="text-[0.65rem] uppercase tracking-[0.4em] text-navy/46">
+            <p className="fluid-eyebrow uppercase text-navy/46">
               Executive view
             </p>
-            <h1 className="mt-3 font-display text-4xl text-navy md:text-5xl">
+            <h1 className="mt-3 font-display text-[clamp(2rem,2.4vw+1.2rem,3.5rem)] text-navy">
               Production-grade control center for your perfume storefront
             </h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-navy/62 md:text-base">
+            <p className="fluid-body mt-4 max-w-2xl text-navy/62">
               Revenue, repeat customers, pending orders, and stock pressure now roll into one
               premium command surface for daily store operations.
             </p>
@@ -81,7 +81,7 @@ function AdminDashboard() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="adaptive-admin-grid mt-6">
         <StatCard
           label="Revenue"
           value={formatCurrency(summary?.revenueInRange || 0)}
@@ -122,7 +122,7 @@ function AdminDashboard() {
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)]">
+      <div className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
         <AnalyticsChart
           title="Revenue pulse"
           description="A clean read on how revenue and order volume are moving across the last 30 days."
@@ -214,7 +214,7 @@ function AdminDashboard() {
         </AnalyticsChart>
       </div>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid gap-6 2xl:grid-cols-2">
         <AnalyticsChart
           title="Top products"
           description="The products currently driving the strongest commercial lift."

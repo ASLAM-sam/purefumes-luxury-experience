@@ -124,21 +124,41 @@ router.post("/test-email", adminAuth, async (req, res) => {
 
 router.get("/google", authLimiter, ensureGoogleOAuthConfigured, (req, res, next) => {
   const redirect = String(req.query.redirect || "/");
+  const safeRedirect = redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "/";
+
   if (req.session) {
-    req.session.oauthRedirect =
-      redirect.startsWith("/") && !redirect.startsWith("//") ? redirect : "/";
+    req.session.oauthRedirect = safeRedirect;
   }
 
   logger.info("Redirecting user to Google OAuth", {
     requestId: req.id,
-    redirectPath: req.session?.oauthRedirect || "/",
+    redirectPath: req.session?.oauthRedirect || safeRedirect,
   });
 
-  return passport.authenticate("google", {
-    scope: ["profile", "email"],
-    prompt: "select_account",
-    state: true,
-  })(req, res, next);
+  const startOAuth = () =>
+    passport.authenticate("google", {
+      scope: ["profile", "email"],
+      prompt: "select_account",
+      state: true,
+    })(req, res, next);
+
+  if (!req.session) {
+    return startOAuth();
+  }
+
+  return req.session.save((error) => {
+    if (error) {
+      logger.error("Failed to persist Google OAuth session before redirect", {
+        requestId: req.id,
+        error: error.message,
+      });
+      return res.redirect(
+        "/auth/google/failure?message=Unable%20to%20start%20Google%20sign-in.",
+      );
+    }
+
+    return startOAuth();
+  });
 });
 
 router.get("/google/failure", googleOAuthFailure);

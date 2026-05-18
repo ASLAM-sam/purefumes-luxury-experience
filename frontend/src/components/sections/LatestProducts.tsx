@@ -80,8 +80,8 @@ export const LatestProducts = memo(function LatestProducts() {
   }
 
   return (
-    <section id="latest-arrivals" className="bg-background py-14 md:py-24">
-      <Container className="max-w-[1100px]">
+    <section id="latest-arrivals" className="bg-background py-[var(--section-space)]">
+      <Container>
         <SectionTitle
           eyebrow="Just In"
           title="Latest Arrivals"
@@ -89,7 +89,7 @@ export const LatestProducts = memo(function LatestProducts() {
         />
 
         {loading ? (
-          <div className="product-grid mt-12 grid grid-cols-1 justify-center gap-x-5 gap-y-8 sm:grid-cols-2 md:gap-x-8 md:gap-y-12 xl:grid-cols-4">
+          <div className="product-grid mt-12">
             {Array.from({ length: 4 }).map((_, index) => (
               <div
                 key={index}
@@ -105,7 +105,7 @@ export const LatestProducts = memo(function LatestProducts() {
             ))}
           </div>
         ) : (
-          <div className="product-grid mt-12 grid grid-cols-1 justify-center gap-x-5 gap-y-8 sm:grid-cols-2 md:gap-x-8 md:gap-y-12 xl:grid-cols-4">
+          <div className="product-grid mt-12">
             {products.map((product) => (
               <ProductCard key={product.id} product={product} showSize variant="bestseller" />
             ))}

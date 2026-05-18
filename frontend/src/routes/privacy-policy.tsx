@@ -11,6 +11,13 @@ export const Route = createFileRoute("/privacy-policy")({
         content:
           "Read the Purefumes Hyderabad Privacy Policy covering customer data, account information, payment security, cookies, third-party services, and user rights.",
       },
+      { property: "og:title", content: "Privacy Policy | Purefumes Hyderabad" },
+      {
+        property: "og:description",
+        content:
+          "Purefumes Hyderabad customer privacy, payment security, data use, cookies, and support contact information.",
+      },
+      { property: "og:type", content: "website" },
     ],
   }),
   component: PrivacyPolicyPage,

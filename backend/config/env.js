@@ -8,8 +8,8 @@ const DEFAULT_JWT_EXPIRE = "15m";
 const DEFAULT_REFRESH_EXPIRE = "30d";
 const DEFAULT_SMTP_PORT = 587;
 const DEFAULT_DEV_FRONTEND_URL = "http://localhost:8080";
-const DEFAULT_PRODUCTION_FRONTEND_URL = "https://purefumeshyderabad.in";
-const DEFAULT_PRODUCTION_BACKEND_URL = "https://hydpurefumes.onrender.com";
+const DEFAULT_PRODUCTION_FRONTEND_URL = "https://purefumeshyderabad.com";
+const DEFAULT_PRODUCTION_BACKEND_URL = "https://api.purefumeshyderabad.com";
 const MIN_SECRET_LENGTH = 32;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -81,14 +81,14 @@ const localDevelopmentOrigins = [
 ];
 const productionOrigins = [
   DEFAULT_PRODUCTION_FRONTEND_URL,
-  "https://www.purefumeshyderabad.in",
+  "https://www.purefumeshyderabad.com",
 ];
 const port = Number(process.env.PORT || DEFAULT_PORT) || DEFAULT_PORT;
 const firstCorsOrigin = configuredCorsOrigins[0] || "";
 const frontendUrl = normalizeUrl(
   firstNonEmpty(
-    read("FRONTEND_URL"),
     read("CLIENT_URL"),
+    read("FRONTEND_URL"),
     firstCorsOrigin,
     isProduction ? DEFAULT_PRODUCTION_FRONTEND_URL : DEFAULT_DEV_FRONTEND_URL,
   ),
@@ -103,7 +103,7 @@ const backendUrl = normalizeUrl(
 const googleCallbackUrl = normalizeUrl(
   firstNonEmpty(
     read("GOOGLE_CALLBACK_URL"),
-    backendUrl ? `${backendUrl}/api/auth/google/callback` : "",
+    backendUrl ? `${backendUrl}/auth/google/callback` : "",
   ),
 );
 const allowedOrigins = [
@@ -134,6 +134,7 @@ export const env = {
   SESSION_SECRET: firstNonEmpty(read("SESSION_SECRET"), read("COOKIE_SECRET")),
   COOKIE_DOMAIN: read("COOKIE_DOMAIN") || undefined,
   COOKIE_SAME_SITE: firstNonEmpty(read("COOKIE_SAME_SITE"), isProduction ? "None" : "Lax"),
+  CLIENT_URL: frontendUrl,
   FRONTEND_URL: frontendUrl,
   BACKEND_URL: backendUrl,
   CORS_ORIGIN: read("CORS_ORIGIN"),
@@ -158,7 +159,10 @@ export const env = {
   ADMIN_PASSWORD_LEGACY: read("ADMIN_PASS"),
 };
 
-env.PAYMENT_BYPASS_ENABLED = !isProduction && env.BYPASS_PAYMENT;
+env.PAYMENT_MODE = firstNonEmpty(read("PAYMENT_MODE"), env.BYPASS_PAYMENT ? "test" : "live");
+
+env.PAYMENT_BYPASS_ENABLED =
+  !isProduction && (env.PAYMENT_MODE === "test" || env.BYPASS_PAYMENT);
 
 export const getMissingGoogleOAuthConfigKeys = () => {
   const missing = [];

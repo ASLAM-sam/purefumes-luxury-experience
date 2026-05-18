@@ -19,7 +19,7 @@ export const FilterDropdown = memo(function FilterDropdown({
   onChange,
 }: Props) {
   return (
-    <label className="flex min-w-[10rem] flex-col gap-2">
+    <label className="flex min-w-0 flex-col gap-2 sm:min-w-[10rem]">
       <span className="text-[0.65rem] uppercase tracking-[0.28em] text-navy/45">{label}</span>
       <select
         value={value}

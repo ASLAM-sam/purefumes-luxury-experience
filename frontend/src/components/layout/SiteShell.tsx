@@ -126,14 +126,14 @@ export function SiteShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="site-shell relative isolate flex min-h-screen flex-col overflow-x-clip">
+    <div className="site-shell relative isolate flex min-h-screen min-w-0 flex-col overflow-x-hidden">
       <div ref={cursorLightRef} className="cursor-light" aria-hidden="true" />
-      <div className="site-shell__content relative z-[1] flex min-h-screen flex-1 flex-col">
+      <div className="site-shell__content relative z-[1] flex min-h-screen min-w-0 flex-1 flex-col">
         <div className="site-header">
           <StickyOfferBar />
           <Navbar />
         </div>
-        <main ref={mainRef} className="site-main flex-1">
+        <main ref={mainRef} className="site-main min-w-0 flex-1">
           {children}
         </main>
         <Footer />

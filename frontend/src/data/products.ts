@@ -1,4 +1,5 @@
 import type { Brand } from "@/data/brands";
+import type { Category } from "@/data/categories";
 
 export type Size = { size: string; price: number };
 export type Season = "Spring" | "Summer" | "Autumn" | "Winter";
@@ -12,7 +13,15 @@ export type Product = {
   brand: string;
   brandId?: string | null;
   brandDetails?: Brand | null;
-  category: "Middle Eastern" | "Designer" | "Niche";
+  categories: Category[];
+  categoryIds: string[];
+  categoryNames: string[];
+  categorySlugs: string[];
+  primaryCategory?: string | null;
+  category: string;
+  categoryId?: string | null;
+  categorySlug?: string;
+  categoryDetails?: Category | null;
   price?: number;
   gender?: "Men" | "Women" | "Unisex" | string;
   rating?: number;

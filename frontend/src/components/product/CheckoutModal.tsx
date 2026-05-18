@@ -134,7 +134,7 @@ export const CheckoutModal = memo(function CheckoutModal() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 30, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            className="relative mx-auto my-16 max-w-lg rounded-lg border border-border bg-card p-8 shadow-luxe md:p-10"
+            className="relative mx-3 my-4 w-auto max-w-[min(100vw-1.5rem,34rem)] rounded-2xl border border-border bg-card p-5 shadow-luxe sm:mx-auto sm:my-10 sm:p-6 md:p-8"
           >
             <button
               onClick={resetAndClose}
@@ -154,7 +154,9 @@ export const CheckoutModal = memo(function CheckoutModal() {
             ) : (
               <>
                 <p className="text-[0.65rem] uppercase tracking-[0.4em] text-gold">Checkout</p>
-                <h3 className="font-display mt-2 text-3xl text-navy">Confirm your order</h3>
+                <h3 className="mt-2 font-display text-2xl text-navy sm:text-3xl">
+                  Confirm your order
+                </h3>
 
                 <div className="mt-6 space-y-3 rounded-lg border border-border bg-beige/40 p-4">
                   {cart.map((item) => (

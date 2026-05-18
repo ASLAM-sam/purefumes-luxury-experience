@@ -31,9 +31,9 @@ import {
   clearBuyNowCheckoutState,
   type BuyNowCustomer,
   getBuyNowCheckoutState,
-  paymentOptions,
   saveBuyNowSuccessState,
 } from "@/lib/buy-now";
+import { setRedirectAfterLogin } from "@/lib/auth-redirect";
 import { couponsApi, ordersApi, paymentsApi, type PaymentConfig } from "@/services/api";
 
 const RAZORPAY_URL = "https://checkout.razorpay.com/v1/checkout.js";
@@ -168,6 +168,36 @@ const createMockPaymentResponse = (): RazorpaySuccessResponse => ({
   razorpay_signature: "TEST_SIGNATURE",
 });
 
+const testPaymentOptions = [
+  {
+    id: "test-paid",
+    name: "Simulate Success",
+    description: "Create a paid test order with a fake gateway transaction.",
+    paymentStatus: "paid" as const,
+  },
+  {
+    id: "test-pending",
+    name: "Simulate Pending",
+    description: "Create a pending-payment order for operational testing.",
+    paymentStatus: "pending" as const,
+  },
+  {
+    id: "test-failed",
+    name: "Simulate Failed",
+    description: "Create a failed-payment order while preserving stock and admin visibility.",
+    paymentStatus: "failed" as const,
+  },
+  {
+    id: "test-cod",
+    name: "Simulate COD",
+    description: "Create a cash-on-delivery style test order without gateway charge.",
+    paymentStatus: "cod" as const,
+  },
+];
+
+const getTestPaymentOption = (id: string) =>
+  testPaymentOptions.find((option) => option.id === id) || testPaymentOptions[0];
+
 const upiOnlyDisplayConfig = {
   display: {
     blocks: {
@@ -203,12 +233,12 @@ function DevelopmentPaymentPanel({
       <p className="text-[0.65rem] uppercase tracking-[0.4em] text-amber-700">Test payment mode</p>
       <h3 className="mt-2 font-display text-3xl text-navy">Complete checkout without Razorpay</h3>
       <p className="mt-2 text-sm leading-6 text-navy/68">
-        Development bypass is enabled, so checkout will create a real order, mark the payment as
-        successful, update stock, clear the cart when required, and continue the normal order flow
-        without Razorpay signature verification.
+        Test mode is enabled, so checkout will create real order records, update inventory,
+        preserve admin analytics visibility, and simulate multiple payment outcomes without real
+        gateway charges.
       </p>
-      <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        {paymentOptions.map((option) => {
+      <div className="mt-6 grid gap-4 sm:grid-cols-2">
+        {testPaymentOptions.map((option) => {
           const processing = loading === option.id;
 
           return (
@@ -222,7 +252,7 @@ function DevelopmentPaymentPanel({
               <p className="text-[0.65rem] uppercase tracking-[0.24em] text-amber-700">Simulate</p>
               <p className="mt-2 font-semibold text-navy">{option.name}</p>
               <p className="mt-2 text-sm text-navy/56">
-                {processing ? "Creating test order..." : "Mark paid with test-bypass and continue."}
+                {processing ? "Creating test order..." : option.description}
               </p>
             </button>
           );
@@ -255,7 +285,7 @@ function CheckoutPage() {
 
   useEffect(() => {
     if (!authReady || user) return;
-    window.localStorage.setItem("purefumes_redirect_after_login", "/checkout");
+    setRedirectAfterLogin("/checkout");
     nav({ to: "/login" });
   }, [authReady, nav, user]);
 
@@ -436,6 +466,7 @@ function CheckoutPage() {
       paymentResponse: RazorpaySuccessResponse,
       paymentName: string,
       paymentGateway = "Razorpay",
+      paymentStatus: "paid" | "failed" | "pending" | "cod" = "paid",
     ) => {
       if (!product || !size) return;
 
@@ -467,6 +498,7 @@ function CheckoutPage() {
           paymentGateway,
           paymentOrderId: paymentResponse.razorpay_order_id,
           paymentSignature: paymentResponse.razorpay_signature,
+          paymentStatus,
         });
 
         saveBuyNowSuccessState({
@@ -484,7 +516,15 @@ function CheckoutPage() {
           buyNowFinalTotal: order.totalAmount,
         });
         clearBuyNowCheckoutState();
-        addNotification("Payment successful. Order placed.");
+        addNotification(
+          paymentStatus === "failed"
+            ? "Test failed-payment order created."
+            : paymentStatus === "pending"
+              ? "Test pending-payment order created."
+              : paymentStatus === "cod"
+                ? "Test COD order created."
+                : "Payment successful. Order placed.",
+        );
         nav({ to: "/success" });
       } catch (ex) {
         const message =
@@ -517,8 +557,13 @@ function CheckoutPage() {
 
       try {
         await ensurePaymentConfig();
-        await handleOrderSuccess(createMockPaymentResponse(), "test-bypass", "test-bypass");
-        addNotification("Development bypass created a paid test order.");
+        const testOption = getTestPaymentOption(paymentOptionId);
+        await handleOrderSuccess(
+          createMockPaymentResponse(),
+          testOption.paymentStatus === "cod" ? "cod" : "test-bypass",
+          "test-mode",
+          testOption.paymentStatus,
+        );
       } catch (bypassError) {
         const message =
           bypassError instanceof Error
@@ -688,7 +733,7 @@ function CheckoutPage() {
           <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[0.65rem] uppercase tracking-[0.4em] text-gold">Checkout</p>
-              <h1 className="mt-2 font-display text-5xl text-navy">Buy It Now</h1>
+              <h1 className="mt-2 font-display text-4xl text-navy sm:text-5xl">Buy It Now</h1>
             </div>
             <Link
               to="/product/$id"
@@ -700,7 +745,7 @@ function CheckoutPage() {
           </header>
 
           <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
-            <div className="rounded-2xl border border-border bg-card p-6 shadow-soft md:p-8">
+            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft md:p-8">
               <div className="grid gap-6 md:grid-cols-[8rem_minmax(0,1fr)] md:items-start">
                 {productImage ? (
                   <OptimizedImage
@@ -721,7 +766,7 @@ function CheckoutPage() {
                   <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">
                     {product.brand}
                   </p>
-                  <h2 className="mt-2 font-display text-3xl text-navy">{product.name}</h2>
+                  <h2 className="mt-2 font-display text-2xl text-navy sm:text-3xl">{product.name}</h2>
                   <p className="mt-2 text-sm text-muted-foreground">{size.size}</p>
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">
                     {product.description}
@@ -789,7 +834,7 @@ function CheckoutPage() {
               ) : null}
             </div>
 
-            <aside className="h-fit rounded-2xl border border-border bg-navy p-6 text-beige shadow-luxe">
+            <aside className="h-fit rounded-2xl border border-border bg-navy p-5 text-beige shadow-luxe sm:p-6 lg:sticky lg:top-28">
               <p className="text-[0.65rem] uppercase tracking-[0.32em] text-gold">Order Summary</p>
               <div className="mt-5 space-y-4 text-sm text-beige/75">
                 <div className="flex items-center justify-between gap-4">
@@ -824,7 +869,7 @@ function CheckoutPage() {
                 </p>
                 {isBypassMode ? (
                   <p className="mt-3 text-xs uppercase tracking-[0.2em] text-amber-300">
-                    Development payment bypass enabled
+                    TEST MODE
                   </p>
                 ) : null}
               </div>
@@ -976,6 +1021,7 @@ function CartCheckout() {
       paymentResponse: RazorpaySuccessResponse,
       paymentName: string,
       paymentGateway = "Razorpay",
+      paymentStatus: "paid" | "failed" | "pending" | "cod" = "paid",
     ) => {
       try {
         await ordersApi.create({
@@ -995,10 +1041,19 @@ function CartCheckout() {
           paymentGateway,
           paymentOrderId: paymentResponse.razorpay_order_id,
           paymentSignature: paymentResponse.razorpay_signature,
+          paymentStatus,
         });
 
         clearCart();
-        addNotification("Payment successful. Order placed.");
+        addNotification(
+          paymentStatus === "failed"
+            ? "Test failed-payment order created."
+            : paymentStatus === "pending"
+              ? "Test pending-payment order created."
+              : paymentStatus === "cod"
+                ? "Test COD order created."
+                : "Payment successful. Order placed.",
+        );
         nav({ to: "/my-orders" });
       } catch (ex) {
         const message = ex instanceof Error ? ex.message : "Order could not be saved.";
@@ -1018,8 +1073,13 @@ function CartCheckout() {
 
       try {
         await ensurePaymentConfig();
-        await handleOrderSuccess(createMockPaymentResponse(), "test-bypass", "test-bypass");
-        addNotification("Development bypass created a paid test order.");
+        const testOption = getTestPaymentOption(paymentOptionId);
+        await handleOrderSuccess(
+          createMockPaymentResponse(),
+          testOption.paymentStatus === "cod" ? "cod" : "test-bypass",
+          "test-mode",
+          testOption.paymentStatus,
+        );
       } catch (bypassError) {
         const message =
           bypassError instanceof Error
@@ -1194,7 +1254,7 @@ function CartCheckout() {
                 </p>
                 {isBypassMode ? (
                   <p className="mt-3 text-xs uppercase tracking-[0.2em] text-amber-300">
-                    Development payment bypass enabled
+                    TEST MODE
                   </p>
                 ) : null}
               </div>

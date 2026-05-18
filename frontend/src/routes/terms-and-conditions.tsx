@@ -11,6 +11,13 @@ export const Route = createFileRoute("/terms-and-conditions")({
         content:
           "Review Purefumes Hyderabad website terms for product information, pricing, availability, order acceptance, customer responsibilities, liability, and governing law.",
       },
+      { property: "og:title", content: "Terms & Conditions | Purefumes Hyderabad" },
+      {
+        property: "og:description",
+        content:
+          "Purefumes Hyderabad ecommerce terms covering browsing, ordering, payments, delivery, and customer responsibilities.",
+      },
+      { property: "og:type", content: "website" },
     ],
   }),
   component: TermsAndConditionsPage,

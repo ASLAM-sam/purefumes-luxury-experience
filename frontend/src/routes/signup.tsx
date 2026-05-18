@@ -6,6 +6,7 @@ import { Container } from "@/components/common/Container";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import { clearRedirectAfterLogin, getRedirectAfterLogin } from "@/lib/auth-redirect";
 
 export const Route = createFileRoute("/signup")({
   component: SignupPage,
@@ -72,9 +73,9 @@ function SignupPage() {
       try {
         await signup(form);
         addNotification("Account created. Please verify your email.");
-        const redirect = window.localStorage.getItem("purefumes_redirect_after_login") || "/profile";
-        window.localStorage.removeItem("purefumes_redirect_after_login");
-        nav({ to: redirect.startsWith("/") ? redirect : "/profile" });
+        const redirect = getRedirectAfterLogin("/profile");
+        clearRedirectAfterLogin();
+        nav({ to: redirect });
       } catch (ex) {
         setError(ex instanceof Error ? ex.message : "Signup failed.");
       } finally {

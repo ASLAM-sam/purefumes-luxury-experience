@@ -139,9 +139,9 @@ function AdminOrders() {
     <AdminShell>
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-[0.65rem] tracking-[0.4em] uppercase text-navy/50">Fulfilment</p>
-          <h1 className="font-display text-4xl text-navy mt-1">Orders</h1>
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-navy/60">
+          <p className="fluid-eyebrow uppercase text-navy/50">Fulfilment</p>
+          <h1 className="mt-1 font-display text-[clamp(2rem,2vw+1.2rem,3rem)] text-navy">Orders</h1>
+          <p className="fluid-body mt-3 max-w-2xl text-navy/60">
             Review live orders by status and date window without loading the full order history.
           </p>
         </div>
@@ -150,7 +150,7 @@ function AdminOrders() {
         </span>
       </header>
 
-      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="mt-6 grid gap-4 2xl:grid-cols-[minmax(0,1fr)_18rem]">
         <DateRangeFilter
           range={dateRange.range}
           from={dateRange.from}
@@ -175,7 +175,7 @@ function AdminOrders() {
           }
         />
 
-        <section className="rounded-[1.5rem] border border-white/70 bg-white/75 p-4 shadow-[0_16px_36px_rgba(7,31,63,0.07)]">
+        <section className="rounded-[var(--radius-panel)] border border-white/70 bg-white/75 p-4 shadow-[0_16px_36px_rgba(7,31,63,0.07)]">
           <label className="flex flex-col gap-2">
             <span className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/45">
               Status
@@ -196,8 +196,8 @@ function AdminOrders() {
         </section>
       </div>
 
-      <div className="mt-8 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-soft">
-        <div className="lg:hidden">
+      <div className="mt-8 overflow-hidden rounded-[var(--radius-panel)] border border-border/60 bg-card shadow-soft">
+        <div className="xl:hidden">
           {loading ? (
             <div className="px-5 py-10 text-center text-navy/50">Loading orders...</div>
           ) : error ? (
@@ -253,7 +253,7 @@ function AdminOrders() {
           )}
         </div>
 
-        <div className="hidden overflow-x-auto lg:block">
+        <div className="admin-table-shell hidden xl:block">
           <table className="w-full text-sm">
             <thead className="bg-beige/50 text-navy/70 text-xs uppercase tracking-[0.2em]">
               <tr>
@@ -340,7 +340,7 @@ function AdminOrders() {
         </div>
       </div>
 
-      <div className="mt-6 flex flex-col gap-3 rounded-[1.5rem] border border-white/70 bg-white/72 px-4 py-4 shadow-[0_12px_24px_rgba(7,31,63,0.06)] sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-6 flex flex-col gap-3 rounded-[var(--radius-panel)] border border-white/70 bg-white/72 px-4 py-4 shadow-[0_12px_24px_rgba(7,31,63,0.06)] sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm text-navy/58">
           Page <span className="font-semibold text-navy">{page}</span> of{" "}
           <span className="font-semibold text-navy">{totalPages}</span>

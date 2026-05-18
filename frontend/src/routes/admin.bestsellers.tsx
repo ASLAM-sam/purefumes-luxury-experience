@@ -1,13 +1,15 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { RefreshCw, Search, Star } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { useNotification } from "@/context/NotificationContext";
+import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
 import {
   BESTSELLERS_CHANGED_EVENT,
   DATA_EVENT_STORAGE_KEY,
   PRODUCTS_CHANGED_EVENT,
+  categoriesApi,
   productsApi,
 } from "@/services/api";
 
@@ -15,9 +17,7 @@ export const Route = createFileRoute("/admin/bestsellers")({
   component: AdminBestsellers,
 });
 
-type CategoryFilter = "all" | Product["category"];
-
-const productCategories: Product["category"][] = ["Middle Eastern", "Designer", "Niche"];
+type CategoryFilter = "all" | string;
 
 const controlCls =
   "w-full rounded-lg border border-border bg-beige/35 px-4 py-3 text-sm text-navy outline-none transition focus:border-navy";
@@ -40,6 +40,7 @@ type LoadOptions = {
 function AdminBestsellers() {
   const { addNotification } = useNotification();
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -78,7 +79,9 @@ function AdminBestsellers() {
         }
 
         const nextProducts = await productsApi.list({}, { forceFresh });
+        const nextCategories = await categoriesApi.listAdmin();
         setProducts(nextProducts);
+        setCategories(nextCategories);
         syncOrderDrafts(nextProducts);
       } catch (ex) {
         const message = ex instanceof Error ? ex.message : "Products could not be loaded.";
@@ -90,6 +93,7 @@ function AdminBestsellers() {
         if (!silent) {
           setError(message);
           setProducts([]);
+          setCategories([]);
           syncOrderDrafts([]);
         }
       } finally {
@@ -305,9 +309,9 @@ function AdminBestsellers() {
               className={`${controlCls} mt-2`}
             >
               <option value="all">All Categories</option>
-              {productCategories.map((category) => (
-                <option key={category} value={category}>
-                  {category}
+              {categories.map((category) => (
+                <option key={category.id} value={category.name}>
+                  {category.name}
                 </option>
               ))}
             </select>
@@ -432,7 +436,14 @@ function AdminBestsellers() {
                         Rs. {price.toLocaleString("en-IN")}
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-2">
+                          <Link
+                            to="/product/$id"
+                            params={{ id: product.id }}
+                            className="rounded-lg border border-border bg-card px-4 py-2 text-xs uppercase tracking-[0.18em] text-navy transition hover:bg-beige/40"
+                          >
+                            Preview
+                          </Link>
                           <button
                             type="button"
                             onClick={() => toggleBestseller(product, false)}

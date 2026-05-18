@@ -17,13 +17,6 @@ export const getPagination = (query) => {
 export const buildProductFilter = (query) => {
   const filter = {};
 
-  if (query.category) {
-    filter.category = {
-      $regex: `^${escapeRegex(String(query.category).trim())}$`,
-      $options: "i",
-    };
-  }
-
   if (query.brand) {
     filter.brand = {
       $regex: `^${escapeRegex(String(query.brand).trim())}$`,

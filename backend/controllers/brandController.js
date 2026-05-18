@@ -27,6 +27,9 @@ const normalizePreviewProduct = (product) => {
   const images = Array.isArray(product.images)
     ? product.images.map((image) => String(image).trim()).filter(Boolean)
     : [];
+  const categoryNames = Array.isArray(product.categoryNames)
+    ? product.categoryNames.map((name) => String(name || "").trim()).filter(Boolean)
+    : [];
 
   return {
     _id: product._id?.toString?.() || product._id,
@@ -34,7 +37,7 @@ const normalizePreviewProduct = (product) => {
     name: String(product.name || "").trim(),
     brand: String(product.brand || "").trim(),
     brandId: product.brandId ? String(product.brandId) : null,
-    category: String(product.category || "").trim(),
+    category: categoryNames[0] || "",
     image: String(images[0] || product.image || "").trim(),
     images,
     price: Number(product.price || 0),

@@ -16,20 +16,20 @@ export const SectionTitle = memo(function SectionTitle({
       viewport={{ once: true, margin: "-80px" }}
       transition={{ duration: 0.7, ease: "easeOut" }}
       className={
-        center ? "mx-auto max-w-[16.5rem] text-center sm:max-w-3xl" : "max-w-[16.5rem] sm:max-w-2xl"
+        center ? "mx-auto max-w-3xl text-center" : "max-w-3xl"
       }
     >
       {eyebrow && (
-        <p className="mb-4 text-[0.62rem] font-medium uppercase tracking-[0.28em] text-gold md:text-[0.68rem] md:tracking-[0.42em]">
+        <p className="fluid-eyebrow mb-4 font-medium uppercase text-gold md:tracking-[0.42em]">
           {eyebrow}
         </p>
       )}
-      <h2 className="font-display text-[1.78rem] leading-[1] text-foreground [overflow-wrap:anywhere] sm:text-5xl md:text-6xl">
+      <h2 className="fluid-section-title font-display text-foreground [overflow-wrap:anywhere]">
         {title}
       </h2>
       {subtitle && (
         <p
-          className={`mt-5 text-[0.95rem] leading-7 text-muted-foreground md:text-base ${
+          className={`fluid-body mt-5 text-muted-foreground ${
             center ? "mx-auto max-w-2xl" : "max-w-xl"
           }`}
         >

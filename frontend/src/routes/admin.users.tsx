@@ -71,7 +71,9 @@ const safeNumber = (value: unknown) => {
 const safeIncludes = (value: unknown, query: string) =>
   safeString(value).toLowerCase().includes(query.toLowerCase());
 
-const normalizeUser = (user: Partial<AdminUser> | null | undefined, index: number): AdminUser & { _key: string } => {
+type AdminUserLike = Partial<AdminUser> & { _id?: string };
+
+const normalizeUser = (user: AdminUserLike | null | undefined, index: number): AdminUser & { _key: string } => {
   const id = safeString(user?.id || user?._id || user?.email || `user-${index}`);
   return {
     _key: `${id}-${index}`,

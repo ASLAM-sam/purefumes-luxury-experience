@@ -14,7 +14,7 @@ export const Button = memo(function Button({
   ...rest
 }: Props) {
   const base =
-    "inline-flex items-center justify-center rounded-xl font-medium uppercase transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50";
+    "inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl font-medium uppercase transition-all duration-300 disabled:cursor-not-allowed disabled:opacity-50";
   const variants = {
     navy:
       "bg-navy text-beige shadow-soft hover:-translate-y-0.5 hover:opacity-95 hover:shadow-[0_0_15px_rgba(212,175,55,0.38)]",
@@ -29,9 +29,9 @@ export const Button = memo(function Button({
       "border border-white/70 bg-white/80 text-navy shadow-[0_12px_28px_rgba(7,31,63,0.08)] hover:-translate-y-0.5 hover:bg-white",
   } as const;
   const sizes = {
-    sm: "px-4 py-2 text-[0.65rem] tracking-[0.24em]",
-    md: "px-7 py-3 text-xs tracking-[0.25em]",
-    lg: "px-8 py-3.5 text-sm tracking-[0.28em]",
+    sm: "px-[clamp(0.9rem,1vw,1.15rem)] py-[clamp(0.6rem,0.8vw,0.72rem)] fluid-button-label tracking-[0.22em]",
+    md: "px-[clamp(1rem,1.4vw,1.5rem)] py-[clamp(0.72rem,0.95vw,0.92rem)] fluid-button-label tracking-[0.24em]",
+    lg: "px-[clamp(1.1rem,1.8vw,1.8rem)] py-[clamp(0.82rem,1.2vw,1rem)] text-[clamp(0.78rem,0.22vw+0.72rem,0.96rem)] tracking-[0.26em]",
   } as const;
   return (
     <button className={`${base} ${sizes[size]} ${variants[variant]} ${className}`} {...rest}>

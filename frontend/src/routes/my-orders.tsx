@@ -8,6 +8,7 @@ import { SiteShell } from "@/components/layout/SiteShell";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import { setRedirectAfterLogin } from "@/lib/auth-redirect";
 import { ordersApi, type Order } from "@/services/api";
 
 export const Route = createFileRoute("/my-orders")({
@@ -24,7 +25,7 @@ function MyOrdersPage() {
 
   useEffect(() => {
     if (authReady && !user) {
-      window.localStorage.setItem("purefumes_redirect_after_login", "/my-orders");
+      setRedirectAfterLogin("/my-orders");
       nav({ to: "/login" });
     }
   }, [authReady, nav, user]);

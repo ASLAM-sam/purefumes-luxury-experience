@@ -9,9 +9,16 @@ import { createRandomToken, timingSafeEqual } from "../utils/crypto.js";
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const csrfHeaderName = "X-CSRF-Token";
 const productionOrigins = [
-  "https://purefumeshyderabad.in",
-  "https://www.purefumeshyderabad.in",
+  "https://purefumeshyderabad.com",
+  "https://www.purefumeshyderabad.com",
 ];
+
+const getSameSiteValue = () => {
+  const configuredValue = String(env.COOKIE_SAME_SITE || "").trim().toLowerCase();
+  return ["lax", "strict", "none"].includes(configuredValue) ? configuredValue : "lax";
+};
+
+const shouldUseSecureCookies = () => env.isProduction || env.ENFORCE_HTTPS;
 
 export const getAllowedOrigins = () => {
   return [...new Set([...productionOrigins, ...(env.ALLOWED_ORIGINS || [])])]
@@ -21,8 +28,8 @@ export const getAllowedOrigins = () => {
 
 export const getCookieOptions = ({ httpOnly = true, maxAge } = {}) => ({
   httpOnly,
-  secure: true,
-  sameSite: "None",
+  secure: shouldUseSecureCookies(),
+  sameSite: getSameSiteValue(),
   signed: false,
   maxAge,
   domain: env.COOKIE_DOMAIN,

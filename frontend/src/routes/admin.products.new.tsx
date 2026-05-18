@@ -21,8 +21,8 @@ function NewProduct() {
         <ProductForm
           resetOnSuccess
           submitLabel="Create Product"
-          onSubmit={async (payload) => {
-            await productsApi.createWithImages(payload);
+          onSubmit={async (payload, options) => {
+            await productsApi.createWithImages(payload, options);
             addNotification("Product added to MongoDB.");
             nav({ to: "/admin/products" });
           }}

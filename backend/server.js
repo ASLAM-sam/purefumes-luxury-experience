@@ -18,9 +18,9 @@ const startServer = async () => {
     logger.info("Google OAuth configuration status", getGoogleOAuthConfigStatus());
 
     if (env.PAYMENT_BYPASS_ENABLED) {
-      logger.warn("PAYMENT BYPASS MODE ENABLED", {
+      logger.warn("TEST PAYMENT MODE ENABLED", {
         environment: env.NODE_ENV,
-        note: "Orders will be auto-paid in development mode.",
+        note: "Checkout will simulate gateway results without charging real customers.",
       });
     }
 

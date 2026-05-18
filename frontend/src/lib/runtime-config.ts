@@ -32,11 +32,16 @@ const resolveOrigin = (value: string, base = "") => {
 
 const configuredFrontendUrl = resolveUrl(String(import.meta.env.VITE_FRONTEND_URL || ""), browserOrigin);
 const frontendUrl = configuredFrontendUrl || browserOrigin;
-const configuredApiUrl = String(
-  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "",
-).trim();
+const normalizeApiUrl = (value: string) => {
+  const resolvedValue = resolveUrl(value, frontendUrl || browserOrigin);
+  if (!resolvedValue) return "";
+
+  return /\/api$/i.test(resolvedValue) ? resolvedValue : `${resolvedValue}/api`;
+};
+
+const configuredApiUrl = String(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "").trim();
 const apiUrl =
-  resolveUrl(configuredApiUrl, frontendUrl || browserOrigin) ||
+  normalizeApiUrl(configuredApiUrl) ||
   (frontendUrl ? resolveUrl("/api", frontendUrl) : "");
 const apiOrigin = resolveOrigin(apiUrl, frontendUrl || browserOrigin) || frontendUrl;
 const authUrl = apiUrl
@@ -45,8 +50,14 @@ const authUrl = apiUrl
     ? resolveUrl("/auth", apiOrigin)
     : "";
 
-if (import.meta.env.PROD && apiUrl.startsWith("http://")) {
-  throw new Error("VITE_API_URL must use HTTPS in production");
+if (import.meta.env.PROD) {
+  if (apiUrl.startsWith("http://")) {
+    throw new Error("VITE_API_URL must use HTTPS in production");
+  }
+
+  if (/localhost|127\.0\.0\.1/i.test(apiUrl)) {
+    throw new Error("VITE_API_URL cannot point to localhost in production");
+  }
 }
 
 export const runtimeConfig = {

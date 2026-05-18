@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ImagePlus, Pencil, Power, RefreshCw, Trash2 } from "lucide-react";
+import { ImagePlus, Pencil, Power, RefreshCw, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { useNotification } from "@/context/NotificationContext";
@@ -198,6 +198,22 @@ function AdminBanners() {
         toggleError instanceof Error ? toggleError.message : "Banner status could not be updated.",
         "error",
       );
+    } finally {
+      setPendingToggleId("");
+    }
+  };
+
+  const updateBannerOrder = async (banner: Banner, newOrder: number) => {
+    setPendingToggleId(banner.id);
+    try {
+      const payload = new FormData();
+      payload.set("order", String(newOrder));
+
+      const updated = await bannersApi.updateWithImage(banner.id, payload);
+      setBanners((current) => sortBanners(current.map((b) => (b.id === banner.id ? updated : b))));
+      addNotification("Banner order updated.");
+    } catch (err) {
+      addNotification(err instanceof Error ? err.message : "Banner order could not be updated.", "error");
     } finally {
       setPendingToggleId("");
     }
@@ -483,6 +499,24 @@ function AdminBanners() {
                               aria-label={`Edit ${banner.title}`}
                             >
                               <Pencil className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void updateBannerOrder(banner, Math.max(0, banner.order - 1))}
+                              className="rounded-lg p-2 text-navy transition hover:bg-navy/10"
+                              aria-label={`Move ${banner.title} up`}
+                              title="Move up"
+                            >
+                              <ChevronLeft className="h-4 w-4 transform rotate-90" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void updateBannerOrder(banner, banner.order + 1)}
+                              className="rounded-lg p-2 text-navy transition hover:bg-navy/10"
+                              aria-label={`Move ${banner.title} down`}
+                              title="Move down"
+                            >
+                              <ChevronRight className="h-4 w-4 transform -rotate-90" />
                             </button>
                             <button
                               type="button"

@@ -4,6 +4,7 @@
  */
 
 import type { Brand, BrandPreviewProduct } from "@/data/brands";
+import type { Category } from "@/data/categories";
 import type { Accord, BestTime, Product, Size } from "@/data/products";
 import { apiTrafficProxy } from "@/lib/performance/api-proxy";
 import { perfInstrumentation } from "@/lib/performance/instrumentation";
@@ -81,6 +82,12 @@ type BrandListParams = {
   category?: Brand["category"];
 };
 
+type CategoryListOptions = {
+  featured?: boolean;
+  includeInactive?: boolean;
+  search?: string;
+};
+
 type ProductPayload = Partial<Product> & {
   _id?: string;
   id?: string;
@@ -88,11 +95,44 @@ type ProductPayload = Partial<Product> & {
   season?: Product["seasons"];
   timeOfDay?: Product["usage"] | string;
   accords?: Array<Partial<Accord> & { color?: string; intensity?: number }>;
+  categories?: Array<CategoryPayload | string>;
+  categoryIds?: string[];
+  categoryNames?: string[];
+  categorySlugs?: string[];
+  primaryCategory?: string | null;
 };
 
 type BrandPayload = Partial<Brand> & {
   _id?: string;
   id?: string;
+};
+
+type CategoryPayload = Partial<Category> & {
+  _id?: string;
+  id?: string;
+  icon?: string;
+  color?: string;
+  sortOrder?: number;
+  isActive?: boolean;
+  isDeleted?: boolean;
+  productCount?: number;
+};
+
+export type AdminCategoryListResponse = {
+  items: Category[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+  summary: {
+    total: number;
+    active: number;
+    inactive: number;
+    featured: number;
+    deleted: number;
+  };
 };
 
 export type Banner = {
@@ -145,9 +185,13 @@ export type BulkProductImportRow = {
   rowNumber?: number;
   name: string;
   brand: string;
+  category?: string;
   price: string | number;
   stock: string | number;
   description?: string;
+  image?: string;
+  imageUrls?: string[] | string;
+  sizes?: Array<{ size: string; price: number }> | string;
 };
 
 export type BulkProductImportIssue = {
@@ -280,6 +324,11 @@ type PerfumeRequestPayload = Partial<PerfumeRequest> & {
 
 type HttpOptions = RequestInit & {
   forceFresh?: boolean;
+  skipAuthRefresh?: boolean;
+};
+
+type UploadRequestOptions = {
+  onUploadProgress?: (progress: number) => void;
   skipAuthRefresh?: boolean;
 };
 
@@ -419,6 +468,14 @@ export type PaymentConfig = {
   keyId: string;
   bypassEnabled: boolean;
   provider: string;
+  mode?: "live" | "test";
+};
+
+export type PaymentModeSettings = {
+  id?: string;
+  paymentMode: "live" | "test";
+  isPersisted?: boolean;
+  updatedAt?: string | null;
 };
 
 export type CreateOrderInput = {
@@ -433,6 +490,7 @@ export type CreateOrderInput = {
   paymentGateway?: string;
   paymentOrderId?: string;
   paymentSignature?: string;
+  paymentStatus?: "paid" | "failed" | "pending" | "cod";
   clearCart?: boolean;
 };
 
@@ -703,9 +761,6 @@ const refreshAuthSession = async () => {
   return response.ok;
 };
 
-const isCategory = (value: unknown): value is Product["category"] =>
-  value === "Middle Eastern" || value === "Designer" || value === "Niche";
-
 const isBrandCategory = (value: unknown): value is Brand["category"] =>
   value === "middle-eastern" || value === "designer" || value === "niche";
 
@@ -817,6 +872,56 @@ const normalizeBanner = (banner: BannerPayload): Banner => ({
   updatedAt: banner.updatedAt,
 });
 
+const normalizeCategory = (category: CategoryPayload): Category => ({
+  _id: category._id,
+  id: String(category.id || category._id || ""),
+  name: String(category.name || "").trim(),
+  slug: String(category.slug || "").trim(),
+  image: resolveImageUrl(category.image || ""),
+  description: String(category.description || "").trim(),
+  icon: String(category.icon || "").trim(),
+  color: String(category.color || "#8b5f3d").trim() || "#8b5f3d",
+  sortOrder: Number.isFinite(Number(category.sortOrder ?? category.displayOrder))
+    ? Number(category.sortOrder ?? category.displayOrder)
+    : 0,
+  displayOrder: Number.isFinite(Number(category.sortOrder ?? category.displayOrder))
+    ? Number(category.sortOrder ?? category.displayOrder)
+    : 0,
+  isActive: category.isActive ?? category.active !== false,
+  active: category.isActive ?? category.active !== false,
+  isDeleted: Boolean(category.isDeleted),
+  featured: Boolean(category.featured),
+  productCount: Number.isFinite(Number(category.productCount)) ? Number(category.productCount) : 0,
+  createdAt: category.createdAt || null,
+  updatedAt: category.updatedAt || null,
+});
+
+const createDerivedCategory = (
+  id: string,
+  name = "",
+  slug = "",
+  overrides: Partial<Category> = {},
+): Category => ({
+  id,
+  _id: id,
+  name: String(name || "").trim(),
+  slug: String(slug || "").trim(),
+  description: "",
+  image: "",
+  icon: "",
+  color: "#8b5f3d",
+  sortOrder: 0,
+  displayOrder: 0,
+  isActive: true,
+  active: true,
+  isDeleted: false,
+  featured: false,
+  productCount: 0,
+  createdAt: null,
+  updatedAt: null,
+  ...overrides,
+});
+
 const normalizeProduct = (product: ProductPayload): Product => {
   const sizes = Array.isArray(product.sizes) ? product.sizes : [];
   const price = Number(product.price ?? sizes[0]?.price ?? 0);
@@ -844,7 +949,71 @@ const normalizeProduct = (product: ProductPayload): Product => {
     product.brandDetails && typeof product.brandDetails === "object"
       ? normalizeBrand(product.brandDetails as BrandPayload)
       : null;
+  const categoryObjects = Array.isArray(product.categories)
+    ? product.categories.reduce<Category[]>((collection, category) => {
+        if (category && typeof category === "object") {
+          collection.push(normalizeCategory(category as CategoryPayload));
+        }
+
+        return collection;
+      }, [])
+    : [];
+  const categoryDetails =
+    product.categoryDetails && typeof product.categoryDetails === "object"
+      ? normalizeCategory(product.categoryDetails as CategoryPayload)
+      : categoryObjects[0] || null;
+  const categoryIds = Array.isArray(product.categoryIds)
+    ? product.categoryIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : Array.isArray(product.categories)
+      ? product.categories
+          .map((category) => {
+            if (!category) return "";
+            if (typeof category === "object") {
+              return String((category as CategoryPayload).id || (category as CategoryPayload)._id || "").trim();
+            }
+
+            return String(category || "").trim();
+          })
+          .filter(Boolean)
+      : product.categoryId
+        ? [String(product.categoryId).trim()]
+        : categoryDetails?.id
+          ? [categoryDetails.id]
+          : [];
+  const categoryNames = Array.isArray(product.categoryNames)
+    ? product.categoryNames.map((name) => String(name || "").trim()).filter(Boolean)
+    : categoryObjects.length
+      ? categoryObjects.map((category) => category.name)
+      : categoryDetails?.name
+        ? [categoryDetails.name]
+        : product.category
+          ? [String(product.category).trim()]
+          : [];
+  const categorySlugs = Array.isArray(product.categorySlugs)
+    ? product.categorySlugs.map((slug) => String(slug || "").trim()).filter(Boolean)
+    : categoryObjects.length
+      ? categoryObjects.map((category) => category.slug)
+      : categoryDetails?.slug
+        ? [categoryDetails.slug]
+        : product.categorySlug
+          ? [String(product.categorySlug).trim()]
+          : [];
+  const categories = categoryObjects.length
+    ? categoryObjects
+    : categoryIds.map((id, index) =>
+        createDerivedCategory(id, categoryNames[index] || categoryNames[0] || "", categorySlugs[index] || ""),
+      );
   const normalizedBrandId = String(product.brandId || brandDetails?.id || "").trim();
+  const normalizedCategoryId = String(
+    product.primaryCategory ||
+      product.categoryId ||
+      categoryDetails?.id ||
+      categoryIds[0] ||
+      "",
+  ).trim();
+  const normalizedCategory = String(
+    product.category || categoryDetails?.name || categoryNames[0] || "",
+  ).trim();
 
   return {
     _id: product._id,
@@ -853,7 +1022,15 @@ const normalizeProduct = (product: ProductPayload): Product => {
     brand: String(product.brand || brandDetails?.name || ""),
     brandId: normalizedBrandId || null,
     brandDetails,
-    category: isCategory(product.category) ? product.category : "Designer",
+    categories,
+    categoryIds,
+    categoryNames,
+    categorySlugs,
+    primaryCategory: normalizedCategoryId || null,
+    category: normalizedCategory || "Uncategorized",
+    categoryId: normalizedCategoryId || null,
+    categorySlug: String(product.categorySlug || categoryDetails?.slug || categorySlugs[0] || "").trim(),
+    categoryDetails,
     price,
     gender: String(product.gender || ""),
     rating: Number(product.rating || 0),
@@ -1139,6 +1316,92 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
   }
 }
 
+const parseUploadPayload = <T,>(responseText: string): ApiEnvelope<T> | null => {
+  try {
+    return responseText ? (JSON.parse(responseText) as ApiEnvelope<T>) : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+async function uploadFormData<T>(
+  path: string,
+  method: "POST" | "PUT",
+  formData: FormData,
+  options: UploadRequestOptions = {},
+): Promise<T> {
+  requireBackend();
+
+  const csrfToken = await ensureCsrfToken().catch((error) => {
+    if (import.meta.env.DEV) {
+      console.debug(`[API] CSRF bootstrap before ${method} ${path} failed`, error);
+    }
+
+    return "";
+  });
+
+  return new Promise<T>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+
+    xhr.open(method, `${BASE}${path}`, true);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Accept", "application/json");
+
+    if (csrfToken) {
+      xhr.setRequestHeader("X-CSRF-Token", csrfToken);
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        options.onUploadProgress?.(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    xhr.onload = async () => {
+      rememberCsrfToken(xhr.getResponseHeader("X-CSRF-Token") || "");
+
+      const payload = parseUploadPayload<T>(xhr.responseText);
+
+      if (xhr.status === 401 && !options.skipAuthRefresh && shouldAttemptRefresh(path)) {
+        const refreshed = await refreshAuthSession();
+
+        if (refreshed) {
+          try {
+            const retryResult = await uploadFormData<T>(path, method, formData, {
+              ...options,
+              skipAuthRefresh: true,
+            });
+            resolve(retryResult);
+          } catch (error) {
+            reject(error);
+          }
+          return;
+        }
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300 || payload?.success === false) {
+        const firstError =
+          Array.isArray((payload as { errors?: Array<{ message?: string }> } | null)?.errors) &&
+          (payload as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
+
+        reject(new Error(firstError || payload?.message || `${xhr.status} ${xhr.statusText}`));
+        return;
+      }
+
+      options.onUploadProgress?.(100);
+      const data =
+        payload && typeof payload === "object" && "data" in payload
+          ? payload.data
+          : (payload as T);
+      resolve(data as T);
+    };
+
+    xhr.onerror = () => reject(new Error("Upload failed. Check your connection and try again."));
+    xhr.onabort = () => reject(new Error("Upload was cancelled."));
+    xhr.send(formData);
+  });
+}
+
 export const productsApi = {
   list: async (
     params: ProductListParams = {},
@@ -1176,7 +1439,7 @@ export const productsApi = {
     };
   },
   listBestsellers: async (options: CatalogRequestOptions = {}): Promise<Product[]> => {
-    const products = await http<ProductPayload[]>("/products/bestsellers", {
+    const products = await http<ProductPayload[]>("/bestsellers", {
       forceFresh: options.forceFresh ?? false,
     });
     return products.map(normalizeProduct);
@@ -1207,11 +1470,16 @@ export const productsApi = {
     emitDataEvent(LATEST_PRODUCTS_CHANGED_EVENT);
     return normalizedProduct;
   },
-  createWithImages: async (formData: FormData): Promise<Product> => {
-    const createdProduct = await http<ProductPayload>("/products", {
-      method: "POST",
-      body: formData,
-    });
+  createWithImages: async (
+    formData: FormData,
+    options: UploadRequestOptions = {},
+  ): Promise<Product> => {
+    const createdProduct = await uploadFormData<ProductPayload>(
+      "/products",
+      "POST",
+      formData,
+      options,
+    );
     clearCatalogCache("/products");
     clearCatalogCache("/brands");
     clearCatalogCache("/categories");
@@ -1256,11 +1524,17 @@ export const productsApi = {
     emitDataEvent(LATEST_PRODUCTS_CHANGED_EVENT);
     return normalizedProduct;
   },
-  updateWithImages: async (id: string, formData: FormData): Promise<Product> => {
-    const updatedProduct = await http<ProductPayload>(`/products/${id}`, {
-      method: "PUT",
-      body: formData,
-    });
+  updateWithImages: async (
+    id: string,
+    formData: FormData,
+    options: UploadRequestOptions = {},
+  ): Promise<Product> => {
+    const updatedProduct = await uploadFormData<ProductPayload>(
+      `/products/${id}`,
+      "PUT",
+      formData,
+      options,
+    );
     clearCatalogCache("/products");
     clearCatalogCache("/brands");
     clearCatalogCache("/categories");
@@ -1373,6 +1647,81 @@ export const brandsApi = {
   remove: async (id: string): Promise<void> => {
     await http<{ id: string }>(`/brands/${id}`, { method: "DELETE" });
     clearCatalogCache("/brands");
+    clearCatalogCache("/products");
+  },
+};
+
+export const categoriesApi = {
+  list: async (options: CategoryListOptions = {}): Promise<Category[]> => {
+    const data = await http<CategoryPayload[]>(
+      `/categories${queryString({
+        featured: options.featured ? "true" : undefined,
+        search: options.search,
+      })}`,
+    );
+    return data.map(normalizeCategory);
+  },
+  listAdmin: async (_options: CategoryListOptions = {}): Promise<Category[]> => {
+    const data = await http<CategoryPayload[]>("/categories/manage");
+    return data.map(normalizeCategory);
+  },
+  listAdminPage: async (
+    params: {
+      page?: number;
+      limit?: number;
+      search?: string;
+      featured?: "featured" | "standard";
+      state?: "active" | "inactive" | "deleted";
+    } = {},
+  ): Promise<AdminCategoryListResponse> => {
+    const data = await http<{
+      items: CategoryPayload[];
+      pagination: AdminCategoryListResponse["pagination"];
+      summary: AdminCategoryListResponse["summary"];
+    }>(`/categories/manage${queryString(params)}`);
+
+    return {
+      items: data.items.map(normalizeCategory),
+      pagination: data.pagination,
+      summary: data.summary,
+    };
+  },
+  getBySlug: async (slug: string): Promise<Category> => {
+    const data = await http<CategoryPayload>(`/categories/slug/${slug}`);
+    return normalizeCategory(data);
+  },
+  createWithAssets: async (formData: FormData): Promise<Category> => {
+    const createdCategory = await http<CategoryPayload>("/categories", {
+      method: "POST",
+      body: formData,
+    });
+    clearCatalogCache("/categories");
+    clearCatalogCache("/products");
+    return normalizeCategory(createdCategory);
+  },
+  updateWithAssets: async (id: string, formData: FormData): Promise<Category> => {
+    const updatedCategory = await http<CategoryPayload>(`/categories/${id}`, {
+      method: "PUT",
+      body: formData,
+    });
+    clearCatalogCache("/categories");
+    clearCatalogCache("/products");
+    return normalizeCategory(updatedCategory);
+  },
+  reorder: async (
+    items: Array<{ id: string; displayOrder?: number; sortOrder?: number }>,
+  ): Promise<Category[]> => {
+    const data = await http<CategoryPayload[]>("/categories/reorder", {
+      method: "PATCH",
+      body: JSON.stringify({ items }),
+    });
+    clearCatalogCache("/categories");
+    clearCatalogCache("/products");
+    return data.map(normalizeCategory);
+  },
+  remove: async (id: string): Promise<void> => {
+    await http<{ id: string }>(`/categories/${id}`, { method: "DELETE" });
+    clearCatalogCache("/categories");
     clearCatalogCache("/products");
   },
 };
@@ -1982,16 +2331,8 @@ export type AdminAnalytics = {
   };
   trends: {
     revenue: Array<{ label: string; revenue: number; orders: number }>;
-    orders: Array<{ label: string; value: number }>;
     users: Array<{ label: string; value: number }>;
   };
-  salesByStatus: Array<{ status: string; orders: number; revenue: number }>;
-  categoryPerformance: Array<{
-    category: string;
-    revenue: number;
-    orders: number;
-    quantity: number;
-  }>;
   topProducts: Array<{
     productId: string;
     productName: string;
@@ -2009,16 +2350,8 @@ export type AdminAnalytics = {
     totalSpent: number;
     lastLogin?: string;
     createdAt?: string | null;
-    emailVerified?: boolean;
-    isBanned?: boolean;
-  }>;
-  lowStockProducts: Array<{
-    id: string;
-    name: string;
-    brand: string;
-    category: string;
-    stock: number;
-    image: string;
+      emailVerified?: boolean;
+      isBanned?: boolean;
   }>;
   recentActivity: Array<{
     id: string;
@@ -2028,14 +2361,6 @@ export type AdminAnalytics = {
     at: string | null;
     type: string;
   }>;
-  totalUsers: number;
-  activeUsers: number;
-  blockedUsers: number;
-  revenue: number;
-  totalOrders: number;
-  pendingOrders: number;
-  repeatCustomers: number;
-  dailySales: Array<{ date: string; orders: number; revenue: number }>;
 };
 
 export const adminApi = {
@@ -2091,8 +2416,37 @@ export const paymentsApi = {
       keyId: String(data.keyId || "").trim(),
       bypassEnabled: Boolean(data.bypassEnabled),
       provider: String(data.provider || "razorpay"),
+      mode: data.mode === "test" ? "test" : "live",
     };
     return cachedPaymentConfig;
+  },
+  getSettings: async (): Promise<PaymentModeSettings> => {
+    const data = await http<PaymentModeSettings>("/payments/settings");
+    return {
+      id: data.id ? String(data.id) : undefined,
+      paymentMode: data.paymentMode === "test" ? "test" : "live",
+      isPersisted: Boolean(data.isPersisted),
+      updatedAt: data.updatedAt || null,
+    };
+  },
+  updateSettings: async (paymentMode: "live" | "test"): Promise<PaymentModeSettings & PaymentConfig> => {
+    const data = await http<PaymentModeSettings & PaymentConfig>("/payments/settings", {
+      method: "PUT",
+      body: JSON.stringify({ paymentMode }),
+    });
+    cachedPaymentConfig = {
+      keyId: String(data.keyId || "").trim(),
+      bypassEnabled: Boolean(data.bypassEnabled),
+      provider: String(data.provider || "razorpay"),
+      mode: data.mode === "test" ? "test" : "live",
+    };
+    return {
+      id: data.id ? String(data.id) : undefined,
+      paymentMode: data.paymentMode === "test" ? "test" : "live",
+      isPersisted: Boolean(data.isPersisted),
+      updatedAt: data.updatedAt || null,
+      ...cachedPaymentConfig,
+    };
   },
   getRazorpayKey: async (): Promise<string> => {
     const config = await paymentsApi.getConfig();
@@ -2103,6 +2457,7 @@ export const paymentsApi = {
 export const frontendApiFacade = {
   products: productsApi,
   brands: brandsApi,
+  categories: categoriesApi,
   banners: bannersApi,
   cart: cartApi,
   coupons: couponsApi,

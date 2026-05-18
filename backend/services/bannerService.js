@@ -1,4 +1,5 @@
 import Banner from "../models/Banner.js";
+import logger from "../config/logger.js";
 
 export const DEFAULT_BANNERS = [
   {
@@ -38,5 +39,5 @@ export const ensureDefaultBanners = async () => {
   }
 
   await Banner.insertMany(DEFAULT_BANNERS);
-  console.log("Default hero banners seeded");
+  logger.info("Default hero banners seeded");
 };

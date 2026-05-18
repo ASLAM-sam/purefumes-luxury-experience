@@ -1,4 +1,5 @@
 import express from "express";
+import mongoose from "mongoose";
 import { body, param, query } from "express-validator";
 import {
   bulkCreateProducts,
@@ -13,9 +14,6 @@ import {
   updateProduct,
   updateProductBestseller,
 } from "../controllers/productController.js";
-import {
-  PRODUCT_CATEGORIES,
-} from "../models/Product.js";
 import { adminAuth } from "../middlewares/authMiddleware.js";
 import { adminLimiter, uploadLimiter } from "../middlewares/rateLimiter.js";
 import { uploadProductImages } from "../middlewares/uploadMiddleware.js";
@@ -27,50 +25,25 @@ const productIdParam = param("id")
   .isMongoId()
   .withMessage("Valid product id is required");
 
-const isHttpImageUrl = (value) => {
-  const imageUrl = String(value || "").trim();
-  if (!imageUrl) return true;
-
-  try {
-    const parsed = new URL(imageUrl);
-    return ["http:", "https:"].includes(parsed.protocol);
-  } catch (_error) {
-    return false;
-  }
-};
-
-const getImageValues = (value) => {
+const isValidCategoryIdList = (value) => {
   if (value === undefined || value === null || value === "") {
-    return [];
+    return true;
   }
 
-  if (Array.isArray(value)) {
-    return value;
-  }
+  const items = Array.isArray(value)
+    ? value
+    : String(value)
+        .split(/[|,]/g)
+        .map((item) => item.trim())
+        .filter(Boolean);
 
-  const trimmed = String(value).trim();
-  if (!trimmed) return [];
-
-  if (trimmed.startsWith("[")) {
-    const parsed = JSON.parse(trimmed);
-    return Array.isArray(parsed) ? parsed : [];
-  }
-
-  return [trimmed];
+  return items.every((item) => mongoose.Types.ObjectId.isValid(String(item)));
 };
-
-const validImageUrls = (value) => getImageValues(value).every(isHttpImageUrl);
 
 const requireProductImages = (req, res, next) => {
   const hasUploadedImage = Array.isArray(req.files) && req.files.length > 0;
-  const hasImageUrl =
-    getImageValues(req.body.image).some((image) => String(image).trim()) ||
-    getImageValues(req.body.images).some((image) => String(image).trim()) ||
-    ["image1", "image2", "image3", "image4", "image5"].some((field) =>
-      getImageValues(req.body[field]).some((image) => String(image).trim()),
-    );
 
-  if (hasUploadedImage || hasImageUrl) {
+  if (hasUploadedImage) {
     next();
     return;
   }
@@ -99,10 +72,12 @@ const productQueryValidation = [
     .optional()
     .isFloat({ min: 0 })
     .withMessage("maxPrice must be positive"),
-  query("category")
+  query("category").optional().trim().isLength({ max: 120 }),
+  query("categoryId")
     .optional()
-    .isIn(PRODUCT_CATEGORIES)
-    .withMessage("Invalid category"),
+    .isMongoId()
+    .withMessage("Valid category id is required"),
+  query("gender").optional().trim().isLength({ max: 40 }),
   query("brandId")
     .optional()
     .isMongoId()
@@ -132,7 +107,36 @@ const createProductValidation = [
 
     throw new Error("Brand is required");
   }),
-  body("category").isIn(PRODUCT_CATEGORIES).withMessage("Invalid category"),
+  body("category").optional().trim().isLength({ max: 240 }),
+  body("categories").optional().custom(() => true),
+  body("categoryId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Valid category id is required"),
+  body("categoryIds")
+    .optional({ values: "falsy" })
+    .custom(isValidCategoryIdList)
+    .withMessage("categoryIds must contain valid category ids"),
+  body().custom((_, { req }) => {
+    const hasCategory = Boolean(String(req.body.category || "").trim());
+    const hasCategoryId = Boolean(String(req.body.categoryId || "").trim());
+    const hasCategoryIds = Boolean(
+      Array.isArray(req.body.categoryIds)
+        ? req.body.categoryIds.length
+        : String(req.body.categoryIds || "").trim(),
+    );
+    const hasCategories = Boolean(
+      Array.isArray(req.body.categories)
+        ? req.body.categories.length
+        : String(req.body.categories || "").trim(),
+    );
+
+    if (hasCategory || hasCategoryId || hasCategoryIds || hasCategories) {
+      return true;
+    }
+
+    throw new Error("Category is required");
+  }),
   body("price")
     .notEmpty()
     .withMessage("Price is required")
@@ -143,20 +147,6 @@ const createProductValidation = [
     .withMessage("Stock is required")
     .isInt({ min: 0 })
     .withMessage("Stock must be positive"),
-  body("image")
-    .optional({ values: "falsy" })
-    .trim()
-    .custom(isHttpImageUrl)
-    .withMessage("Image must be a valid URL"),
-  body(["image1", "image2", "image3", "image4", "image5"])
-    .optional({ values: "falsy" })
-    .trim()
-    .custom(isHttpImageUrl)
-    .withMessage("Image must be a valid URL"),
-  body("images")
-    .optional({ values: "falsy" })
-    .custom(validImageUrls)
-    .withMessage("Images must be valid URLs"),
   body("videoUrl")
     .optional({ values: "falsy" })
     .trim()
@@ -179,8 +169,17 @@ const updateProductValidation = [
     .withMessage("Valid brand id is required"),
   body("category")
     .optional()
-    .isIn(PRODUCT_CATEGORIES)
-    .withMessage("Invalid category"),
+    .trim()
+    .isLength({ max: 240 }),
+  body("categories").optional().custom(() => true),
+  body("categoryId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Valid category id is required"),
+  body("categoryIds")
+    .optional({ values: "falsy" })
+    .custom(isValidCategoryIdList)
+    .withMessage("categoryIds must contain valid category ids"),
   body("price")
     .optional({ values: "falsy" })
     .isFloat({ min: 0 })
@@ -189,20 +188,19 @@ const updateProductValidation = [
     .optional({ values: "falsy" })
     .isInt({ min: 0 })
     .withMessage("Stock must be positive"),
-  body("image")
+  body("existingImages")
     .optional({ values: "falsy" })
-    .trim()
-    .custom(isHttpImageUrl)
-    .withMessage("Image must be a valid URL"),
-  body(["image1", "image2", "image3", "image4", "image5"])
-    .optional({ values: "falsy" })
-    .trim()
-    .custom(isHttpImageUrl)
-    .withMessage("Image must be a valid URL"),
-  body("images")
-    .optional({ values: "falsy" })
-    .custom(validImageUrls)
-    .withMessage("Images must be valid URLs"),
+    .custom((value) => {
+      if (Array.isArray(value)) return value.length <= 5;
+
+      try {
+        const parsed = JSON.parse(String(value || "[]"));
+        return Array.isArray(parsed) && parsed.length <= 5;
+      } catch (_error) {
+        return false;
+      }
+    })
+    .withMessage("existingImages must be a valid image list"),
   body("videoUrl")
     .optional({ values: "falsy" })
     .trim()
@@ -258,6 +256,7 @@ router.post(
     .withMessage("products must contain 1-500 rows"),
   body("products.*.name").optional().trim().isLength({ max: 160 }),
   body("products.*.brand").optional().trim().isLength({ max: 120 }),
+  body("products.*.category").optional().trim().isLength({ max: 120 }),
   body("products.*.description").optional({ values: "falsy" }).trim().isLength({ max: 4000 }),
   validateRequest,
   bulkCreateProducts,

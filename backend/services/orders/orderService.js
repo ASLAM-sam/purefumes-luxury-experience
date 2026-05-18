@@ -10,6 +10,7 @@ import { addEmailJob } from "../../queues/emailQueue.js";
 import { applyCouponToSubtotal } from "../couponService.js";
 import { buildPreparedOrderItems, normalizeOrderItems } from "../pricingService.js";
 import { clearCart } from "../cart/cartService.js";
+import { getEffectivePaymentMode } from "../paymentModeService.js";
 import {
   countOrdersByUserId,
   countOrdersByUserIdentity,
@@ -30,26 +31,38 @@ const shippingToString = (shippingAddress = {}) =>
     .filter(Boolean)
     .join(", ");
 
-const isDevelopmentPaymentBypass = () => Boolean(env.PAYMENT_BYPASS_ENABLED);
+const isTestPaymentMode = (paymentMode = "live") => paymentMode === "test";
 
-const applyDevelopmentPaymentBypass = (body = {}) => {
-  if (!isDevelopmentPaymentBypass()) {
+const applyDevelopmentPaymentBypass = (body = {}, { paymentMode = "live" } = {}) => {
+  if (!isTestPaymentMode(paymentMode)) {
     return body;
   }
 
-  logger.warn("PAYMENT BYPASS MODE ENABLED", {
+  logger.warn("TEST PAYMENT MODE ENABLED", {
     environment: env.NODE_ENV,
-    paymentGateway: body.paymentGateway || "test-bypass",
+    paymentGateway: body.paymentGateway || "test-mode",
   });
+
+  const requestedPaymentStatus = String(body.paymentStatus || "").trim().toLowerCase();
+  const normalizedPaymentStatus =
+    requestedPaymentStatus === "failed" || requestedPaymentStatus === "pending"
+      ? requestedPaymentStatus
+      : requestedPaymentStatus === "cod"
+        ? "pending"
+        : "paid";
+  const normalizedPaymentMethod =
+    requestedPaymentStatus === "cod"
+      ? "cod"
+      : String(body.paymentMethod || "test-bypass").trim() || "test-bypass";
 
   return {
     ...body,
-    paymentStatus: "paid",
-    paymentMethod: "test-bypass",
-    paymentId: String(body.paymentId || "TEST_PAYMENT_ID"),
+    paymentStatus: normalizedPaymentStatus,
+    paymentMethod: normalizedPaymentMethod,
+    paymentId: String(body.paymentId || `TEST_PAYMENT_${Date.now()}`),
     paymentOrderId: String(body.paymentOrderId || `TEST_ORDER_${Date.now()}`),
     paymentSignature: String(body.paymentSignature || "TEST_SIGNATURE"),
-    paymentGateway: String(body.paymentGateway || "test-bypass"),
+    paymentGateway: String(body.paymentGateway || "test-mode"),
   };
 };
 
@@ -71,8 +84,11 @@ const normalizeShippingAddress = ({ body, user }) => {
   return { fullName, mobile, line1, line2, city, state, postalCode, country };
 };
 
-const verifyRazorpayPayment = ({ paymentOrderId, paymentId, paymentSignature }) => {
-  if (isDevelopmentPaymentBypass()) return true;
+const verifyRazorpayPayment = (
+  { paymentOrderId, paymentId, paymentSignature },
+  { paymentMode = "live" } = {},
+) => {
+  if (isTestPaymentMode(paymentMode)) return true;
   if (!env.RAZORPAY_KEY_SECRET || !paymentSignature) return true;
 
   const expectedSignature = crypto
@@ -89,8 +105,10 @@ const verifyRazorpayPayment = ({ paymentOrderId, paymentId, paymentSignature }) 
   );
 };
 
-const resolvePaymentStatus = (body) => {
-  if (isDevelopmentPaymentBypass()) return "paid";
+const resolvePaymentStatus = (body, { paymentMode = "live" } = {}) => {
+  if (isTestPaymentMode(paymentMode)) {
+    return String(body.paymentStatus || "paid").trim().toLowerCase() || "paid";
+  }
   if (body.paymentStatus) return body.paymentStatus;
   if (body.paymentId && body.paymentGateway === "Razorpay") return "paid";
   if (body.paymentMethod) return "pending";
@@ -150,7 +168,8 @@ export const serializeOrder = (order) => {
 };
 
 export const createAuthenticatedOrder = async ({ user, body }) => {
-  const orderInput = applyDevelopmentPaymentBypass(body);
+  const paymentMode = await getEffectivePaymentMode();
+  const orderInput = applyDevelopmentPaymentBypass(body, { paymentMode });
   const rawItems = normalizeOrderItems(orderInput);
 
   if (!rawItems.length) {
@@ -164,7 +183,7 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
       paymentOrderId: orderInput.paymentOrderId,
       paymentId: orderInput.paymentId,
       paymentSignature: orderInput.paymentSignature,
-    })
+    }, { paymentMode })
   ) {
     throw new ApiError(400, "Payment verification failed");
   }
@@ -219,7 +238,7 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
             paymentGateway: String(orderInput.paymentGateway || "").trim(),
             paymentOrderId: String(orderInput.paymentOrderId || "").trim(),
             paymentSignature: String(orderInput.paymentSignature || "").trim(),
-            paymentStatus: resolvePaymentStatus(orderInput),
+            paymentStatus: resolvePaymentStatus(orderInput, { paymentMode }),
             status: "Pending",
             orderStatus: "Pending",
           },

@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 
-export const PRODUCT_CATEGORIES = ["Middle Eastern", "Designer", "Niche"];
 export const PRODUCT_USAGES = ["Day", "Night", "Day & Night"];
 export const PRODUCT_SEASONS = ["Spring", "Summer", "Autumn", "Winter"];
 export const PRODUCT_BEST_TIMES = ["Morning", "Day", "Evening", "Night"];
@@ -31,6 +30,40 @@ const accordSchema = new mongoose.Schema(
   { _id: false },
 );
 
+const normalizeStringList = (value) => {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => String(item || "").split(","))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+};
+
+const normalizeObjectIdList = (value) => {
+  const items = Array.isArray(value) ? value : value ? [value] : [];
+
+  return items
+    .map((item) => {
+      const raw = item?._id || item?.id || item;
+      if (!raw) return null;
+      const stringValue = String(raw).trim();
+      return mongoose.Types.ObjectId.isValid(stringValue)
+        ? new mongoose.Types.ObjectId(stringValue)
+        : null;
+    })
+    .filter(Boolean)
+    .filter((item, index, array) => array.findIndex((entry) => String(entry) === String(item)) === index);
+};
+
 const productSchema = new mongoose.Schema(
   {
     name: {
@@ -52,10 +85,36 @@ const productSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
-    category: {
-      type: String,
-      required: [true, "Product category is required"],
-      enum: PRODUCT_CATEGORIES,
+    categories: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "Category",
+        },
+      ],
+      validate: {
+        validator(value) {
+          return Array.isArray(value) && value.length > 0;
+        },
+        message: "At least one category is required",
+      },
+      default: [],
+      index: true,
+    },
+    primaryCategory: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+      index: true,
+    },
+    categoryNames: {
+      type: [String],
+      default: [],
+      index: true,
+    },
+    categorySlugs: {
+      type: [String],
+      default: [],
       index: true,
     },
     price: {
@@ -68,11 +127,12 @@ const productSchema = new mongoose.Schema(
       type: Number,
       min: [0, "Stock cannot be negative"],
       default: 0,
+      index: true,
     },
     image: {
       type: String,
       trim: true,
-      maxlength: [1000, "Image URL cannot exceed 1000 characters"],
+      maxlength: [1000, "Image path cannot exceed 1000 characters"],
       default: "",
     },
     description: {
@@ -85,17 +145,18 @@ const productSchema = new mongoose.Schema(
       type: [
         {
           type: String,
+          required: [true, "Product image is required"],
           trim: true,
-          maxlength: [1000, "Image URL cannot exceed 1000 characters"],
+          maxlength: [1000, "Image path cannot exceed 1000 characters"],
         },
       ],
       default: [],
       validate: {
         validator(images) {
           const total = Array.isArray(images) ? images.filter(Boolean).length : 0;
-          return total >= 0 && total <= 5;
+          return total >= 1 && total <= 5;
         },
-        message: "Products can have up to 5 images",
+        message: "Products must have between 1 and 5 images",
       },
     },
     videoUrl: {
@@ -110,8 +171,12 @@ const productSchema = new mongoose.Schema(
         message: "Video URL must point to an mp4, webm, or mov file",
       },
     },
-
-    // Optional fragrance metadata used by the storefront. All values are persisted in MongoDB.
+    gender: {
+      type: String,
+      trim: true,
+      maxlength: [40, "Gender label cannot exceed 40 characters"],
+      default: "",
+    },
     notes: { type: [String], default: [] },
     topNotes: { type: [String], default: [] },
     middleNotes: { type: [String], default: [] },
@@ -129,7 +194,7 @@ const productSchema = new mongoose.Schema(
     season: { type: [String], default: [] },
     seasons: [{ type: String, trim: true }],
     sizes: { type: [sizeSchema], default: [] },
-    originalPrice: { type: Number, min: 0 },
+    originalPrice: { type: Number, min: 0, default: 0 },
     isBestseller: {
       type: Boolean,
       default: false,
@@ -144,6 +209,7 @@ const productSchema = new mongoose.Schema(
       type: Number,
       min: [0, "Bestseller order cannot be negative"],
       default: 0,
+      index: true,
     },
   },
   {
@@ -155,10 +221,10 @@ const productSchema = new mongoose.Schema(
 
 productSchema.index({ name: "text", brand: "text", description: "text" });
 productSchema.index({ createdAt: -1 });
-productSchema.index({ category: 1, brand: 1 });
-productSchema.index({ brandId: 1, category: 1 });
-productSchema.index({ category: 1, price: 1 });
-productSchema.index({ stock: 1 });
+productSchema.index({ brand: 1, categoryNames: 1 });
+productSchema.index({ brandId: 1, categories: 1 });
+productSchema.index({ categorySlugs: 1, price: 1 });
+productSchema.index({ primaryCategory: 1, price: 1 });
 productSchema.index({ isBestseller: 1, bestsellerOrder: 1, updatedAt: -1 });
 productSchema.index({ isLatest: 1, createdAt: -1 });
 
@@ -167,33 +233,47 @@ productSchema.virtual("id").get(function getId() {
 });
 
 productSchema.pre("validate", function normalizeProduct(next) {
-  if (
-    (!this.price || this.price === 0) &&
-    this.sizes?.length &&
-    this.sizes[0].price
-  ) {
+  if ((!this.price || this.price === 0) && this.sizes?.length && this.sizes[0].price) {
     this.price = this.sizes[0].price;
   }
 
   const images = Array.isArray(this.images)
     ? this.images.map((image) => String(image).trim()).filter(Boolean)
     : [];
+  const legacyImage = String(this.image || "").trim();
 
-  this.images = [...new Set(images)];
-  this.image = this.images[0] || String(this.image || "").trim();
+  this.images = [...new Set(images.length ? images : legacyImage ? [legacyImage] : [])];
+  this.image = this.images[0] || "";
   this.videoUrl = String(this.videoUrl || "").trim();
+  this.gender = String(this.gender || "").trim();
+  this.categoryNames = [...new Set(normalizeStringList(this.categoryNames))];
+  this.categorySlugs = [...new Set(normalizeStringList(this.categorySlugs).map((slug) => slug.toLowerCase()))];
+  this.categories = normalizeObjectIdList(this.categories);
 
-  const normalizeNotes = (notes) =>
-    Array.isArray(notes)
-      ? notes.flatMap((note) => String(note).split(",")).map((note) => note.trim()).filter(Boolean)
-      : typeof notes === "string"
-        ? notes.split(",").map((note) => note.trim()).filter(Boolean)
-        : [];
+  if (!this.primaryCategory && this.categories.length > 0) {
+    this.primaryCategory = this.categories[0];
+  }
 
-  this.topNotes = normalizeNotes(this.topNotes);
-  this.middleNotes = normalizeNotes(this.middleNotes);
-  this.baseNotes = normalizeNotes(this.baseNotes);
-  this.notes = normalizeNotes(this.notes);
+  if (this.primaryCategory) {
+    const primaryCategoryValue = String(this.primaryCategory);
+    const hasPrimaryCategory = this.categories.some(
+      (categoryId) => String(categoryId) === primaryCategoryValue,
+    );
+
+    if (!hasPrimaryCategory) {
+      this.categories = [this.primaryCategory, ...this.categories];
+    } else {
+      this.categories = [
+        this.primaryCategory,
+        ...this.categories.filter((categoryId) => String(categoryId) !== primaryCategoryValue),
+      ];
+    }
+  }
+
+  this.topNotes = normalizeStringList(this.topNotes);
+  this.middleNotes = normalizeStringList(this.middleNotes);
+  this.baseNotes = normalizeStringList(this.baseNotes);
+  this.notes = normalizeStringList(this.notes);
 
   if (Array.isArray(this.accords) && this.accords.length) {
     this.accords = this.accords.map((accord) => ({
@@ -243,9 +323,31 @@ productSchema.pre("validate", function normalizeProduct(next) {
 const normalizeProductOutput = (_doc, ret) => {
   const images = Array.isArray(ret.images) ? ret.images.filter(Boolean) : [];
   const primaryImage = images[0] || ret.image || "";
+  const normalizedImages = images.length ? images : primaryImage ? [primaryImage] : [];
+  const categoryIds = Array.isArray(ret.categories)
+    ? ret.categories.map((category) => {
+        if (!category) return null;
+        if (typeof category === "object" && category !== null && category._id) {
+          return category._id.toString?.() || String(category._id);
+        }
+        return category.toString?.() || String(category);
+      }).filter(Boolean)
+    : [];
+  const primaryCategoryId =
+    ret.primaryCategory && typeof ret.primaryCategory === "object" && ret.primaryCategory._id
+      ? ret.primaryCategory._id.toString?.() || String(ret.primaryCategory._id)
+      : ret.primaryCategory
+        ? ret.primaryCategory.toString?.() || String(ret.primaryCategory)
+        : categoryIds[0] || null;
 
   ret.image = primaryImage;
-  ret.images = [...new Set(images)];
+  ret.images = [...new Set(normalizedImages)];
+  ret.categories = Array.isArray(ret.categories) ? ret.categories : categoryIds;
+  ret.categoryIds = categoryIds;
+  ret.primaryCategory = primaryCategoryId;
+  ret.categoryId = primaryCategoryId;
+  ret.category = Array.isArray(ret.categoryNames) ? ret.categoryNames[0] || "" : "";
+  ret.categorySlug = Array.isArray(ret.categorySlugs) ? ret.categorySlugs[0] || "" : "";
   ret.notes =
     Array.isArray(ret.notes) && ret.notes.length
       ? ret.notes

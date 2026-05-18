@@ -97,13 +97,13 @@ export const ProductCard = memo(function ProductCard({
             <div className="absolute inset-0 bg-gradient-to-t from-[#1e1b18]/18 via-transparent to-transparent opacity-80" />
 
             {discountPercentage > 0 ? (
-              <span className="absolute left-3 top-3 bg-[#7b5136] px-2.5 py-1 text-[0.58rem] uppercase tracking-[0.12em] text-[#fffaf4]">
+              <span className="absolute left-3 top-3 bg-[#7b5136] px-2.5 py-1 text-[clamp(0.56rem,0.12vw+0.54rem,0.66rem)] uppercase tracking-[0.12em] text-[#fffaf4]">
                 -{discountPercentage}%
               </span>
             ) : null}
 
             {isBestsellerCard || product.isBestseller ? (
-              <span className="absolute right-3 top-3 bg-[#efd4a9] px-2.5 py-1 text-[0.56rem] uppercase tracking-[0.14em] text-[#5b3a29]">
+              <span className="absolute right-3 top-3 bg-[#efd4a9] px-2.5 py-1 text-[clamp(0.56rem,0.12vw+0.54rem,0.66rem)] uppercase tracking-[0.14em] text-[#5b3a29]">
                 Best Seller
               </span>
             ) : null}
@@ -122,7 +122,7 @@ export const ProductCard = memo(function ProductCard({
             type="button"
             onClick={quickAdd}
             disabled={!inStock}
-            className="flex h-9 w-9 items-center justify-center border border-[#5b3a29]/15 bg-[#fffaf4]/95 text-[#5b3a29] shadow-soft backdrop-blur transition hover:border-[#c89b63] hover:text-[#c89b63] disabled:cursor-not-allowed disabled:opacity-50"
+            className="touch-target flex h-10 w-10 items-center justify-center rounded-full border border-[#5b3a29]/15 bg-[#fffaf4]/95 text-[#5b3a29] shadow-soft backdrop-blur transition hover:border-[#c89b63] hover:text-[#c89b63] disabled:cursor-not-allowed disabled:opacity-50"
             aria-label="Quick add to cart"
             title="Quick add"
           >
@@ -131,25 +131,25 @@ export const ProductCard = memo(function ProductCard({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col px-3 pb-4 pt-3 text-center md:px-4 md:pb-5 md:pt-4">
+      <div className="product-card-body flex flex-1 flex-col px-3 pb-4 pt-3 text-center md:px-4 md:pb-5 md:pt-4">
         <Link to="/product/$id" params={{ id: product.id }} className="block flex-1">
-          <p className="truncate text-[0.58rem] uppercase tracking-[0.28em] text-[#8b6b56] md:text-[0.64rem]">
+          <p className="product-card-brand truncate text-[clamp(0.58rem,0.12vw+0.56rem,0.68rem)] uppercase tracking-[0.28em] text-[#8b6b56]">
             {product.brand}
           </p>
 
-          <h3 className="product-title mt-2 min-h-[2.7rem] text-sm font-medium leading-snug text-[#5b3a29] md:text-base">
+          <h3 className="product-title mt-2 min-h-[2.9rem] text-[clamp(0.9rem,0.22vw+0.86rem,1.02rem)] font-medium leading-snug text-[#5b3a29] md:min-h-[3rem]">
             {product.name}
           </h3>
 
           {rating > 0 ? (
-            <div className="mt-2 flex items-center justify-center gap-1 text-[0.72rem] text-[#8b6b56]">
+            <div className="product-card-rating mt-2 flex items-center justify-center gap-1 text-[0.72rem] text-[#8b6b56]">
               <Star className="h-3.5 w-3.5 fill-[#c89b63] text-[#c89b63]" />
               <span>{rating.toFixed(1)}</span>
               {reviewCount > 0 ? <span>- {reviewCount} reviews</span> : null}
             </div>
           ) : null}
 
-          <div className="product-price mt-2 flex items-center justify-center gap-2 text-sm text-[#5b3a29]">
+          <div className="product-price mt-2 flex items-center justify-center gap-2 text-[clamp(0.88rem,0.18vw+0.84rem,1rem)] text-[#5b3a29]">
             <span className="font-medium">Rs. {formattedPrice}</span>
             {hasDiscount ? (
               <span className="text-xs text-[#8b6b56]/70 line-through">
@@ -159,7 +159,7 @@ export const ProductCard = memo(function ProductCard({
           </div>
 
           {showSize && featuredSize && (
-            <p className="mt-2 text-[0.58rem] uppercase tracking-[0.2em] text-[#8b6b56]/75 md:text-[0.64rem]">
+            <p className="product-card-size mt-2 text-[clamp(0.58rem,0.12vw+0.56rem,0.68rem)] uppercase tracking-[0.2em] text-[#8b6b56]/75">
               Size {featuredSize}
             </p>
           )}

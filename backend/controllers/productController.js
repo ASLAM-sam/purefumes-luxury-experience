@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import Brand from "../models/Brand.js";
+import { createCategorySlug } from "../models/Category.js";
 import Product from "../models/Product.js";
 import {
   buildProductFilter,
@@ -19,7 +20,12 @@ import {
 } from "../utils/brandHelpers.js";
 import { deleteCacheByPrefix, getCachedJson, setCachedJson } from "../utils/cache.js";
 import { bulkImportProducts } from "../services/bulkProductImportService.js";
+import {
+  attachCategoryDetails,
+  syncProductCategoryFields,
+} from "../services/categoryService.js";
 import env from "../config/env.js";
+import logger from "../config/logger.js";
 
 const PRODUCT_CACHE_TTL_SECONDS = 5 * 60;
 const PRODUCT_CACHE_TTL_MS = PRODUCT_CACHE_TTL_SECONDS * 1000;
@@ -72,7 +78,7 @@ const setNoStoreHeaders = (res) => {
 
 const debugBestseller = (...args) => {
   if (!env.isProduction) {
-    console.log("[bestsellers]", ...args);
+    logger.debug("[bestsellers]", { details: args });
   }
 };
 
@@ -309,19 +315,47 @@ const parseBooleanField = (value, fieldName = "value") => {
   throw new ApiError(400, `${fieldName} must be a boolean`);
 };
 
-const normalizeImagesFromBody = (body) => {
-  const images = [
-    ...parseImageField(body.images),
-    ...parseImageField(body.image),
-    ...parseImageField(body.image1),
-    ...parseImageField(body.image2),
-    ...parseImageField(body.image3),
-    ...parseImageField(body.image4),
-    ...parseImageField(body.image5),
-    ...parseImageField(body.imageUrls),
-    ...parseImageField(body.imageUrl),
-  ];
-  return [...new Set(images)];
+const parseExistingImages = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  try {
+    return parseImageField(value);
+  } catch (_error) {
+    throw new ApiError(400, "existingImages must be a valid JSON array");
+  }
+};
+
+const normalizeStoredImageValue = (value = "") => {
+  const image = String(value || "").trim();
+
+  if (!image) return "";
+
+  try {
+    const parsed = new URL(image);
+    return parsed.pathname.startsWith("/uploads/") ? parsed.pathname : image;
+  } catch (_error) {
+    return image;
+  }
+};
+
+const getRetainedExistingImages = (body = {}, existingImages = []) => {
+  const requestedImages = parseExistingImages(body.existingImages);
+
+  if (requestedImages === undefined) {
+    return undefined;
+  }
+
+  const existingImageSet = new Set(
+    existingImages.map(normalizeStoredImageValue).filter(Boolean),
+  );
+
+  return requestedImages
+    .map(normalizeStoredImageValue)
+    .filter((image, index, images) => image && images.indexOf(image) === index)
+    .filter((image) => existingImageSet.has(image))
+    .slice(0, 5);
 };
 
 const normalizeAccordInput = (accords = []) => {
@@ -356,7 +390,7 @@ const normalizeAccordInput = (accords = []) => {
 
 const validateAccordTotal = (accords = []) => {
   if (!accords.length) {
-    throw new ApiError(400, "Accords required");
+    return;
   }
 
   const total = accords.reduce(
@@ -383,15 +417,18 @@ const validateImageCount = (images = [], { requireMinimum = false } = {}) => {
   }
 };
 
-const buildProductPayload = (body, { isUpdate = false } = {}) => {
+const buildProductPayload = (body) => {
   const payload = {};
-const directFields = [
+  const directFields = [
     "name",
     "brand",
-    "category",
     "description",
     "longevity",
     "videoUrl",
+    "gender",
+    "sillage",
+    "usage",
+    "timeOfDay",
   ];
 
   directFields.forEach((field) => {
@@ -439,17 +476,14 @@ const directFields = [
   }
 
   try {
-    [
-      "notes",
-      "topNotes",
-      "middleNotes",
-      "baseNotes",
-    ].forEach((field) => {
-      const parsed = parseArrayField(body[field]);
-      if (parsed !== undefined) payload[field] = parsed;
-    });
+    ["notes", "topNotes", "middleNotes", "baseNotes", "bestTime", "season", "seasons"].forEach(
+      (field) => {
+        const parsed = parseArrayField(body[field]);
+        if (parsed !== undefined) payload[field] = parsed;
+      },
+    );
 
-    ["sizes"].forEach((field) => {
+    ["sizes", "accords"].forEach((field) => {
       const parsed = parseJsonArrayField(body[field]);
       if (parsed !== undefined) payload[field] = parsed;
     });
@@ -470,32 +504,17 @@ const directFields = [
       : payload.notes;
   }
 
+  if (payload.accords) {
+    payload.accords = normalizeAccordInput(payload.accords);
+    validateAccordTotal(payload.accords);
+  }
+
   if (payload.videoUrl) {
     const videoUrl = String(payload.videoUrl).trim();
     if (videoUrl && !/\.(mp4|webm|mov)(\?.*)?$/i.test(videoUrl)) {
       throw new ApiError(400, "videoUrl must point to an mp4, webm, or mov file");
     }
     payload.videoUrl = videoUrl;
-  }
-
-  let bodyImages = [];
-  try {
-    bodyImages = normalizeImagesFromBody(body);
-  } catch (_error) {
-    throw new ApiError(400, "images must be a valid string or JSON array");
-  }
-  if (
-    bodyImages.length > 0 ||
-    body.image !== undefined ||
-    body.images !== undefined ||
-    body.image1 !== undefined ||
-    body.image2 !== undefined ||
-    body.image3 !== undefined ||
-    body.image4 !== undefined ||
-    body.image5 !== undefined
-  ) {
-    payload.image = bodyImages[0] || "";
-    payload.images = bodyImages;
   }
 
   if (!payload.price && payload.sizes?.length && payload.sizes[0]?.price) {
@@ -529,24 +548,26 @@ const addUploadedVideo = async (payload, file = null) => {
 
 const validateProductPayload = (
   payload,
-  { requireImages = false } = {},
+  { requireImages = false, requireCategories = false } = {},
 ) => {
   if (requireImages || payload.images !== undefined) {
     validateImageCount(payload.images, { requireMinimum: requireImages });
   }
 
-};
+  if (requireCategories) {
+    if (!Array.isArray(payload.categories) || payload.categories.length === 0) {
+      throw new ApiError(422, "At least one category is required");
+    }
+  }
 
-const PRODUCT_TO_BRAND_CATEGORY = {
-  "Middle Eastern": "middle-eastern",
-  Designer: "designer",
-  Niche: "niche",
+  if (payload.accords) {
+    validateAccordTotal(payload.accords);
+  }
 };
 
 const syncProductBrandFields = async (
   payload,
   body = {},
-  { productCategory } = {},
 ) => {
   const hasBrandField = Object.prototype.hasOwnProperty.call(body, "brand");
   const hasBrandIdField = Object.prototype.hasOwnProperty.call(body, "brandId");
@@ -566,15 +587,6 @@ const syncProductBrandFields = async (
   }
 
   if (brand) {
-    const expectedBrandCategory = PRODUCT_TO_BRAND_CATEGORY[productCategory];
-
-    if (expectedBrandCategory && brand.category !== expectedBrandCategory) {
-      throw new ApiError(
-        400,
-        "Selected brand does not match the product category",
-      );
-    }
-
     payload.brandId = brand.id;
     payload.brand = brand.name;
     return payload;
@@ -590,6 +602,42 @@ const syncProductBrandFields = async (
 const buildProductQueryFilter = async (query = {}) => {
   const filter = buildProductFilter(query);
   const brandId = String(query.brandId || "").trim();
+  const categoryId = String(query.categoryId || "").trim();
+  const categoryQuery = String(query.category || "").trim();
+  const genderQuery = String(query.gender || "").trim();
+
+  if (categoryId) {
+    if (!mongoose.Types.ObjectId.isValid(categoryId)) {
+      throw new ApiError(400, "Invalid category id");
+    }
+
+    filter.categories = new mongoose.Types.ObjectId(categoryId);
+  } else if (categoryQuery) {
+    const normalizedCategorySlug = createCategorySlug(categoryQuery);
+    if (!normalizedCategorySlug) {
+      filter._id = null;
+    } else {
+      filter.categorySlugs = normalizedCategorySlug;
+    }
+  }
+
+  if (genderQuery) {
+    const normalizedGenderSlug = createCategorySlug(genderQuery);
+    const genderMatcher = {
+      $or: [
+        { gender: { $regex: `^${escapeRegex(genderQuery)}$`, $options: "i" } },
+        { categorySlugs: normalizedGenderSlug },
+      ],
+    };
+
+    if (filter.$and) {
+      filter.$and.push(genderMatcher);
+    } else if (Object.keys(filter).length > 0) {
+      filter.$and = [genderMatcher];
+    } else {
+      Object.assign(filter, genderMatcher);
+    }
+  }
 
   if (!brandId) {
     return filter;
@@ -633,17 +681,47 @@ const normalizeProductResponse = (product) => {
 
   const images = [
     ...parseImageField(raw.images),
-    ...parseImageField(raw.imageUrls),
-    ...parseImageField(raw.imageUrl),
+    ...parseImageField(raw.image),
   ];
-  const image = String(images[0] || raw.image || raw.imageUrl || "").trim();
+  const image = String(images[0] || raw.image || "").trim();
+  const categoryIds = Array.isArray(raw.categoryIds)
+    ? raw.categoryIds
+    : Array.isArray(raw.categories)
+      ? raw.categories.map((category) =>
+          typeof category === "object" && category !== null
+            ? category._id?.toString?.() || String(category._id || "")
+            : String(category || ""),
+        )
+      : raw.categoryId
+        ? [raw.categoryId]
+        : [];
   const id = raw.id || raw._id?.toString?.() || raw._id;
   const { __v, ...cleanProduct } = raw;
+
+  const categoryNames = Array.isArray(raw.categoryNames)
+    ? raw.categoryNames.map((name) => String(name || "").trim()).filter(Boolean)
+    : raw.category
+      ? [String(raw.category).trim()]
+      : [];
+  const categorySlugs = Array.isArray(raw.categorySlugs)
+    ? raw.categorySlugs.map((slug) => String(slug || "").trim()).filter(Boolean)
+    : raw.categorySlug
+      ? [String(raw.categorySlug).trim()]
+      : categoryNames.map((name) => createCategorySlug(name)).filter(Boolean);
+  const primaryCategoryId = String(raw.primaryCategory || categoryIds[0] || "").trim() || null;
 
   return {
     ...cleanProduct,
     id,
     brandId: raw.brandId ? String(raw.brandId) : null,
+    categories: categoryIds,
+    categoryIds,
+    categoryNames,
+    categorySlugs,
+    primaryCategory: primaryCategoryId,
+    category: categoryNames[0] || "Uncategorized",
+    categoryId: primaryCategoryId,
+    categorySlug: categorySlugs[0] || "",
     image,
     images: [...new Set(images)],
     videoUrl: String(raw.videoUrl || ""),
@@ -670,12 +748,18 @@ const normalizeProductResponse = (product) => {
   };
 };
 
+const enrichProductsForResponse = async (products = []) => {
+  const normalizedProducts = products.map(normalizeProductResponse);
+  const withBrands = await attachBrandDetails(normalizedProducts);
+  return attachCategoryDetails(withBrands);
+};
+
 export const getProducts = asyncHandler(async (req, res) => {
   const cacheKey = getCacheKey(req.query);
   const cachedPayload = await getCachedProductList(cacheKey);
 
   if (cachedPayload) {
-    return res.json({ success: true, data: cachedPayload });
+    return res.json({ success: true, message: "Products loaded successfully", data: cachedPayload });
   }
 
   const filter = await buildProductQueryFilter(req.query);
@@ -687,10 +771,10 @@ export const getProducts = asyncHandler(async (req, res) => {
     const products = await Product.find(filter)
       .sort(sort)
       .lean({ virtuals: true });
-    const payload = await attachBrandDetails(products.map(normalizeProductResponse));
+    const payload = await enrichProductsForResponse(products);
 
     await setCachedProductList(cacheKey, payload);
-    return res.json({ success: true, data: payload });
+    return res.json({ success: true, message: "Products loaded successfully", data: payload });
   }
 
   const { page, limit, skip } = getPagination(req.query);
@@ -705,12 +789,12 @@ export const getProducts = asyncHandler(async (req, res) => {
   ]);
 
   const payload = {
-    products: await attachBrandDetails(products.map(normalizeProductResponse)),
+    products: await enrichProductsForResponse(products),
     pagination: createPaginationMeta({ page, limit, total }),
   };
 
   await setCachedProductList(cacheKey, payload);
-  res.json({ success: true, data: payload });
+  res.json({ success: true, message: "Products loaded successfully", data: payload });
 });
 
 export const getProductById = asyncHandler(async (req, res) => {
@@ -724,9 +808,9 @@ export const getProductById = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Product not found");
   }
 
-  const [payload] = await attachBrandDetails([normalizeProductResponse(product)]);
+  const [payload] = await enrichProductsForResponse([product]);
 
-  res.json({ success: true, data: payload });
+  res.json({ success: true, message: "Product loaded successfully", data: payload });
 });
 
 export const getBestsellerProducts = asyncHandler(async (_req, res) => {
@@ -736,16 +820,16 @@ export const getBestsellerProducts = asyncHandler(async (_req, res) => {
   const cachedPayload = await getCachedProductList(cacheKey);
 
   if (cachedPayload) {
-    return res.json({ success: true, data: cachedPayload });
+    return res.json({ success: true, message: "Bestsellers loaded successfully", data: cachedPayload });
   }
 
   const products = await Product.find({ isBestseller: true })
     .sort({ bestsellerOrder: 1, updatedAt: -1, name: 1 })
     .lean({ virtuals: true });
-  const payload = await attachBrandDetails(products.map(normalizeProductResponse));
+  const payload = await enrichProductsForResponse(products);
 
   await setCachedProductList(cacheKey, payload);
-  res.json({ success: true, data: payload });
+  res.json({ success: true, message: "Bestsellers loaded successfully", data: payload });
 });
 
 export const getLatestProducts = asyncHandler(async (_req, res) => {
@@ -753,35 +837,35 @@ export const getLatestProducts = asyncHandler(async (_req, res) => {
   const cachedPayload = await getCachedProductList(cacheKey);
 
   if (cachedPayload) {
-    return res.json({ success: true, data: cachedPayload });
+    return res.json({ success: true, message: "Latest products loaded successfully", data: cachedPayload });
   }
 
   const products = await Product.find({ isLatest: true })
     .sort({ createdAt: -1, updatedAt: -1, name: 1 })
     .limit(12)
     .lean({ virtuals: true });
-  const payload = await attachBrandDetails(products.map(normalizeProductResponse));
+  const payload = await enrichProductsForResponse(products);
 
   await setCachedProductList(cacheKey, payload);
-  res.json({ success: true, data: payload });
+  res.json({ success: true, message: "Latest products loaded successfully", data: payload });
 });
 
 export const createProduct = asyncHandler(async (req, res) => {
   const payload = buildProductPayload(req.body);
   await addUploadedImages(payload, req.productImageFiles || req.files);
   await addUploadedVideo(payload, req.productVideoFile);
-  await syncProductBrandFields(payload, req.body, {
-    productCategory: payload.category,
-  });
+  await syncProductCategoryFields(payload, req.body, { allowCreate: true });
+  await syncProductBrandFields(payload, req.body);
   validateProductPayload(payload, {
     requireImages: true,
+    requireCategories: true,
   });
 
   const product = await Product.create(payload);
   clearProductCache();
-  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+  const [response] = await enrichProductsForResponse([product]);
 
-  res.status(201).json({ success: true, data: response });
+  res.status(201).json({ success: true, message: "Product created successfully", data: response });
 });
 
 export const bulkCreateProducts = asyncHandler(async (req, res) => {
@@ -799,6 +883,7 @@ export const bulkCreateProducts = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
+    message: "Bulk product import completed",
     data: result,
   });
 });
@@ -808,19 +893,51 @@ export const updateProduct = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid product id");
   }
 
-  const existingProduct = await Product.findById(req.params.id).select("category");
+  const existingProduct = await Product.findById(req.params.id).select(
+    "image images categories primaryCategory categoryNames categorySlugs",
+  );
 
   if (!existingProduct) {
     throw new ApiError(404, "Product not found");
   }
 
-  const payload = buildProductPayload(req.body, { isUpdate: true });
-  await addUploadedImages(payload, req.productImageFiles || req.files);
+  const payload = buildProductPayload(req.body);
+  const uploadedImageFiles = req.productImageFiles || req.files || [];
+  const retainedImages = getRetainedExistingImages(
+    req.body,
+    existingProduct.images?.length
+      ? existingProduct.images
+      : existingProduct.image
+        ? [existingProduct.image]
+        : [],
+  );
+  const hasImageUpdate = retainedImages !== undefined || uploadedImageFiles.length > 0;
+
+  if (retainedImages !== undefined) {
+    payload.images = retainedImages;
+    payload.image = retainedImages[0] || "";
+  } else if (uploadedImageFiles.length > 0) {
+    payload.images = existingProduct.images?.length
+      ? existingProduct.images
+      : existingProduct.image
+        ? [existingProduct.image]
+        : [];
+    payload.image = payload.images[0] || "";
+  }
+
+  await addUploadedImages(payload, uploadedImageFiles);
   await addUploadedVideo(payload, req.productVideoFile);
-  await syncProductBrandFields(payload, req.body, {
-    productCategory: payload.category || existingProduct.category,
-  });
-  validateProductPayload(payload);
+  await syncProductCategoryFields(payload, req.body, { allowCreate: true });
+  await syncProductBrandFields(payload, req.body);
+
+  if (payload.categories === undefined) {
+    payload.categories = existingProduct.categories;
+    payload.primaryCategory = existingProduct.primaryCategory;
+    payload.categoryNames = existingProduct.categoryNames;
+    payload.categorySlugs = existingProduct.categorySlugs;
+  }
+
+  validateProductPayload(payload, { requireImages: hasImageUpdate });
 
   const product = await Product.findByIdAndUpdate(req.params.id, payload, {
     new: true,
@@ -828,9 +945,9 @@ export const updateProduct = asyncHandler(async (req, res) => {
   });
 
   clearProductCache();
-  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+  const [response] = await enrichProductsForResponse([product]);
 
-  res.json({ success: true, data: response });
+  res.json({ success: true, message: "Product updated successfully", data: response });
 });
 
 export const updateProductBestseller = asyncHandler(async (req, res) => {
@@ -851,9 +968,9 @@ export const updateProductBestseller = asyncHandler(async (req, res) => {
   const product = await persistBestsellerState(req.params.id, req.body);
 
   clearProductCache();
-  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+  const [response] = await enrichProductsForResponse([product]);
 
-  res.json({ success: true, data: response });
+  res.json({ success: true, message: "Bestseller updated successfully", data: response });
 });
 
 export const removeProductBestseller = asyncHandler(async (req, res) => {
@@ -866,9 +983,9 @@ export const removeProductBestseller = asyncHandler(async (req, res) => {
   });
 
   clearProductCache();
-  const [response] = await attachBrandDetails([normalizeProductResponse(product)]);
+  const [response] = await enrichProductsForResponse([product]);
 
-  res.json({ success: true, data: response });
+  res.json({ success: true, message: "Bestseller removed successfully", data: response });
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
@@ -887,7 +1004,7 @@ export const deleteProduct = asyncHandler(async (req, res) => {
   }
 
   clearProductCache();
-  res.json({ success: true, data: { id: req.params.id } });
+  res.json({ success: true, message: "Product deleted successfully", data: { id: req.params.id } });
 });
 
 export const getLowStockProducts = asyncHandler(async (req, res) => {
@@ -895,10 +1012,11 @@ export const getLowStockProducts = asyncHandler(async (req, res) => {
   const products = await Product.find({ stock: { $lt: threshold } })
     .sort({ stock: 1, name: 1 })
     .lean({ virtuals: true });
-  const payload = await attachBrandDetails(products.map(normalizeProductResponse));
+  const payload = await enrichProductsForResponse(products);
 
   res.json({
     success: true,
+    message: "Low stock products loaded successfully",
     data: {
       threshold,
       products: payload,

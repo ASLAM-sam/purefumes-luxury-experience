@@ -1,11 +1,15 @@
-import { memo, useEffect, useMemo, useState } from "react";
-import { Plus, Upload, X } from "lucide-react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { ImagePlus, Plus, Upload, X } from "lucide-react";
 import type { Brand } from "@/data/brands";
+import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
 import { Button } from "@/components/common/Button";
-import { brandsApi } from "@/services/api";
+import { brandsApi, categoriesApi } from "@/services/api";
 
 type FormSize = { size: string; price: string };
+type ProductFormSubmitOptions = {
+  onUploadProgress?: (progress: number) => void;
+};
 type FormState = Omit<
   Product,
   | "id"
@@ -13,6 +17,8 @@ type FormState = Omit<
   | "createdAt"
   | "updatedAt"
   | "price"
+  | "image"
+  | "images"
   | "sizes"
   | "stock"
   | "brandDetails"
@@ -23,18 +29,34 @@ type FormState = Omit<
   videoUrl: string;
 };
 
-const EMPTY_IMAGES = ["", "", "", "", ""];
+const MAX_IMAGES = 5;
+const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
 const MAX_VIDEO_SIZE_BYTES = 10 * 1024 * 1024;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
+const IMAGE_TYPES = new Set([
+  "",
+  "image/jpeg",
+  "image/jpg",
+  "image/pjpeg",
+  "image/png",
+  "image/webp",
+  "application/octet-stream",
+]);
 const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 
 const createEmptyForm = (): FormState => ({
   name: "",
   brand: "",
   brandId: "",
-  category: "Designer",
+  categories: [],
+  categoryIds: [],
+  categoryNames: [],
+  categorySlugs: [],
+  primaryCategory: "",
+  category: "",
+  categorySlug: "",
+  categoryDetails: null,
   price: "",
-  image: "",
-  images: EMPTY_IMAGES,
   videoUrl: "",
   isLatest: false,
   description: "",
@@ -53,8 +75,8 @@ const createEmptyForm = (): FormState => ({
   stock: "",
 });
 
-const toImageSlots = (images: string[]) =>
-  Array.from({ length: 5 }, (_, index) => images[index] || "");
+const getProductImages = (product?: Product) =>
+  product?.images?.length ? product.images.filter(Boolean) : product?.image ? [product.image] : [];
 
 const toFormState = (product?: Product): FormState => {
   if (!product) return createEmptyForm();
@@ -65,22 +87,34 @@ const toFormState = (product?: Product): FormState => {
     createdAt,
     updatedAt,
     price: _price,
+    image: _image,
+    images: _images,
     sizes: _sizes,
     stock,
     ...rest
   } = product;
   const price = Number(product.price ?? product.sizes?.[0]?.price ?? 0);
-  const images = toImageSlots(
-    product.images?.length ? product.images : product.image ? [product.image] : [],
-  );
 
   return {
     ...createEmptyForm(),
     ...rest,
     brandId: product.brandId || product.brandDetails?.id || "",
+    categories: product.categories || [],
+    categoryIds:
+      product.categoryIds?.length
+        ? product.categoryIds
+        : product.categories?.map((category) => category.id).filter(Boolean) || [],
+    categoryNames:
+      product.categoryNames?.length
+        ? product.categoryNames
+        : product.categories?.map((category) => category.name).filter(Boolean) || [],
+    categorySlugs:
+      product.categorySlugs?.length
+        ? product.categorySlugs
+        : product.categories?.map((category) => category.slug).filter(Boolean) || [],
+    primaryCategory: product.primaryCategory || product.categoryId || "",
+    category: product.category || product.categoryNames?.join(", ") || "",
     price: Number.isFinite(price) ? String(price) : "",
-    image: images[0] || "",
-    images,
     videoUrl: String(product.videoUrl || ""),
     sizes: product.sizes?.length
       ? product.sizes.map((size) => ({
@@ -90,13 +124,6 @@ const toFormState = (product?: Product): FormState => {
       : [{ size: "Standard", price: Number.isFinite(price) ? String(price) : "" }],
     stock: stock === undefined || stock === null ? "" : String(stock),
   };
-};
-
-const CATS = ["Middle Eastern", "Designer", "Niche"] as const;
-const CATEGORY_TO_BRAND_CATEGORY: Record<Product["category"], Brand["category"]> = {
-  "Middle Eastern": "middle-eastern",
-  Designer: "designer",
-  Niche: "niche",
 };
 
 const getBrandId = (brand: Brand) => brand.id || brand._id || "";
@@ -161,6 +188,8 @@ const appendJson = (data: FormData, key: string, value: unknown) => {
   data.append(key, JSON.stringify(value));
 };
 
+const fileKey = (file: File) => `${file.name}:${file.size}:${file.lastModified}`;
+
 export const ProductForm = memo(function ProductForm({
   initial,
   onSubmit,
@@ -168,21 +197,38 @@ export const ProductForm = memo(function ProductForm({
   resetOnSuccess = false,
 }: {
   initial?: Product;
-  onSubmit: (payload: FormData) => Promise<void>;
+  onSubmit: (payload: FormData, options?: ProductFormSubmitOptions) => Promise<void>;
   submitLabel?: string;
   resetOnSuccess?: boolean;
 }) {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState<FormState>(() => toFormState(initial));
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [brandsLoading, setBrandsLoading] = useState(true);
   const [brandsError, setBrandsError] = useState("");
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [categoriesError, setCategoriesError] = useState("");
+  const [existingImages, setExistingImages] = useState<string[]>(() => getProductImages(initial));
   const [imageFiles, setImageFiles] = useState<File[]>([]);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoPreview, setVideoPreview] = useState("");
   const [saving, setSaving] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  useEffect(() => {
+    setForm(toFormState(initial));
+    setExistingImages(getProductImages(initial));
+    setImageFiles([]);
+    setVideoFile(null);
+    setUploadProgress(0);
+    setError("");
+    setSuccess("");
+  }, [initial]);
 
   useEffect(() => {
     const previews = imageFiles.map((file) => URL.createObjectURL(file));
@@ -232,7 +278,30 @@ export const ProductForm = memo(function ProductForm({
       }
     };
 
-    loadBrands();
+    const loadCategories = async () => {
+      setCategoriesLoading(true);
+      setCategoriesError("");
+
+      try {
+        const nextCategories = await categoriesApi.listAdmin();
+
+        if (!isActive) return;
+
+        setCategories(nextCategories.filter((category) => !category.isDeleted));
+      } catch (ex) {
+        if (!isActive) return;
+
+        setCategories([]);
+        setCategoriesError(ex instanceof Error ? ex.message : "No categories available.");
+      } finally {
+        if (isActive) {
+          setCategoriesLoading(false);
+        }
+      }
+    };
+
+    void loadBrands();
+    void loadCategories();
 
     return () => {
       isActive = false;
@@ -260,27 +329,24 @@ export const ProductForm = memo(function ProductForm({
     set("stock", value);
   };
 
-  const updateImageUrl = (index: number, value: string) => {
-    setForm((current) => {
-      const images = toImageSlots(current.images);
-      images[index] = value;
-      return { ...current, images, image: images[0] || "" };
-    });
-  };
-
-  const imagePreviewUrls = filePreviews.length
-    ? filePreviews
-    : form.images.map((image) => image.trim()).filter(Boolean);
-  const availableBrands = useMemo(() => {
-    const selectedBrandId = String(form.brandId || "").trim();
-    const selectedCategory = CATEGORY_TO_BRAND_CATEGORY[form.category];
-
-    return brands.filter((brand) => {
-      const currentBrandId = getBrandId(brand);
-
-      return brand.category === selectedCategory || currentBrandId === selectedBrandId;
-    });
-  }, [brands, form.brandId, form.category]);
+  const availableBrands = useMemo(() => brands, [brands]);
+  const totalImageCount = existingImages.length + imageFiles.length;
+  const imagePreviewItems = [
+    ...existingImages.map((src, index) => ({
+      id: `existing-${src}`,
+      src,
+      name: `Image ${index + 1}`,
+      type: "existing" as const,
+      index,
+    })),
+    ...filePreviews.map((src, index) => ({
+      id: `file-${imageFiles[index] ? fileKey(imageFiles[index]) : src}`,
+      src,
+      name: imageFiles[index]?.name || `Image ${existingImages.length + index + 1}`,
+      type: "file" as const,
+      index,
+    })),
+  ];
 
   const addSize = () => set("sizes", [...form.sizes, { size: "", price: "" }]);
   const removeSize = (index: number) =>
@@ -300,6 +366,68 @@ export const ProductForm = memo(function ProductForm({
       sizes: nextSizes,
       price: index === 0 && key === "price" ? value : current.price,
     }));
+  };
+
+  const validateImageFile = (file: File) => {
+    if (!IMAGE_EXTENSIONS.test(file.name)) {
+      throw new Error("Only JPG, PNG, and WEBP images are allowed.");
+    }
+
+    if (!IMAGE_TYPES.has(file.type)) {
+      throw new Error("Only JPG, PNG, and WEBP images are allowed.");
+    }
+
+    if (file.size > MAX_IMAGE_SIZE_BYTES) {
+      throw new Error("Image size must be under 5MB.");
+    }
+  };
+
+  const addImageFiles = (files: File[]) => {
+    if (!files.length) return;
+
+    setError("");
+    setSuccess("");
+
+    files.forEach(validateImageFile);
+
+    const currentKeys = new Set(imageFiles.map(fileKey));
+    const uniqueFiles = files.filter((file) => !currentKeys.has(fileKey(file)));
+    const nextFiles = [...imageFiles, ...uniqueFiles];
+
+    if (existingImages.length + nextFiles.length > MAX_IMAGES) {
+      throw new Error("Products can have up to 5 images.");
+    }
+
+    setImageFiles(nextFiles);
+  };
+
+  const removeExistingImage = (index: number) => {
+    setError("");
+    setExistingImages((current) => current.filter((_, imageIndex) => imageIndex !== index));
+  };
+
+  const removeSelectedFile = (index: number) => {
+    setError("");
+    setImageFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+  };
+
+  const handleImageInput = (files: FileList | null) => {
+    try {
+      addImageFiles(Array.from(files || []));
+    } catch (ex) {
+      setError(ex instanceof Error ? ex.message : "Images could not be selected.");
+    } finally {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDragActive(false);
+    handleImageInput(event.dataTransfer.files);
   };
 
   const isValidVideoUrl = (value: string) =>
@@ -332,24 +460,26 @@ export const ProductForm = memo(function ProductForm({
     e.preventDefault();
     setError("");
     setSuccess("");
+    setUploadProgress(0);
     setSaving(true);
 
     try {
-      const images = form.images.map((image) => image.trim()).filter(Boolean);
-      const hasNewFiles = imageFiles.length > 0;
       const sizes = form.sizes
         .map((size) => ({ size: size.size.trim(), price: Number(size.price) }))
         .filter((size) => size.size);
       const price = Number(form.price);
       const stock = Number(form.stock);
       const selectedBrand = brands.find((brand) => getBrandId(brand) === form.brandId);
+      const selectedCategories = categories.filter((category) =>
+        form.categoryIds.includes(category.id),
+      );
 
-      if (hasNewFiles && (imageFiles.length < 1 || imageFiles.length > 5)) {
-        throw new Error("Select between 1 and 5 image files.");
+      if (totalImageCount < 1 || totalImageCount > MAX_IMAGES) {
+        throw new Error("Select between 1 and 5 product images.");
       }
 
-      if (!hasNewFiles && (images.length < 1 || images.length > 5)) {
-        throw new Error("Provide between 1 and 5 product image URLs.");
+      if (!initial && imageFiles.length === 0) {
+        throw new Error("Select at least one product image.");
       }
 
       if (form.videoUrl.trim() && !isValidVideoUrl(form.videoUrl)) {
@@ -377,6 +507,10 @@ export const ProductForm = memo(function ProductForm({
         throw new Error("Brands are still loading.");
       }
 
+      if (categoriesLoading) {
+        throw new Error("Categories are still loading.");
+      }
+
       if (!form.brandId) {
         throw new Error("Select a brand.");
       }
@@ -385,8 +519,8 @@ export const ProductForm = memo(function ProductForm({
         throw new Error(brandsError || "No brands available.");
       }
 
-      if (selectedBrand.category !== CATEGORY_TO_BRAND_CATEGORY[form.category]) {
-        throw new Error("Selected brand does not match the product category.");
+      if (!form.categoryIds.length || !selectedCategories.length) {
+        throw new Error(categoriesError || "Select a category.");
       }
 
       if (
@@ -404,7 +538,14 @@ export const ProductForm = memo(function ProductForm({
       const payload = new FormData();
       payload.append("name", form.name.trim());
       payload.append("brandId", form.brandId);
-      payload.append("category", form.category);
+      payload.append(
+        "categoryIds",
+        selectedCategories.map((category) => category.id).join(","),
+      );
+      payload.append(
+        "categories",
+        selectedCategories.map((category) => category.name).join(" | "),
+      );
       payload.append("price", String(price));
       payload.append("stock", String(stock));
       payload.append("description", form.description.trim());
@@ -417,25 +558,28 @@ export const ProductForm = memo(function ProductForm({
       appendJson(payload, "notes", [...form.topNotes, ...form.middleNotes, ...form.baseNotes]);
       appendJson(payload, "sizes", sizes);
 
-      if (hasNewFiles) {
-        imageFiles.forEach((file) => payload.append("images", file));
-      } else {
-        payload.append("image", images[0]);
-        appendJson(payload, "images", images);
+      if (initial) {
+        appendJson(payload, "existingImages", existingImages);
       }
+
+      imageFiles.forEach((file) => payload.append("images", file));
 
       if (videoFile) {
         payload.append("video", videoFile);
       }
 
-      await onSubmit(payload);
+      await onSubmit(payload, {
+        onUploadProgress: (progress) => setUploadProgress(progress),
+      });
 
       if (resetOnSuccess) {
         setForm(createEmptyForm());
+        setExistingImages([]);
         setImageFiles([]);
         setVideoFile(null);
       }
 
+      setUploadProgress(100);
       setSuccess("Product saved successfully.");
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : "Product could not be saved.");
@@ -495,32 +639,56 @@ export const ProductForm = memo(function ProductForm({
           </>
         </Field>
         <Field label="Category">
-          <select
-            value={form.category}
-            onChange={(e) => {
-              const category = e.target.value as Product["category"];
+          <div className="space-y-3 rounded-[1.3rem] border border-border bg-beige/20 p-3">
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => {
+                const selected = form.categoryIds.includes(category.id);
 
-              setForm((current) => {
-                const selectedBrand = brands.find(
-                  (brand) => getBrandId(brand) === current.brandId,
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      setForm((current) => {
+                        const nextIds = selected
+                          ? current.categoryIds.filter((id) => id !== category.id)
+                          : [...current.categoryIds, category.id];
+                        const nextCategories = categories.filter((item) => nextIds.includes(item.id));
+
+                        return {
+                          ...current,
+                          categories: nextCategories,
+                          categoryIds: nextIds,
+                          categoryNames: nextCategories.map((item) => item.name),
+                          categorySlugs: nextCategories.map((item) => item.slug),
+                          primaryCategory: nextCategories[0]?.id || "",
+                          category: nextCategories.map((item) => item.name).join(", "),
+                          categoryId: nextCategories[0]?.id || "",
+                          categorySlug: nextCategories[0]?.slug || "",
+                          categoryDetails: nextCategories[0] || null,
+                        };
+                      });
+                    }}
+                    className={`rounded-full border px-3 py-2 text-sm transition ${
+                      selected
+                        ? "border-navy bg-navy text-beige"
+                        : "border-border bg-card text-navy/70 hover:border-navy/35 hover:text-navy"
+                    }`}
+                  >
+                    {category.name}
+                  </button>
                 );
-                const keepBrand =
-                  selectedBrand?.category === CATEGORY_TO_BRAND_CATEGORY[category];
-
-                return {
-                  ...current,
-                  category,
-                  brandId: keepBrand ? current.brandId : "",
-                  brand: keepBrand ? current.brand : "",
-                };
-              });
-            }}
-            className={inputCls}
-          >
-            {CATS.map((category) => (
-              <option key={category}>{category}</option>
-            ))}
-          </select>
+              })}
+            </div>
+            <p className="text-xs text-navy/55">
+              {form.categoryIds.length
+                ? `${form.categoryIds.length} categories selected`
+                : categoriesLoading
+                  ? "Loading categories..."
+                  : "Choose one or more categories"}
+            </p>
+          </div>
+          {categoriesError ? <p className="mt-2 text-xs text-red-600">{categoriesError}</p> : null}
         </Field>
         <Field label="Price">
           <input
@@ -567,55 +735,101 @@ export const ProductForm = memo(function ProductForm({
         <legend className="px-2 text-xs uppercase tracking-[0.25em] text-navy/60">
           Product Images
         </legend>
-        <div className="grid gap-5 lg:grid-cols-[1fr_16rem]">
-          <div className="space-y-3">
-            {form.images.map((image, index) => (
-              <input
-                key={index}
-                type="url"
-                value={image}
-                placeholder={`Image URL ${index + 1}`}
-                onChange={(e) => updateImageUrl(index, e.target.value)}
-                className={inputCls}
-              />
-            ))}
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-navy/25 bg-beige/30 px-4 py-4 text-sm text-navy/70 transition hover:border-navy/50">
-              <Upload className="h-4 w-4" />
-              <span>
-                {imageFiles.length ? `${imageFiles.length} files selected` : "Upload images"}
-              </span>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={(e) => setImageFiles(Array.from(e.target.files || []))}
-                  className="sr-only"
-                />
-            </label>
+        <div className="space-y-4">
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                fileInputRef.current?.click();
+              }
+            }}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragActive(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setDragActive(false);
+            }}
+            onDrop={handleDrop}
+            className={`flex min-h-32 cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-4 py-6 text-center transition ${
+              dragActive
+                ? "border-navy bg-beige/70"
+                : "border-navy/25 bg-beige/30 hover:border-navy/50"
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".jpg,.jpeg,.png,.webp"
+              onChange={(event) => handleImageInput(event.target.files)}
+              className="sr-only"
+            />
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-card text-navy shadow-soft">
+              <ImagePlus className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-navy">
+                {totalImageCount ? `${totalImageCount}/${MAX_IMAGES} images selected` : "Upload product images"}
+              </p>
+              <p className="mt-1 text-xs text-navy/55">JPG, PNG, or WEBP under 5MB each</p>
+            </div>
           </div>
-          <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
-            {Array.from({ length: 5 }, (_, index) => {
-              const preview = imagePreviewUrls[index];
 
-              return preview ? (
-                <img
-                  key={index}
-                  src={preview}
-                  alt={`Product preview ${index + 1}`}
-                  loading="lazy"
-                  decoding="async"
-                  className="aspect-square w-full rounded-lg border border-border bg-beige object-contain object-center p-2"
-                />
-              ) : (
+          {imagePreviewItems.length ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {imagePreviewItems.map((item) => (
                 <div
-                  key={index}
-                  className="flex aspect-square w-full items-center justify-center rounded-lg border border-border bg-beige/70 text-[0.6rem] uppercase tracking-[0.18em] text-navy/40"
+                  key={item.id}
+                  className="group relative overflow-hidden rounded-lg border border-border bg-beige/70"
                 >
-                  Image {index + 1}
+                  <img
+                    src={item.src}
+                    alt={item.name}
+                    loading="lazy"
+                    decoding="async"
+                    className="aspect-square w-full object-contain object-center p-2"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      item.type === "existing"
+                        ? removeExistingImage(item.index)
+                        : removeSelectedFile(item.index)
+                    }
+                    className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full border border-border bg-card text-navy shadow-sm transition hover:border-red-200 hover:text-red-600"
+                    aria-label={`Remove ${item.name}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex min-h-24 items-center justify-center rounded-lg border border-border bg-beige/40 text-xs uppercase tracking-[0.2em] text-navy/40">
+              No images selected
+            </div>
+          )}
+
+          {saving && uploadProgress > 0 ? (
+            <div className="space-y-2">
+              <div className="h-2 overflow-hidden rounded-full bg-beige">
+                <div
+                  className="h-full rounded-full bg-navy transition-all"
+                  style={{ width: `${Math.min(Math.max(uploadProgress, 0), 100)}%` }}
+                />
+              </div>
+              <p className="text-right text-xs text-navy/55">{Math.round(uploadProgress)}%</p>
+            </div>
+          ) : null}
         </div>
       </fieldset>
 
@@ -773,10 +987,16 @@ export const ProductForm = memo(function ProductForm({
       <div className="flex justify-end border-t border-border pt-4">
         <Button
           type="submit"
-          disabled={saving || brandsLoading || !form.brandId}
+          disabled={
+            saving ||
+            brandsLoading ||
+            categoriesLoading ||
+            !form.brandId ||
+            form.categoryIds.length === 0
+          }
           className="!bg-navy !text-beige"
         >
-          {saving ? (videoFile ? "Uploading video..." : "Saving...") : submitLabel}
+          {saving ? `Uploading ${Math.round(uploadProgress)}%` : submitLabel}
         </Button>
       </div>
     </form>

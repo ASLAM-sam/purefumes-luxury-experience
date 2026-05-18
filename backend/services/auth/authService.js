@@ -207,7 +207,16 @@ const updateLoginFailure = async (user, req) => {
   });
 };
 
-const ensureCanLogin = (user) => {
+const clearExpiredAccountLock = async (user) => {
+  if (!user || !user.accountLockedUntil) return;
+  if (user.accountLockedUntil <= new Date()) {
+    user.accountLockedUntil = null;
+    user.failedLoginAttempts = 0;
+    await user.save();
+  }
+};
+
+const ensureCanLogin = async (user) => {
   if (!user) {
     throw new ApiError(401, "Invalid credentials");
   }
@@ -215,6 +224,8 @@ const ensureCanLogin = (user) => {
   if (user.isBanned) {
     throw new ApiError(403, "Your account has been disabled. Please contact support.");
   }
+
+  await clearExpiredAccountLock(user);
 
   if (user.accountLockedUntil && user.accountLockedUntil > new Date()) {
     throw new ApiError(423, "Too many failed attempts. Try again later.");
@@ -278,10 +289,18 @@ export const signup = async ({ payload, req, res }) => {
 };
 
 export const login = async ({ identifier, password, req, res }) => {
-  const user = await findUserByIdentifier(identifier, "+passwordHash +failedLoginAttempts +accountLockedUntil +refreshTokens");
+  const normalizedIdentifier = String(identifier || "").trim();
+  if (!normalizedIdentifier) {
+    throw new ApiError(401, "Invalid credentials");
+  }
+
+  const user = await findUserByIdentifier(
+    normalizedIdentifier,
+    "+passwordHash +failedLoginAttempts +accountLockedUntil +refreshTokens",
+  );
 
   try {
-    ensureCanLogin(user);
+    await ensureCanLogin(user);
 
     if (!user.passwordHash || !(await bcrypt.compare(String(password || ""), user.passwordHash))) {
       await updateLoginFailure(user, req);
@@ -304,8 +323,8 @@ export const loginWithGoogle = async ({ profile, req, res }) => {
   }
 
   let user =
-    (await User.findOne({ googleId: profile.googleId }).select("+refreshTokens")) ||
-    (await User.findOne({ email: profile.email }).select("+refreshTokens"));
+    (await User.findOne({ googleId: profile.googleId }).select("+refreshTokens +accountLockedUntil")) ||
+    (await User.findOne({ email: profile.email }).select("+refreshTokens +accountLockedUntil"));
 
   if (!user) {
     user = await User.create({
@@ -322,7 +341,7 @@ export const loginWithGoogle = async ({ profile, req, res }) => {
     user.emailVerified = true;
   }
 
-  ensureCanLogin(user);
+  await ensureCanLogin(user);
   await updateLoginSuccess({ user, req });
   const tokens = await issueTokens({ user, req, res });
   logger.info("Google OAuth login succeeded", { userId: user.id, email: user.email });
@@ -352,8 +371,8 @@ export const refreshSession = async ({ req, res }) => {
     throw new ApiError(401, "Invalid refresh token");
   }
 
-  const user = await User.findById(decoded.sub).select("+refreshTokens");
-  ensureCanLogin(user);
+  const user = await User.findById(decoded.sub).select("+refreshTokens +accountLockedUntil");
+  await ensureCanLogin(user);
 
   const tokenHash = hashToken(token);
   const storedToken = user.refreshTokens.find(

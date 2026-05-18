@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 import { AppProvider } from "@/context/AppContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
+import brandIconUrl from "@/assets/purefumes-hyderabad-logo-circle.png?url";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -29,17 +30,33 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Purefumes Hyderabad — Luxury Fragrances, Decants & Niche Houses" },
+      { title: "Purefumes Hyderabad - Authentic Perfumes Online in India" },
       {
         name: "description",
         content:
-          "Discover authentic luxury perfumes in Hyderabad — Middle Eastern oud, designer classics, and rare niche fragrances.",
+          "Shop authentic perfumes, deodorants, and personal care products from Purefumes Hyderabad with secure checkout, support, and fast delivery across India.",
       },
-      { property: "og:title", content: "Purefumes Hyderabad" },
-      { property: "og:description", content: "Discover Luxury Fragrances" },
+      { name: "theme-color", content: "#fffaf4" },
+      { property: "og:site_name", content: "Purefumes Hyderabad" },
+      { property: "og:title", content: "Purefumes Hyderabad - Authentic Perfumes Online" },
+      {
+        property: "og:description",
+        content:
+          "Authentic perfumes, secure checkout, customer support, and fast delivery across India from Purefumes Hyderabad.",
+      },
       { property: "og:type", content: "website" },
+      { property: "og:image", content: brandIconUrl },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Purefumes Hyderabad" },
+      {
+        name: "twitter:description",
+        content: "Shop authentic fragrances online with Purefumes Hyderabad.",
+      },
+      { name: "twitter:image", content: brandIconUrl },
     ],
     links: [
+      { rel: "icon", href: brandIconUrl, type: "image/png" },
+      { rel: "apple-touch-icon", href: brandIconUrl },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: appCss },

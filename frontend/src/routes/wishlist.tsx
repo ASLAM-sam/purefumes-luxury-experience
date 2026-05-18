@@ -31,13 +31,13 @@ function WishlistPage() {
 
   return (
     <SiteShell>
-      <section className="py-12 md:py-16">
+      <section className="py-[var(--section-space)]">
         <Container>
           <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-[0.65rem] uppercase tracking-[0.4em] text-gold">Wishlist</p>
-              <h1 className="mt-2 font-display text-5xl text-navy">Saved Fragrances</h1>
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              <p className="fluid-eyebrow uppercase text-gold">Wishlist</p>
+              <h1 className="fluid-section-title mt-2 font-display text-navy">Saved Fragrances</h1>
+              <p className="fluid-body mt-3 text-muted-foreground">
                 {wishlistCount
                   ? `${wishlistCount} saved perfume${wishlistCount === 1 ? "" : "s"} ready for your next browse.`
                   : "Your saved perfumes will appear here."}
@@ -79,7 +79,7 @@ function WishlistPage() {
               </Link>
             </div>
           ) : (
-            <div className="product-grid mt-12 grid grid-cols-2 gap-x-3 gap-y-10 md:grid-cols-2 md:gap-x-8 md:gap-y-14 lg:grid-cols-3">
+            <div className="product-grid mt-12">
               {wishlist.map((product) => (
                 <div key={product.id} className="min-w-0">
                   <ProductCard product={product} />

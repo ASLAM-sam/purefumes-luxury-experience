@@ -35,21 +35,21 @@ export function DateRangeFilter({
 }: DateRangeFilterProps) {
   return (
     <section
-      className={`rounded-[1.5rem] border border-white/70 bg-white/75 p-4 shadow-[0_16px_36px_rgba(7,31,63,0.07)] backdrop-blur ${className}`}
+      className={`rounded-[1.35rem] border border-white/70 bg-white/78 p-3 shadow-[0_14px_30px_rgba(7,31,63,0.07)] backdrop-blur sm:p-4 ${className}`}
     >
       <div className="flex items-center gap-2 text-[0.65rem] uppercase tracking-[0.24em] text-navy/45">
         <CalendarDays className="h-4 w-4 text-gold" />
         Date range
       </div>
 
-      <div className="mt-3 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 [scrollbar-width:thin]">
+      <div className="mt-3 flex flex-wrap gap-2">
         {DATE_RANGE_OPTIONS.map((option) => (
           <button
             key={option.key}
             type="button"
             disabled={disabled}
             onClick={() => onRangeChange(option.key)}
-            className={`h-10 shrink-0 rounded-full px-4 text-xs uppercase tracking-[0.2em] transition ${
+            className={`min-h-10 rounded-full px-3.5 text-[0.68rem] uppercase tracking-[0.18em] transition sm:px-4 ${
               range === option.key
                 ? "bg-navy text-beige shadow-[0_12px_24px_rgba(7,31,63,0.18)]"
                 : "bg-navy/6 text-navy/62 hover:bg-navy/10"
@@ -94,7 +94,7 @@ export function DateRangeFilter({
 
       <div className="mt-4 flex flex-col gap-3 text-sm text-navy/58 sm:flex-row sm:items-center sm:justify-between">
         <p>{error || getDateRangeLabel(range, from, to)}</p>
-        {action}
+        <div className="w-full sm:w-auto [&>*]:w-full sm:[&>*]:w-auto">{action}</div>
       </div>
     </section>
   );

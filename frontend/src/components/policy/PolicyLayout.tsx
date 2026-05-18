@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { ArrowRight, Home, Mail, MapPin, Phone } from "lucide-react";
+import { ArrowRight, Clock, Home, Mail, MapPin, Phone } from "lucide-react";
 import { Container } from "@/components/common/Container";
 import { SiteShell } from "@/components/layout/SiteShell";
 import type { PolicyPageContent } from "@/data/policies";
 
 const policyLinks = [
+  { label: "Shipping Policy", to: "/shipping-policy" },
   { label: "Privacy Policy", to: "/privacy-policy" },
   { label: "Terms & Conditions", to: "/terms-and-conditions" },
   { label: "Refund & Cancellation Policy", to: "/refund-policy" },
@@ -20,13 +21,20 @@ const supportLinks = [
   },
   {
     label: "Phone",
-    value: "+91 8686003446",
+    value: "+91-8686 003 446",
     href: "tel:+918686003446",
     Icon: Phone,
   },
   {
+    label: "Support Time",
+    value: "Monday to Saturday | 11:00 AM – 6:00 PM",
+    href: undefined,
+    Icon: Clock,
+  },
+  {
     label: "Location",
     value: "Hyderabad, Telangana, India",
+    href: undefined,
     Icon: MapPin,
   },
 ] as const;
@@ -174,7 +182,7 @@ export function PolicyLayout({
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 {supportLinks.map(({ label, value, href, Icon }) => {
                   const content = (
                     <>
