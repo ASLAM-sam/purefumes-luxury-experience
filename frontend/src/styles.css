@@ -592,7 +592,7 @@
   .home-hero-slider__frame {
     aspect-ratio: 16 / 9;
     min-height: 12.5rem;
-    max-height: 34rem;
+    max-height: 50rem;
   }
   .home-hero-slider__track,
   .home-hero-slider__track > article {

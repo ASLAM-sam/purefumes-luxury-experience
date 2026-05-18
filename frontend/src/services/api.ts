@@ -10,6 +10,7 @@ import { apiTrafficProxy } from "@/lib/performance/api-proxy";
 import { perfInstrumentation } from "@/lib/performance/instrumentation";
 import { frontendMediator } from "@/lib/performance/mediator";
 import runtimeConfig from "@/lib/runtime-config";
+import { applyProductImageOverride } from "@/lib/static-image-overrides";
 
 const BASE = runtimeConfig.apiUrl.replace(/\/$/, "");
 const CATALOG_CACHE_TTL_MS = 30 * 1000;
@@ -1015,7 +1016,7 @@ const normalizeProduct = (product: ProductPayload): Product => {
     product.category || categoryDetails?.name || categoryNames[0] || "",
   ).trim();
 
-  return {
+  return applyProductImageOverride({
     _id: product._id,
     id: String(product.id || product._id || ""),
     name: String(product.name || ""),
@@ -1061,7 +1062,7 @@ const normalizeProduct = (product: ProductPayload): Product => {
     displayOrder: Number(product.displayOrder ?? product.bestsellerOrder ?? 0),
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
-  };
+  });
 };
 
 const normalizeOrder = (order: Order): Order => ({
