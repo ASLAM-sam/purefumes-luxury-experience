@@ -15,13 +15,13 @@ The backend now uses a layered Express architecture:
 
 Set every value in `backend/.env.production` or `backend/.env.example` on Render, Railway, Hostinger Node.js, cPanel Node.js hosting, PM2, AWS EC2, DigitalOcean, or your container runtime. Use long random values for `JWT_SECRET`, `REFRESH_SECRET`, and `COOKIE_SECRET`.
 
-For cross-domain deployments such as Vercel frontend plus Render backend:
+For cross-domain deployments such as Cloudflare Workers frontend plus Render backend:
 
 - Use HTTPS on both origins.
-- Set `FRONTEND_URL=https://your-store.vercel.app`.
-- Set `BACKEND_URL=https://your-api.onrender.com`.
-- Set `CORS_ORIGIN=https://your-store.vercel.app`.
-- Set `GOOGLE_CALLBACK_URL=https://your-api.onrender.com/auth/google/callback`.
+- Set `FRONTEND_URL=https://purefumeshyderabad.in`.
+- Set `BACKEND_URL=https://hydpurefumes.onrender.com`.
+- Set `CORS_ORIGIN=https://purefumeshyderabad.in,https://www.purefumeshyderabad.in,https://tanstack-start-app.hydpurefumes.workers.dev`.
+- Set `GOOGLE_CALLBACK_URL=https://hydpurefumes.onrender.com/auth/google/callback`.
 - Set `COOKIE_SAME_SITE=none`.
 - Keep `NODE_ENV=production` so cookies are marked `Secure`.
 - Set `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` for the admin bootstrap user. `ADMIN_USER` and `ADMIN_PASS` are supported only as temporary migration keys.
@@ -29,8 +29,8 @@ For cross-domain deployments such as Vercel frontend plus Render backend:
 Frontend production env:
 
 ```env
-VITE_API_URL=https://your-api.onrender.com/api
-VITE_FRONTEND_URL=https://your-store.vercel.app
+VITE_API_URL=https://hydpurefumes.onrender.com/api
+VITE_FRONTEND_URL=https://purefumeshyderabad.in
 ```
 
 Frontend hosting files included in the repo:

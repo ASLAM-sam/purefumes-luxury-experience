@@ -8,8 +8,8 @@ const DEFAULT_JWT_EXPIRE = "15m";
 const DEFAULT_REFRESH_EXPIRE = "30d";
 const DEFAULT_SMTP_PORT = 587;
 const DEFAULT_DEV_FRONTEND_URL = "http://localhost:8080";
-const DEFAULT_PRODUCTION_FRONTEND_URL = "https://purefumeshyderabad.com";
-const DEFAULT_PRODUCTION_BACKEND_URL = "https://api.purefumeshyderabad.com";
+const DEFAULT_PRODUCTION_FRONTEND_URL = "https://purefumeshyderabad.in";
+const DEFAULT_PRODUCTION_BACKEND_URL = "https://hydpurefumes.onrender.com";
 const MIN_SECRET_LENGTH = 32;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -81,7 +81,8 @@ const localDevelopmentOrigins = [
 ];
 const productionOrigins = [
   DEFAULT_PRODUCTION_FRONTEND_URL,
-  "https://www.purefumeshyderabad.com",
+  "https://www.purefumeshyderabad.in",
+  "https://tanstack-start-app.hydpurefumes.workers.dev",
 ];
 const port = Number(process.env.PORT || DEFAULT_PORT) || DEFAULT_PORT;
 const firstCorsOrigin = configuredCorsOrigins[0] || "";

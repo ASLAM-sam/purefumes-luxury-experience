@@ -9,8 +9,9 @@ import { createRandomToken, timingSafeEqual } from "../utils/crypto.js";
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const csrfHeaderName = "X-CSRF-Token";
 const productionOrigins = [
-  "https://purefumeshyderabad.com",
-  "https://www.purefumeshyderabad.com",
+  "https://purefumeshyderabad.in",
+  "https://www.purefumeshyderabad.in",
+  "https://tanstack-start-app.hydpurefumes.workers.dev",
 ];
 
 const getSameSiteValue = () => {

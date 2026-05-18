@@ -57,11 +57,12 @@ GOOGLE_CALLBACK_URL=http://localhost:5000/auth/google/callback
 Production defaults:
 
 ```env
-VITE_API_URL=https://api.yourdomain.com/api
-VITE_FRONTEND_URL=https://yourdomain.com
-FRONTEND_URL=https://yourdomain.com
-BACKEND_URL=https://api.yourdomain.com
-GOOGLE_CALLBACK_URL=https://api.yourdomain.com/auth/google/callback
+VITE_API_URL=https://hydpurefumes.onrender.com/api
+VITE_FRONTEND_URL=https://purefumeshyderabad.in
+FRONTEND_URL=https://purefumeshyderabad.in
+BACKEND_URL=https://hydpurefumes.onrender.com
+CORS_ORIGIN=https://purefumeshyderabad.in,https://www.purefumeshyderabad.in,https://tanstack-start-app.hydpurefumes.workers.dev
+GOOGLE_CALLBACK_URL=https://hydpurefumes.onrender.com/auth/google/callback
 ```
 
 The backend auto-loads `.env`, `.env.development`, and `.env.production` based on `NODE_ENV`. The frontend reads the matching Vite env file automatically, and the API/auth URLs adapt from those values without manual code changes.
