@@ -2,10 +2,9 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
-import { v2 as cloudinary } from "cloudinary";
 import multer from "multer";
 import sharp from "sharp";
-import env from "../config/env.js";
+import cloudinary, { isCloudinaryConfigured } from "../config/cloudinary.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -37,8 +36,6 @@ const VIDEO_SIZE_MESSAGE = "Video size must be under 10MB";
 ].forEach((directory) => {
   fs.mkdirSync(directory, { recursive: true });
 });
-
-cloudinary.config({ secure: true });
 
 const allowedImageMimeTypes = new Set([
   "image/jpeg",
@@ -481,14 +478,14 @@ export const storeUploadedImage = async (
     localSubdirectory = "products",
   } = {},
 ) => {
-  if (env.CLOUDINARY_URL) {
+  if (isCloudinaryConfigured) {
     const result = await cloudinary.uploader.upload(file.path, {
       folder: cloudinaryFolder,
       resource_type: "image",
       format: "webp",
     });
     await deleteFile(file.path);
-    return result.secure_url;
+    return result.secure_url || result.url || "";
   }
 
   return `/uploads/${localSubdirectory}/${file.filename}`;
@@ -501,7 +498,7 @@ export const storeUploadedVideo = async (
     localSubdirectory = "product-videos",
   } = {},
 ) => {
-  if (env.CLOUDINARY_URL) {
+  if (isCloudinaryConfigured) {
     const result = await cloudinary.uploader.upload(file.path, {
       folder: cloudinaryFolder,
       resource_type: "video",

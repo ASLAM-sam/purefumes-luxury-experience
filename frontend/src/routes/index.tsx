@@ -9,6 +9,7 @@ import { DeferredSection } from "@/components/common/DeferredSection";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
 import { adaptiveComponentFactory } from "@/lib/performance/component-factory";
 import { useAdaptiveLoadingStrategy } from "@/lib/performance/loading-strategy";
+import { cloudinaryStaticImages } from "@/lib/cloudinary-static-images";
 
 const LatestProducts = lazy(() =>
   import("@/components/sections/LatestProducts").then((module) => ({
@@ -67,6 +68,28 @@ function Index() {
   const testimonialFallback = adaptiveComponentFactory.createDeferredFallback({
     minHeightClass: "min-h-[20rem]",
   });
+
+  useEffect(() => {
+    const preconnect = document.createElement("link");
+    preconnect.rel = "preconnect";
+    preconnect.href = "https://res.cloudinary.com";
+    document.head.append(preconnect);
+
+    const productPreloads = Object.values(cloudinaryStaticImages.products).map((src) => {
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = src;
+      link.setAttribute("fetchpriority", "high");
+      document.head.append(link);
+      return link;
+    });
+
+    return () => {
+      preconnect.remove();
+      productPreloads.forEach((link) => link.remove());
+    };
+  }, []);
 
   useEffect(() => {
     const scrollToHashTarget = () => {

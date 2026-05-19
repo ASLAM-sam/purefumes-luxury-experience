@@ -528,11 +528,30 @@ const buildProductPayload = (body) => {
   return payload;
 };
 
+const getProductUploadFolder = (payload = {}) => {
+  const primaryCategorySlug = Array.isArray(payload.categorySlugs)
+    ? payload.categorySlugs[0]
+    : "";
+  const primaryCategoryName = Array.isArray(payload.categoryNames)
+    ? payload.categoryNames[0]
+    : "";
+  const categorySlug =
+    createCategorySlug(primaryCategorySlug || primaryCategoryName || payload.category) ||
+    "uncategorized";
+
+  return `${env.CLOUDINARY_PRODUCT_FOLDER}/${categorySlug}`;
+};
+
 const addUploadedImages = async (payload, files = []) => {
   if (!files.length) return payload;
 
   const uploadedImages = await Promise.all(
-    files.map((file) => storeUploadedImage(file)),
+    files.map((file) =>
+      storeUploadedImage(file, {
+        cloudinaryFolder: getProductUploadFolder(payload),
+        localSubdirectory: "products",
+      }),
+    ),
   );
   payload.images = [...new Set([...(payload.images || []), ...uploadedImages])];
   payload.image = payload.image || payload.images[0] || "";
@@ -852,10 +871,10 @@ export const getLatestProducts = asyncHandler(async (_req, res) => {
 
 export const createProduct = asyncHandler(async (req, res) => {
   const payload = buildProductPayload(req.body);
-  await addUploadedImages(payload, req.productImageFiles || req.files);
-  await addUploadedVideo(payload, req.productVideoFile);
   await syncProductCategoryFields(payload, req.body, { allowCreate: true });
   await syncProductBrandFields(payload, req.body);
+  await addUploadedImages(payload, req.productImageFiles || req.files);
+  await addUploadedVideo(payload, req.productVideoFile);
   validateProductPayload(payload, {
     requireImages: true,
     requireCategories: true,
@@ -925,8 +944,6 @@ export const updateProduct = asyncHandler(async (req, res) => {
     payload.image = payload.images[0] || "";
   }
 
-  await addUploadedImages(payload, uploadedImageFiles);
-  await addUploadedVideo(payload, req.productVideoFile);
   await syncProductCategoryFields(payload, req.body, { allowCreate: true });
   await syncProductBrandFields(payload, req.body);
 
@@ -936,6 +953,9 @@ export const updateProduct = asyncHandler(async (req, res) => {
     payload.categoryNames = existingProduct.categoryNames;
     payload.categorySlugs = existingProduct.categorySlugs;
   }
+
+  await addUploadedImages(payload, uploadedImageFiles);
+  await addUploadedVideo(payload, req.productVideoFile);
 
   validateProductPayload(payload, { requireImages: hasImageUpdate });
 

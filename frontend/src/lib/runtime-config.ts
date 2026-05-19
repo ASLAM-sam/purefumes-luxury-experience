@@ -1,5 +1,7 @@
 const trimTrailingSlash = (value: string) => value.replace(/\/$/, "");
 
+const DEFAULT_PRODUCTION_API_URL = "https://hydpurefumes.onrender.com/api";
+
 const browserOrigin = typeof window !== "undefined" ? window.location.origin : "";
 
 const resolveUrl = (value: string, base = "") => {
@@ -32,6 +34,7 @@ const resolveOrigin = (value: string, base = "") => {
 
 const configuredFrontendUrl = resolveUrl(String(import.meta.env.VITE_FRONTEND_URL || ""), browserOrigin);
 const frontendUrl = configuredFrontendUrl || browserOrigin;
+const isLocalApiUrl = (value: string) => /localhost|127\.0\.0\.1/i.test(value);
 const normalizeApiUrl = (value: string) => {
   const resolvedValue = resolveUrl(value, frontendUrl || browserOrigin);
   if (!resolvedValue) return "";
@@ -40,9 +43,15 @@ const normalizeApiUrl = (value: string) => {
 };
 
 const configuredApiUrl = String(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "").trim();
+const productionSafeConfiguredApiUrl =
+  import.meta.env.PROD && isLocalApiUrl(configuredApiUrl) ? "" : configuredApiUrl;
 const apiUrl =
-  normalizeApiUrl(configuredApiUrl) ||
-  (frontendUrl ? resolveUrl("/api", frontendUrl) : "");
+  normalizeApiUrl(productionSafeConfiguredApiUrl) ||
+  (import.meta.env.PROD
+    ? DEFAULT_PRODUCTION_API_URL
+    : frontendUrl
+      ? resolveUrl("/api", frontendUrl)
+      : "");
 const apiOrigin = resolveOrigin(apiUrl, frontendUrl || browserOrigin) || frontendUrl;
 const authUrl = apiUrl
   ? `${apiUrl.replace(/\/$/, "")}/auth`
@@ -55,7 +64,7 @@ if (import.meta.env.PROD) {
     throw new Error("VITE_API_URL must use HTTPS in production");
   }
 
-  if (/localhost|127\.0\.0\.1/i.test(apiUrl)) {
+  if (isLocalApiUrl(apiUrl)) {
     throw new Error("VITE_API_URL cannot point to localhost in production");
   }
 }

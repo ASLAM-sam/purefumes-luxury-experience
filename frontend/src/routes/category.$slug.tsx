@@ -182,8 +182,13 @@ function CategoryPage() {
           {!isLoading && !error && products.length > 0 ? (
             <>
               <div className="product-grid mt-16">
-                {products.map((product) => (
-                  <ProductCard key={product.id} product={product} />
+                {products.map((product, index) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    imageLoading={index < 3 ? "eager" : "lazy"}
+                    imageFetchPriority={index < 3 ? "high" : "auto"}
+                  />
                 ))}
               </div>
 

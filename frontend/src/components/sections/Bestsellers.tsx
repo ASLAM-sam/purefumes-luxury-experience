@@ -5,6 +5,7 @@ import { ProductCard } from "@/components/product/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Product } from "@/data/products";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
+import { storefrontFallbackProducts } from "@/lib/static-image-overrides";
 import { BESTSELLERS_CHANGED_EVENT, DATA_EVENT_STORAGE_KEY, productsApi } from "@/services/api";
 
 type LoadOptions = {
@@ -31,11 +32,11 @@ export const Bestsellers = memo(function Bestsellers() {
         }
 
         const nextProducts = await productsApi.listBestsellers({ forceFresh });
-        setProducts(nextProducts);
+        setProducts(nextProducts.length ? nextProducts : storefrontFallbackProducts);
         setError("");
       } catch (nextError) {
         if (!silent) {
-          setProducts([]);
+          setProducts(storefrontFallbackProducts);
           setError(
             nextError instanceof Error
               ? nextError.message
@@ -125,8 +126,15 @@ export const Bestsellers = memo(function Bestsellers() {
           </div>
         ) : showcaseProducts.length > 0 ? (
           <div className="product-grid mt-12">
-            {showcaseProducts.map((product) => (
-              <ProductCard key={product.id} product={product} showSize variant="bestseller" />
+            {showcaseProducts.map((product, index) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                showSize
+                variant="bestseller"
+                imageLoading={index < 3 ? "eager" : "lazy"}
+                imageFetchPriority={index < 3 ? "high" : "auto"}
+              />
             ))}
           </div>
         ) : (

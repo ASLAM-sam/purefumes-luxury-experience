@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import mongoose from "mongoose";
 import logger from "../../config/logger.js";
 import Order, { ORDER_STATUSES } from "../../models/Order.js";
@@ -11,6 +10,10 @@ import { applyCouponToSubtotal } from "../couponService.js";
 import { buildPreparedOrderItems, normalizeOrderItems } from "../pricingService.js";
 import { clearCart } from "../cart/cartService.js";
 import { getEffectivePaymentMode } from "../paymentModeService.js";
+import {
+  verifyRazorpayOrderAmount,
+  verifyRazorpaySignature,
+} from "../razorpayService.js";
 import {
   countOrdersByUserId,
   countOrdersByUserIdentity,
@@ -84,25 +87,31 @@ const normalizeShippingAddress = ({ body, user }) => {
   return { fullName, mobile, line1, line2, city, state, postalCode, country };
 };
 
-const verifyRazorpayPayment = (
-  { paymentOrderId, paymentId, paymentSignature },
+const verifyRazorpayPayment = async (
+  { paymentOrderId, paymentId, paymentSignature, expectedAmount },
   { paymentMode = "live" } = {},
 ) => {
   if (isTestPaymentMode(paymentMode)) return true;
-  if (!env.RAZORPAY_KEY_SECRET || !paymentSignature) return true;
 
-  const expectedSignature = crypto
-    .createHmac("sha256", env.RAZORPAY_KEY_SECRET)
-    .update(`${paymentOrderId}|${paymentId}`)
-    .digest("hex");
-  const receivedSignature = String(paymentSignature);
+  try {
+    const hasValidSignature = verifyRazorpaySignature({
+      orderId: paymentOrderId,
+      paymentId,
+      signature: paymentSignature,
+    });
 
-  if (expectedSignature.length !== receivedSignature.length) return false;
+    if (!hasValidSignature) return false;
 
-  return crypto.timingSafeEqual(
-    Buffer.from(expectedSignature),
-    Buffer.from(receivedSignature),
-  );
+    return await verifyRazorpayOrderAmount({
+      orderId: paymentOrderId,
+      expectedAmount,
+    });
+  } catch (error) {
+    logger.warn("Razorpay payment verification failed before order save", {
+      message: error.message,
+    });
+    return false;
+  }
 };
 
 const resolvePaymentStatus = (body, { paymentMode = "live" } = {}) => {
@@ -176,18 +185,6 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
     throw new ApiError(400, "Order items are required");
   }
 
-  if (
-    orderInput.paymentGateway === "Razorpay" &&
-    orderInput.paymentSignature &&
-    !verifyRazorpayPayment({
-      paymentOrderId: orderInput.paymentOrderId,
-      paymentId: orderInput.paymentId,
-      paymentSignature: orderInput.paymentSignature,
-    }, { paymentMode })
-  ) {
-    throw new ApiError(400, "Payment verification failed");
-  }
-
   const shippingAddress = normalizeShippingAddress({ body: orderInput, user });
   const session = await mongoose.startSession();
   let createdOrder;
@@ -211,6 +208,18 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
         couponCode = couponResult.code;
         discountAmount = couponResult.discount;
         totalAmount = couponResult.finalTotal;
+      }
+
+      if (
+        orderInput.paymentGateway === "Razorpay" &&
+        !(await verifyRazorpayPayment({
+          paymentOrderId: orderInput.paymentOrderId,
+          paymentId: orderInput.paymentId,
+          paymentSignature: orderInput.paymentSignature,
+          expectedAmount: totalAmount,
+        }, { paymentMode }))
+      ) {
+        throw new ApiError(400, "Payment verification failed");
       }
 
       const [order] = await Order.create(

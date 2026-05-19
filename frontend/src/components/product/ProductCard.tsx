@@ -12,6 +12,8 @@ type ProductCardProps = {
   product: Product;
   showSize?: boolean;
   variant?: "default" | "bestseller";
+  imageLoading?: "eager" | "lazy";
+  imageFetchPriority?: "high" | "low" | "auto";
 };
 
 const getValidImageUrl = (product: Product) => {
@@ -27,6 +29,8 @@ export const ProductCard = memo(function ProductCard({
   product,
   showSize = false,
   variant = "default",
+  imageLoading = "lazy",
+  imageFetchPriority = "auto",
 }: ProductCardProps) {
   const { addToCart } = useApp();
   const { addNotification } = useNotification();
@@ -85,6 +89,9 @@ export const ProductCard = memo(function ProductCard({
               alt={product.name}
               width={900}
               height={900}
+              loading={imageLoading}
+              fetchPriority={imageFetchPriority}
+              revealImmediately={imageLoading === "eager" || imageFetchPriority === "high"}
               sizes="(max-width: 640px) 48vw, (max-width: 1024px) 45vw, 25vw"
               fallback={
                 <div className="flex h-full w-full items-center justify-center bg-[#efe7dc] font-display text-5xl text-[#5b3a29]/35">

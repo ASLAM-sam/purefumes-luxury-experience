@@ -154,6 +154,13 @@ export const env = {
   RAZORPAY_KEY_SECRET: read("RAZORPAY_KEY_SECRET"),
   BYPASS_PAYMENT: parseBoolean(read("BYPASS_PAYMENT")),
   CLOUDINARY_URL: read("CLOUDINARY_URL"),
+  CLOUDINARY_CLOUD_NAME: read("CLOUDINARY_CLOUD_NAME"),
+  CLOUDINARY_API_KEY: read("CLOUDINARY_API_KEY"),
+  CLOUDINARY_API_SECRET: read("CLOUDINARY_API_SECRET"),
+  CLOUDINARY_PRODUCT_FOLDER: firstNonEmpty(
+    read("CLOUDINARY_PRODUCT_FOLDER"),
+    "purefumes-hyderabad/products",
+  ),
   ADMIN_EMAIL: read("ADMIN_EMAIL").toLowerCase(),
   ADMIN_USERNAME: read("ADMIN_USER").toLowerCase(),
   ADMIN_PASSWORD_HASH: read("ADMIN_PASSWORD_HASH"),
@@ -261,6 +268,10 @@ export const validateEnv = () => {
     }
   }
   assertCompleteGroup(["SMTP_HOST", "MAIL_FROM"], "SMTP");
+  assertCompleteGroup(
+    ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"],
+    "Cloudinary",
+  );
 
   if ((env.SMTP_USER && !env.SMTP_PASS) || (!env.SMTP_USER && env.SMTP_PASS)) {
     throw new Error("SMTP_USER and SMTP_PASS must be provided together");

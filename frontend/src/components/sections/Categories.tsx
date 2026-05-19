@@ -6,12 +6,16 @@ import { SectionTitle } from "@/components/common/SectionTitle";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
 import type { Category } from "@/data/categories";
 import { filterStorefrontCategories } from "@/lib/categories";
-import { getStorefrontCategoryCardImage } from "@/lib/static-image-overrides";
+import {
+  getStorefrontCategoryCardImage,
+  storefrontFallbackCategories,
+} from "@/lib/static-image-overrides";
 import { categoriesApi } from "@/services/api";
 
 export const Categories = memo(function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const visibleCategories = filterStorefrontCategories(categories);
+  const sourceCategories = categories.length ? categories : storefrontFallbackCategories;
+  const visibleCategories = filterStorefrontCategories(sourceCategories);
 
   useEffect(() => {
     let active = true;

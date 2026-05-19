@@ -6,6 +6,7 @@ type OptimizedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "al
   alt: string;
   wrapperClassName?: string;
   placeholderSrc?: string;
+  revealImmediately?: boolean;
   fallback?: ReactNode;
 };
 
@@ -15,6 +16,7 @@ export const OptimizedImage = memo(function OptimizedImage({
   className,
   wrapperClassName,
   placeholderSrc,
+  revealImmediately = false,
   fallback,
   loading = "lazy",
   decoding = "async",
@@ -48,11 +50,11 @@ export const OptimizedImage = memo(function OptimizedImage({
 
   return (
     <span className={cn("relative block h-full w-full overflow-hidden", wrapperClassName)}>
-      {!loaded ? (
+      {!loaded && !revealImmediately ? (
         <span className="absolute inset-0 animate-pulse bg-[linear-gradient(110deg,rgba(235,222,212,0.85),rgba(255,255,255,0.72),rgba(235,222,212,0.85))] bg-[length:220%_100%]" />
       ) : null}
 
-      {placeholderSrc && !loaded ? (
+      {placeholderSrc && !loaded && !revealImmediately ? (
         <img
           src={placeholderSrc}
           alt=""
@@ -81,7 +83,7 @@ export const OptimizedImage = memo(function OptimizedImage({
         className={cn(
           className,
           "transition-[filter,opacity,transform] duration-500 ease-out",
-          loaded ? "opacity-100 blur-0" : "opacity-0 blur-sm",
+          loaded || revealImmediately ? "opacity-100 blur-0" : "opacity-0 blur-sm",
         )}
       />
     </span>

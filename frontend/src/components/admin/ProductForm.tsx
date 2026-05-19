@@ -835,7 +835,7 @@ export const ProductForm = memo(function ProductForm({
 
       <fieldset className="rounded-lg border border-border p-5">
         <legend className="px-2 text-xs uppercase tracking-[0.25em] text-navy/60">
-          Product Video
+          Product Video (Optional)
         </legend>
         <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
           <div className="space-y-3">
@@ -844,7 +844,7 @@ export const ProductForm = memo(function ProductForm({
                 type="url"
                 value={form.videoUrl}
                 onChange={(e) => set("videoUrl", e.target.value)}
-                placeholder="https://example.com/video.mp4"
+                placeholder="Optional https://example.com/video.mp4"
                 className={inputCls}
               />
             </Field>
@@ -859,7 +859,7 @@ export const ProductForm = memo(function ProductForm({
               />
             </label>
             <p className="text-xs text-navy/45">
-              MP4, WebM, or MOV. Video uploads replace the URL on save.
+              Optional MP4, WebM, or MOV. Video uploads replace the URL on save.
             </p>
           </div>
           <div className="overflow-hidden rounded-lg border border-border bg-beige/60">

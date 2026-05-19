@@ -479,6 +479,34 @@ export type PaymentModeSettings = {
   updatedAt?: string | null;
 };
 
+export type RazorpayOrderInput = {
+  items: Array<{ productId: string; quantity: number; size?: string }>;
+  couponCode?: string;
+  currency?: string;
+  receipt?: string;
+};
+
+export type RazorpayOrderResponse = {
+  order_id: string;
+  amount: number;
+  currency: string;
+  receipt?: string;
+  subtotalAmount?: number;
+  discountAmount?: number;
+  totalAmount?: number;
+  couponCode?: string;
+};
+
+export type RazorpayVerifyInput = {
+  razorpay_payment_id: string;
+  razorpay_order_id: string;
+  razorpay_signature: string;
+};
+
+export type RazorpayVerifyResponse = {
+  verified: boolean;
+};
+
 export type CreateOrderInput = {
   customerName: string;
   phone: string;
@@ -789,6 +817,30 @@ const asStringArray = (value: unknown): string[] => {
   return [];
 };
 
+const asImageStringArray = (value: unknown): string[] => {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    const image = value.trim();
+    if (!image) return [];
+
+    if (image.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(image);
+        return asImageStringArray(parsed);
+      } catch (_error) {
+        return [image];
+      }
+    }
+
+    return [image];
+  }
+
+  return [];
+};
+
 const asBestTimeArray = (value: unknown): BestTime[] =>
   Array.isArray(value) ? value.filter(isBestTime) : [];
 
@@ -850,7 +902,7 @@ const normalizeBrand = (brand: BrandPayload): Brand => ({
             brandId: product?.brandId ? String(product.brandId) : null,
             category: String(product?.category || ""),
             image: resolveImageUrl(product?.image || ""),
-            images: asStringArray(product?.images).map(resolveImageUrl),
+            images: asImageStringArray(product?.images).map(resolveImageUrl),
             price: Number.isFinite(Number(product?.price)) ? Number(product?.price) : 0,
           }) satisfies BrandPreviewProduct,
       )
@@ -926,7 +978,7 @@ const createDerivedCategory = (
 const normalizeProduct = (product: ProductPayload): Product => {
   const sizes = Array.isArray(product.sizes) ? product.sizes : [];
   const price = Number(product.price ?? sizes[0]?.price ?? 0);
-  const images = asStringArray(product.images).map(resolveImageUrl);
+  const images = asImageStringArray(product.images).map(resolveImageUrl);
   const legacyImage = resolveImageUrl(product.image || "");
   const normalizedImages = images.length
     ? Array.from(new Set(images))
@@ -1181,7 +1233,7 @@ const normalizePerfumeRequest = (perfumeRequest: PerfumeRequestPayload): Perfume
   preferredSize: String(perfumeRequest.preferredSize || ""),
   budgetRange: String(perfumeRequest.budgetRange || ""),
   message: String(perfumeRequest.message || ""),
-  images: asStringArray(perfumeRequest.images).map(resolveImageUrl),
+  images: asImageStringArray(perfumeRequest.images).map(resolveImageUrl),
   status: isPerfumeRequestStatus(perfumeRequest.status) ? perfumeRequest.status : "new",
   createdAt: String(perfumeRequest.createdAt || ""),
   updatedAt: String(perfumeRequest.updatedAt || ""),
@@ -2453,6 +2505,16 @@ export const paymentsApi = {
     const config = await paymentsApi.getConfig();
     return String(config.keyId || "").trim();
   },
+  createOrder: async (input: RazorpayOrderInput): Promise<RazorpayOrderResponse> =>
+    http<RazorpayOrderResponse>("/payments/create-order", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  verifyPayment: async (input: RazorpayVerifyInput): Promise<RazorpayVerifyResponse> =>
+    http<RazorpayVerifyResponse>("/payments/verify-payment", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 };
 
 export const frontendApiFacade = {

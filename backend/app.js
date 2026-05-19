@@ -24,7 +24,7 @@ import userRoutes from "./routes/userRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import analyticsRoutes from "./routes/analyticsRoutes.js";
-import paymentRoutes from "./routes/paymentRoutes.js";
+import paymentRoutes, { checkoutPaymentRoutes } from "./routes/paymentRoutes.js";
 import perfumeRequestRoutes from "./routes/perfumeRequestRoutes.js";
 import couponRoutes from "./routes/couponRoutes.js";
 
@@ -150,6 +150,7 @@ app.use("/api/users", userRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/admin", adminLimiter, adminRoutes);
 app.use("/api/analytics", adminLimiter, analyticsRoutes);
+app.use("/api", checkoutPaymentRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/products", catalogLimiter, productRoutes);
 app.use("/api/bestsellers", catalogLimiter, bestsellerRoutes);

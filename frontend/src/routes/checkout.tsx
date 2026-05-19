@@ -52,6 +52,7 @@ type RazorpayFailureResponse = {
 
 type RazorpayOptions = {
   key: string;
+  order_id?: string;
   amount: number;
   currency: string;
   name: string;
@@ -167,6 +168,22 @@ const createMockPaymentResponse = (): RazorpaySuccessResponse => ({
   razorpay_order_id: `TEST_ORDER_${Date.now()}`,
   razorpay_signature: "TEST_SIGNATURE",
 });
+
+const verifyRazorpayResponse = async (response: RazorpaySuccessResponse) => {
+  if (!response.razorpay_order_id || !response.razorpay_signature) {
+    throw new Error("Razorpay did not return complete payment verification details.");
+  }
+
+  const verification = await paymentsApi.verifyPayment({
+    razorpay_payment_id: response.razorpay_payment_id,
+    razorpay_order_id: response.razorpay_order_id,
+    razorpay_signature: response.razorpay_signature,
+  });
+
+  if (!verification.verified) {
+    throw new Error("Payment signature verification failed.");
+  }
+};
 
 const testPaymentOptions = [
   {
@@ -607,6 +624,30 @@ function CheckoutPage() {
       setError("");
       setLoading(paymentOptionId);
 
+      let razorpayOrder;
+      try {
+        razorpayOrder = await paymentsApi.createOrder({
+          items: [
+            {
+              productId: product.id,
+              quantity,
+              size: size.size,
+            },
+          ],
+          couponCode: appliedCoupon?.code || undefined,
+          currency: "INR",
+        });
+      } catch (orderError) {
+        const message =
+          orderError instanceof Error
+            ? orderError.message
+            : "Payment order could not be created.";
+        setLoading(null);
+        setError(message);
+        addNotification(message, "error");
+        return;
+      }
+
       const sdkLoaded = await loadRazorpay();
       if (!sdkLoaded) {
         setLoading(null);
@@ -623,13 +664,27 @@ function CheckoutPage() {
 
       const paymentObject = new Razorpay({
         key: razorpayKey,
-        amount: Math.round(finalTotal * 100),
-        currency: "INR",
+        order_id: razorpayOrder.order_id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
         name: "Purefumes Hyderabad",
         description: `Order Payment - ${product.name}`,
         config: upiOnlyDisplayConfig,
         handler: (response) => {
-          void handleOrderSuccess(response, paymentName);
+          void (async () => {
+            try {
+              await verifyRazorpayResponse(response);
+              await handleOrderSuccess(response, paymentName);
+            } catch (verificationError) {
+              const message =
+                verificationError instanceof Error
+                  ? verificationError.message
+                  : "Payment could not be verified.";
+              setLoading(null);
+              setError(message);
+              addNotification(message, "error");
+            }
+          })();
         },
         prefill: {
           name: form.name.trim(),
@@ -666,7 +721,6 @@ function CheckoutPage() {
       addNotification,
       appliedCoupon?.code,
       ensurePaymentConfig,
-      finalTotal,
       form.name,
       form.phone,
       handleBypassPayment,
@@ -1117,6 +1171,29 @@ function CartCheckout() {
       }
 
       setLoading(paymentOptionId);
+
+      let razorpayOrder;
+      try {
+        razorpayOrder = await paymentsApi.createOrder({
+          items: cart.map((item) => ({
+            productId: item.product.id || item.product._id || "",
+            quantity: item.quantity,
+            size: item.size.size,
+          })),
+          couponCode: cartCouponCode || undefined,
+          currency: "INR",
+        });
+      } catch (orderError) {
+        const message =
+          orderError instanceof Error
+            ? orderError.message
+            : "Payment order could not be created.";
+        setLoading(null);
+        setError(message);
+        addNotification(message, "error");
+        return;
+      }
+
       const sdkLoaded = await loadRazorpay();
       if (!sdkLoaded) {
         setLoading(null);
@@ -1133,13 +1210,27 @@ function CartCheckout() {
 
       const paymentObject = new Razorpay({
         key: razorpayKey,
-        amount: Math.round(cartFinalTotal * 100),
-        currency: "INR",
+        order_id: razorpayOrder.order_id,
+        amount: razorpayOrder.amount,
+        currency: razorpayOrder.currency,
         name: "Purefumes Hyderabad",
         description: "Cart Checkout",
         config: upiOnlyDisplayConfig,
         handler: (response) => {
-          void handleOrderSuccess(response, paymentName);
+          void (async () => {
+            try {
+              await verifyRazorpayResponse(response);
+              await handleOrderSuccess(response, paymentName);
+            } catch (verificationError) {
+              const message =
+                verificationError instanceof Error
+                  ? verificationError.message
+                  : "Payment could not be verified.";
+              setLoading(null);
+              setError(message);
+              addNotification(message, "error");
+            }
+          })();
         },
         prefill: {
           name: form.name.trim(),
@@ -1167,9 +1258,8 @@ function CartCheckout() {
     },
     [
       addNotification,
-      cart.length,
+      cart,
       cartCouponCode,
-      cartFinalTotal,
       ensurePaymentConfig,
       form.name,
       form.phone,

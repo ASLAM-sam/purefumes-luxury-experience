@@ -5,6 +5,7 @@ import { ProductCard } from "@/components/product/ProductCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Product } from "@/data/products";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
+import { storefrontFallbackProducts } from "@/lib/static-image-overrides";
 import { DATA_EVENT_STORAGE_KEY, LATEST_PRODUCTS_CHANGED_EVENT, productsApi } from "@/services/api";
 
 type LoadOptions = {
@@ -28,11 +29,12 @@ export const LatestProducts = memo(function LatestProducts() {
       try {
         const nextProducts = await productsApi.listLatest({ forceFresh });
         if (isActive) {
-          setProducts(nextProducts.filter((product) => product.isLatest).slice(0, 8));
+          const latestProducts = nextProducts.filter((product) => product.isLatest).slice(0, 8);
+          setProducts(latestProducts.length ? latestProducts : storefrontFallbackProducts);
         }
       } catch (_error) {
         if (isActive && !silent) {
-          setProducts([]);
+          setProducts(storefrontFallbackProducts);
         }
       } finally {
         if (isActive && !silent) {
@@ -106,8 +108,15 @@ export const LatestProducts = memo(function LatestProducts() {
           </div>
         ) : (
           <div className="product-grid mt-12">
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} showSize variant="bestseller" />
+            {products.map((product, index) => (
+              <ProductCard
+                key={product.id}
+                product={product}
+                showSize
+                variant="bestseller"
+                imageLoading={index < 3 ? "eager" : "lazy"}
+                imageFetchPriority={index < 3 ? "high" : "auto"}
+              />
             ))}
           </div>
         )}
