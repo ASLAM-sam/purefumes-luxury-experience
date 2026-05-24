@@ -1,11 +1,73 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import {
   BANNERS_CHANGED_EVENT,
-  bannersApi,
   DATA_EVENT_STORAGE_KEY,
   type Banner,
 } from "@/services/api";
 import { frontendEventBus } from "@/lib/performance/event-bus";
+import heroSlide1 from "@/assets/hero-slide-1.jpeg";
+import heroSlide2 from "@/assets/hero-slide-2.jpeg";
+import heroSlide3 from "@/assets/hero-slide-3.jpeg";
+import heroSlide4 from "@/assets/hero-slide-4.jpeg";
+import heroSlide5 from "@/assets/hero-slide-5.jpeg";
+
+const STATIC_HERO_SLIDES: Banner[] = [
+  {
+    _id: "static-hero-1",
+    id: "static-hero-1",
+    title: "Designer Perfumes",
+    subtitle: "Discover iconic and luxury fragrances.",
+    image: heroSlide1,
+    buttonText: "Shop Now",
+    link: "/shop",
+    isActive: true,
+    order: 1,
+  },
+  {
+    _id: "static-hero-2",
+    id: "static-hero-2",
+    title: "Premium Collection",
+    subtitle: "Curated scents for every style.",
+    image: heroSlide2,
+    buttonText: "Explore",
+    link: "/shop",
+    isActive: true,
+    order: 2,
+  },
+  {
+    _id: "static-hero-3",
+    id: "static-hero-3",
+    title: "Luxury Bottles",
+    subtitle: "Signature perfumes from top brands.",
+    image: heroSlide3,
+    buttonText: "Browse",
+    link: "/shop",
+    isActive: true,
+    order: 3,
+  },
+  {
+    _id: "static-hero-4",
+    id: "static-hero-4",
+    title: "Arabian Favorites",
+    subtitle: "Long-lasting perfumes with rich notes.",
+    image: heroSlide4,
+    buttonText: "View Collection",
+    link: "/shop",
+    isActive: true,
+    order: 4,
+  },
+  {
+    _id: "static-hero-5",
+    id: "static-hero-5",
+    title: "Top Arabian Brand",
+    subtitle: "Best-smelling fragrances for every occasion.",
+    image: heroSlide5,
+    buttonText: "Shop Arabian",
+    link: "/shop",
+    isActive: true,
+    order: 5,
+  },
+];
 
 const sortActiveBanners = (items: Banner[]) =>
   [...items]
@@ -35,20 +97,10 @@ export const Hero = memo(function Hero() {
     };
   }, []);
 
-  const loadBanners = useCallback(async (forceFresh = false) => {
-    try {
-      const nextBanners = await bannersApi.listActive({ forceFresh });
-
-      if (!mountedRef.current) return;
-      setSlides(sortActiveBanners(nextBanners));
-    } catch (_error) {
-      if (!mountedRef.current) return;
-      setSlides([]);
-    } finally {
-      if (mountedRef.current) {
-        setLoading(false);
-      }
-    }
+  const loadBanners = useCallback(async (_forceFresh = false) => {
+    if (!mountedRef.current) return;
+    setSlides(sortActiveBanners(STATIC_HERO_SLIDES));
+    setLoading(false);
   }, []);
 
   useEffect(() => {

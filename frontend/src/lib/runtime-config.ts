@@ -41,14 +41,19 @@ const normalizeApiUrl = (value: string) => {
   return /\/api$/i.test(resolvedValue) ? resolvedValue : `${resolvedValue}/api`;
 };
 
-const configuredApiUrl = String(import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "").trim();
+const configuredApiUrl = String(
+  import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "",
+).trim();
+const normalizedConfiguredApiUrl = normalizeApiUrl(configuredApiUrl);
 const productionSafeConfiguredApiUrl =
-  import.meta.env.PROD && isLocalApiUrl(configuredApiUrl) ? "" : configuredApiUrl;
+  import.meta.env.PROD && isLocalApiUrl(normalizedConfiguredApiUrl)
+    ? ""
+    : normalizedConfiguredApiUrl;
 const sameOriginApiUrl = sameOriginBaseUrl ? resolveUrl("/api", sameOriginBaseUrl) : "/api";
 const apiUrl =
   import.meta.env.PROD
-    ? sameOriginApiUrl
-    : normalizeApiUrl(productionSafeConfiguredApiUrl) ||
+    ? productionSafeConfiguredApiUrl || sameOriginApiUrl
+    : productionSafeConfiguredApiUrl ||
       (frontendUrl ? resolveUrl("/api", frontendUrl) : "");
 const apiOrigin = resolveOrigin(apiUrl, frontendUrl || browserOrigin) || frontendUrl;
 const authUrl = apiUrl
@@ -78,3 +83,4 @@ export const runtimeConfig = {
 };
 
 export default runtimeConfig;
+
