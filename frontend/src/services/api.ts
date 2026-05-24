@@ -33,6 +33,7 @@ let authCacheVersion = 0;
 let csrfTokenCache = "";
 let csrfTokenRequest: Promise<string> | null = null;
 let refreshSessionRequest: Promise<boolean> | null = null;
+let refreshBackoffUntilMs = 0;
 export const PRODUCTS_CHANGED_EVENT = "purefumes:products-changed";
 export const BESTSELLERS_CHANGED_EVENT = "purefumes:bestsellers-changed";
 export const LATEST_PRODUCTS_CHANGED_EVENT = "purefumes:latest-products-changed";
@@ -47,6 +48,7 @@ const AUTH_REFRESH_LAST_SUCCESS_KEY = "purefumes:auth-refresh-last-success";
 const AUTH_REFRESH_LOCK_TTL_MS = 10_000;
 const AUTH_REFRESH_RECENT_SUCCESS_MS = 1_500;
 const AUTH_REFRESH_LOCK_POLL_MS = 120;
+const AUTH_REFRESH_FAILURE_BACKOFF_MS = 15_000;
 
 type NavigatorWithLocks = Navigator & {
   locks?: {
@@ -1026,6 +1028,7 @@ const clearStoredAccessToken = () => {
 const isMutationMethod = (method: string) => !["GET", "HEAD", "OPTIONS"].includes(method);
 
 const shouldAttemptRefresh = (path: string) =>
+  Date.now() >= refreshBackoffUntilMs &&
   !path.startsWith("/auth/login") &&
   !path.startsWith("/auth/signup") &&
   !path.startsWith("/auth/refresh") &&
@@ -1069,11 +1072,13 @@ const refreshAuthSession = async () => {
     rememberCsrfToken(response.headers.get("X-CSRF-Token") || "");
 
     if (response.ok) {
+      refreshBackoffUntilMs = 0;
       markAuthRefreshSucceeded();
       return true;
     }
 
     if (response.status === 401 || response.status === 403) {
+      refreshBackoffUntilMs = Date.now() + AUTH_REFRESH_FAILURE_BACKOFF_MS;
       clearStoredAccessToken();
     }
 

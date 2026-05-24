@@ -11,7 +11,7 @@ export const Route = createFileRoute("/admin/login")({
 
 function AdminLogin() {
   const nav = useNavigate();
-  const { login, logout } = useAuth();
+  const { login, logout, reloadUser } = useAuth();
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -31,6 +31,14 @@ function AdminLogin() {
           return;
         }
 
+        const verifiedSessionUser = await reloadUser();
+        if (!verifiedSessionUser) {
+          setError(
+            "Sign-in succeeded but your session cookie was blocked on this device/browser. Please allow cookies and try again.",
+          );
+          return;
+        }
+
         nav({ to: "/admin" });
       } catch (ex) {
         setError(ex instanceof Error ? ex.message : "Login failed");
@@ -38,7 +46,7 @@ function AdminLogin() {
         setLoading(false);
       }
     },
-    [identifier, login, logout, nav, password],
+    [identifier, login, logout, nav, password, reloadUser],
   );
 
   return (
