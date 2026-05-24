@@ -800,7 +800,24 @@ const getCookieValue = (name: string) => {
   );
 };
 
+const isCrossOriginApi = () => {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const apiOrigin = new URL(API_ORIGIN || BASE, window.location.origin).origin;
+    return apiOrigin !== window.location.origin;
+  } catch (_error) {
+    return false;
+  }
+};
+
 const getCsrfToken = () => {
+  // In cross-origin deployments the API cookie is not visible to frontend JS.
+  // Use the server-issued header token cache instead of local document.cookie.
+  if (isCrossOriginApi()) {
+    return csrfTokenCache;
+  }
+
   const cookieToken = getCookieValue("csrfToken");
   return cookieToken ? decodeURIComponent(cookieToken) : csrfTokenCache;
 };
@@ -3029,3 +3046,4 @@ export const frontendApiFacade = {
 
 export const isUsingMock = false;
 export const isBackendConfigured = !!BASE;
+

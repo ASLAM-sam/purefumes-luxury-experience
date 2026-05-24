@@ -10,6 +10,15 @@ import { getRequestLogContext } from "../utils/redaction.js";
 
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const csrfHeaderName = "X-CSRF-Token";
+const csrfExemptPaths = new Set([
+  "/api/auth/login",
+  "/api/auth/signup",
+  "/api/auth/forgot-password",
+  "/api/auth/reset-password",
+  "/api/auth/verify-email",
+  "/api/auth/google",
+  "/api/auth/google/callback",
+]);
 const productionOrigins = [
   "https://purefumeshyderabad.in",
   "https://www.purefumeshyderabad.in",
@@ -54,6 +63,10 @@ export const clearAuthCookies = (res) => {
 
 export const csrfProtection = (req, res, next) => {
   if (safeMethods.has(req.method)) {
+    return next();
+  }
+
+  if (csrfExemptPaths.has(req.path)) {
     return next();
   }
 
