@@ -58,7 +58,7 @@ const apiUrl =
 const apiOrigin = resolveOrigin(apiUrl, frontendUrl || browserOrigin) || frontendUrl;
 const authUrl = apiUrl
   ? import.meta.env.PROD
-    ? resolveUrl("/auth", sameOriginBaseUrl || frontendUrl)
+    ? resolveUrl("/auth", apiOrigin || frontendUrl)
     : `${apiUrl.replace(/\/$/, "")}/auth`
   : apiOrigin
     ? resolveUrl("/auth", apiOrigin)
