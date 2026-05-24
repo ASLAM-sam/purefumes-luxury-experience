@@ -2,13 +2,12 @@ import { asyncHandler } from "../middlewares/errorMiddleware.js";
 import { cleanupUploadedFiles, storeUploadedImage } from "../middlewares/uploadMiddleware.js";
 import {
   buildCategoryPayload,
+  deleteCategoryPermanently,
   createCategory as persistCategory,
   getCategoryById,
   getCategoryBySlug,
   listAdminCategories,
   listCategories,
-  reorderCategoryCollection,
-  softDeleteCategory,
   updateCategory as persistCategoryUpdate,
 } from "../services/categoryService.js";
 import { clearProductCache } from "./productController.js";
@@ -31,10 +30,9 @@ const addUploadedAssets = async (payload, req) => {
   return payload;
 };
 
-const hydrateCategoryById = async (id, { includeDeleted = true } = {}) => {
+const hydrateCategoryById = async (id) => {
   const categories = await listCategories({
-    includeInactive: true,
-    includeDeleted,
+    search: "",
   });
 
   return categories.find((category) => String(category.id) === String(id)) || null;
@@ -42,7 +40,6 @@ const hydrateCategoryById = async (id, { includeDeleted = true } = {}) => {
 
 export const getCategories = asyncHandler(async (req, res) => {
   const categories = await listCategories({
-    featured: req.query.featured,
     search: req.query.search,
   });
 
@@ -54,7 +51,7 @@ export const getCategories = asyncHandler(async (req, res) => {
 });
 
 export const getAdminCategories = asyncHandler(async (req, res) => {
-  const hasQueryControls = ["page", "limit", "search", "featured", "state"].some((field) =>
+  const hasQueryControls = ["page", "limit", "search"].some((field) =>
     Object.prototype.hasOwnProperty.call(req.query, field),
   );
 
@@ -70,8 +67,7 @@ export const getAdminCategories = asyncHandler(async (req, res) => {
   }
 
   const categories = await listCategories({
-    includeInactive: true,
-    includeDeleted: true,
+    search: "",
   });
 
   res.json({
@@ -83,7 +79,7 @@ export const getAdminCategories = asyncHandler(async (req, res) => {
 
 export const getCategoryDetails = asyncHandler(async (req, res) => {
   const category = await getCategoryBySlug(req.params.slug);
-  const hydratedCategory = await hydrateCategoryById(category._id, { includeDeleted: false });
+  const hydratedCategory = await hydrateCategoryById(category._id);
 
   res.json({
     success: true,
@@ -121,24 +117,9 @@ export const updateCategory = asyncHandler(async (req, res) => {
   });
 });
 
-export const reorderCategories = asyncHandler(async (req, res) => {
-  const items = Array.isArray(req.body.items) ? req.body.items : [];
-  await reorderCategoryCollection(items);
-  clearProductCache();
-
-  res.json({
-    success: true,
-    message: "Category order updated successfully",
-    data: await listCategories({
-      includeInactive: true,
-      includeDeleted: true,
-    }),
-  });
-});
-
 export const deleteCategory = asyncHandler(async (req, res) => {
   const category = await getCategoryById(req.params.id);
-  await softDeleteCategory(category);
+  await deleteCategoryPermanently(category);
   clearProductCache();
 
   res.json({

@@ -28,6 +28,7 @@ const analyticsEventSchema = new mongoose.Schema(
     },
     revenue: { type: Number, default: 0 },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    isTestData: { type: Boolean, default: false, index: true },
   },
   { timestamps: true },
 );
@@ -35,5 +36,6 @@ const analyticsEventSchema = new mongoose.Schema(
 analyticsEventSchema.index({ type: 1, createdAt: -1 });
 analyticsEventSchema.index({ userId: 1, type: 1, createdAt: -1 });
 analyticsEventSchema.index({ createdAt: -1 });
+analyticsEventSchema.index({ isTestData: 1, createdAt: -1 });
 
 export default mongoose.model("AnalyticsEvent", analyticsEventSchema);

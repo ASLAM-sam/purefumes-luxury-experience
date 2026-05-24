@@ -2,8 +2,10 @@ import crypto from "crypto";
 import Razorpay from "razorpay";
 import env from "../config/env.js";
 import logger from "../config/logger.js";
+import { captureException } from "../config/sentry.js";
 import { ApiError } from "../middlewares/errorMiddleware.js";
-import { applyCouponToSubtotal } from "./couponService.js";
+import { normalizeMoney, toPaise } from "../utils/money.js";
+import { applyCouponToPreparedItems } from "./couponService.js";
 import { buildPreparedOrderItems } from "./pricingService.js";
 
 let cachedClient = null;
@@ -38,10 +40,10 @@ const getRazorpayClient = () => {
   return cachedClient;
 };
 
-export const toPaise = (amount) => Math.round((Number(amount || 0) + Number.EPSILON) * 100);
-
 const normalizeCurrency = (currency) => {
-  const normalized = String(currency || "INR").trim().toUpperCase();
+  const normalized = String(currency || "INR")
+    .trim()
+    .toUpperCase();
   return normalized || "INR";
 };
 
@@ -49,34 +51,39 @@ const buildReceipt = (receipt, userId) => {
   const requestedReceipt = String(receipt || "").trim();
   if (requestedReceipt) return requestedReceipt.slice(0, 40);
 
-  const suffix = String(userId || "guest").replace(/[^a-zA-Z0-9]/g, "").slice(-8);
+  const suffix = String(userId || "guest")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(-8);
   return `pf_${Date.now()}_${suffix}`.slice(0, 40);
 };
 
 export const buildCheckoutTotals = async ({ items, couponCode }) => {
-  const { preparedItems, subtotalAmount } = await buildPreparedOrderItems(items, {
-    requireAvailableStock: true,
-  });
+  const { preparedItems, subtotalAmount } = await buildPreparedOrderItems(
+    items,
+    {
+      requireAvailableStock: true,
+    },
+  );
 
   let discountAmount = 0;
-  let totalAmount = subtotalAmount;
+  let totalAmount = normalizeMoney(subtotalAmount);
   let appliedCouponCode = "";
 
   if (String(couponCode || "").trim()) {
-    const couponResult = await applyCouponToSubtotal({
+    const couponResult = await applyCouponToPreparedItems({
       code: couponCode,
-      subtotalAmount,
+      preparedItems,
     });
 
     appliedCouponCode = couponResult.code;
-    discountAmount = couponResult.discount;
-    totalAmount = couponResult.finalTotal;
+    discountAmount = normalizeMoney(couponResult.discount);
+    totalAmount = normalizeMoney(couponResult.finalTotal);
   }
 
   const amount = toPaise(totalAmount);
 
   if (!Number.isInteger(amount) || amount < 100) {
-    throw new ApiError(400, "Order amount must be at least Rs. 1.");
+    throw new ApiError(400, "Order amount must be at least ₹1.");
   }
 
   return {
@@ -125,17 +132,28 @@ export const createRazorpayCheckoutOrder = async ({
   } catch (error) {
     if (error instanceof ApiError) throw error;
 
-    const statusCode = Number(error?.statusCode || error?.status || error?.error?.status_code || 500);
+    const statusCode = Number(
+      error?.statusCode || error?.status || error?.error?.status_code || 500,
+    );
     const razorpayMessage =
-      error?.error?.description || error?.message || "Razorpay order could not be created.";
+      error?.error?.description ||
+      error?.message ||
+      "Razorpay order could not be created.";
 
     logger.error("Razorpay order creation failed", {
       statusCode,
       message: razorpayMessage,
     });
+    captureException(new Error("Razorpay order creation failed"), {
+      tags: { area: "payment", provider: "razorpay", action: "create_order" },
+      extra: { statusCode, providerMessage: razorpayMessage },
+    });
 
     if (statusCode === 401) {
-      throw new ApiError(401, "Razorpay authentication failed. Check the key id and secret.");
+      throw new ApiError(
+        401,
+        "Razorpay authentication failed. Check the key id and secret.",
+      );
     }
 
     throw new ApiError(500, "Razorpay order could not be created.");
@@ -180,24 +198,38 @@ export const fetchRazorpayOrder = async (orderId) => {
   } catch (error) {
     if (error instanceof ApiError) throw error;
 
-    const statusCode = Number(error?.statusCode || error?.status || error?.error?.status_code || 500);
+    const statusCode = Number(
+      error?.statusCode || error?.status || error?.error?.status_code || 500,
+    );
     const razorpayMessage =
-      error?.error?.description || error?.message || "Razorpay order could not be fetched.";
+      error?.error?.description ||
+      error?.message ||
+      "Razorpay order could not be fetched.";
 
     logger.error("Razorpay order fetch failed", {
       statusCode,
       message: razorpayMessage,
     });
+    captureException(new Error("Razorpay order fetch failed"), {
+      tags: { area: "payment", provider: "razorpay", action: "fetch_order" },
+      extra: { statusCode, providerMessage: razorpayMessage },
+    });
 
     if (statusCode === 401) {
-      throw new ApiError(401, "Razorpay authentication failed. Check the key id and secret.");
+      throw new ApiError(
+        401,
+        "Razorpay authentication failed. Check the key id and secret.",
+      );
     }
 
     throw new ApiError(500, "Razorpay order could not be verified.");
   }
 };
 
-export const verifyRazorpayOrderAmount = async ({ orderId, expectedAmount }) => {
+export const verifyRazorpayOrderAmount = async ({
+  orderId,
+  expectedAmount,
+}) => {
   const order = await fetchRazorpayOrder(orderId);
   return Number(order?.amount) === toPaise(expectedAmount);
 };

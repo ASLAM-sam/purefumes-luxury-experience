@@ -1,5 +1,7 @@
 import env from "../config/env.js";
 import logger from "../config/logger.js";
+import { captureException } from "../config/sentry.js";
+import { getRequestLogContext, sanitizeUrl } from "../utils/redaction.js";
 
 export const asyncHandler = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
@@ -14,10 +16,24 @@ export class ApiError extends Error {
 }
 
 export const notFound = (req, _res, next) => {
-  next(new ApiError(404, `Route not found: ${req.originalUrl}`));
+  next(new ApiError(404, `Route not found: ${sanitizeUrl(req.originalUrl)}`));
 };
 
-export const errorHandler = (error, req, res, _next) => {
+const shouldCaptureExpectedError = (statusCode, req) => {
+  const path = req.originalUrl || "";
+
+  if (statusCode >= 500) return false;
+  if (path.includes("/auth/refresh") && [401, 403].includes(statusCode)) return true;
+  if (path.includes("/payments") && statusCode >= 400) return true;
+
+  return false;
+};
+
+export const errorHandler = (error, req, res, next) => {
+  if (res.headersSent) {
+    return next(error);
+  }
+
   let statusCode = error.statusCode || (error.name === "ValidationError" ? 422 : 500);
 
   const response = {
@@ -46,12 +62,20 @@ export const errorHandler = (error, req, res, _next) => {
   }
 
   logger.error(error.message || "Unhandled API error", {
-    requestId: req.id,
-    method: req.method,
-    path: req.originalUrl,
-    statusCode,
+    ...getRequestLogContext(req, { statusCode }),
     stack: error.stack,
   });
+
+  if (shouldCaptureExpectedError(statusCode, req)) {
+    captureException(error, {
+      req,
+      tags: {
+        statusCode,
+        area: req.originalUrl?.includes("/payments") ? "payment" : "auth",
+      },
+      extra: { statusCode },
+    });
+  }
 
   res.status(statusCode).json(response);
 };

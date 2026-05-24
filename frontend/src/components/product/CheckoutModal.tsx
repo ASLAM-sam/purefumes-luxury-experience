@@ -14,6 +14,7 @@ import {
   type DeliveryFormValues,
 } from "@/components/checkout/DeliveryDetailsFields";
 import { ordersApi } from "@/services/api";
+import { formatINR, multiplyMoney } from "@/lib/money";
 
 export const CheckoutModal = memo(function CheckoutModal() {
   const {
@@ -168,19 +169,19 @@ export const CheckoutModal = memo(function CheckoutModal() {
                         </p>
                       </div>
                       <p className="font-display text-xl text-gold">
-                        Rs. {item.size.price * item.quantity}
+                        {formatINR(multiplyMoney(item.size.price, item.quantity))}
                       </p>
                     </div>
                   ))}
                   <div className="border-t border-border pt-3 text-sm text-navy/70">
                     <div className="flex items-center justify-between">
                       <span>Subtotal</span>
-                      <span>Rs. {cartTotal.toLocaleString("en-IN")}</span>
+                      <span>{formatINR(cartTotal)}</span>
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <span>Discount</span>
                       <span className={cartDiscount > 0 ? "text-green-700" : ""}>
-                        -Rs. {cartDiscount.toLocaleString("en-IN")}
+                        -{formatINR(cartDiscount)}
                       </span>
                     </div>
                   </div>
@@ -189,7 +190,7 @@ export const CheckoutModal = memo(function CheckoutModal() {
                       Final Total
                     </span>
                     <span className="font-display text-2xl text-navy">
-                      Rs. {cartFinalTotal.toLocaleString("en-IN")}
+                      {formatINR(cartFinalTotal)}
                     </span>
                   </div>
                 </div>
@@ -256,7 +257,7 @@ export const CheckoutModal = memo(function CheckoutModal() {
                     disabled={submitting || !cart.length}
                     className="mt-4 w-full"
                   >
-                    {submitting ? "Placing..." : `Place Order Rs. ${cartFinalTotal}`}
+                    {submitting ? "Placing..." : `Place Order ${formatINR(cartFinalTotal)}`}
                   </Button>
                 </form>
               </>

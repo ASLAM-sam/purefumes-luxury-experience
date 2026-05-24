@@ -1,8 +1,17 @@
+import { useEffect } from "react";
 import { createRouter, useRouter } from "@tanstack/react-router";
+import { captureFrontendException } from "@/lib/sentry";
 import { routeTree } from "./routeTree.gen";
 
 function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+
+  useEffect(() => {
+    captureFrontendException(error, {
+      source: "router.defaultErrorComponent",
+      path: typeof window === "undefined" ? "" : window.location.pathname,
+    });
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">

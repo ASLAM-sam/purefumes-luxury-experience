@@ -65,7 +65,7 @@ export function ConfirmModal({
             disabled={loading}
             className="!bg-red-600 !text-white hover:!opacity-90"
           >
-            {loading ? "Deleting..." : confirmLabel}
+            {loading ? `${confirmLabel}...` : confirmLabel}
           </Button>
         </div>
       </div>

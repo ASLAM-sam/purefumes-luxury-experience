@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 export const COUPON_DISCOUNT_TYPES = ["percentage", "fixed"];
+export const COUPON_APPLICABILITY_TYPES = ["all", "selected"];
 
 const normalizeCouponCode = (value) =>
   String(value || "")
@@ -57,6 +58,17 @@ const couponSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    applicabilityType: {
+      type: String,
+      enum: COUPON_APPLICABILITY_TYPES,
+      default: "all",
+    },
+    applicableProducts: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Product",
+      },
+    ],
   },
   {
     timestamps: true,
@@ -66,6 +78,7 @@ const couponSchema = new mongoose.Schema(
 );
 
 couponSchema.index({ isActive: 1, expiryDate: 1 });
+couponSchema.index({ applicabilityType: 1, applicableProducts: 1 });
 
 couponSchema.virtual("id").get(function getId() {
   return this._id.toString();
@@ -78,6 +91,24 @@ couponSchema.pre("validate", function normalizeCoupon(next) {
 
   if (this.discountType !== "percentage") {
     this.maxDiscount = this.maxDiscount ?? null;
+  }
+
+  this.applicabilityType = COUPON_APPLICABILITY_TYPES.includes(
+    this.applicabilityType,
+  )
+    ? this.applicabilityType
+    : "all";
+
+  if (this.applicabilityType !== "selected") {
+    this.applicableProducts = [];
+  } else {
+    this.applicableProducts = Array.from(
+      new Set(
+        (this.applicableProducts || [])
+          .map((productId) => productId?.toString())
+          .filter(Boolean),
+      ),
+    );
   }
 
   next();

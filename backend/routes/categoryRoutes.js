@@ -5,7 +5,6 @@ import {
   getAdminCategories,
   getCategories,
   getCategoryDetails,
-  reorderCategories,
   updateCategory,
 } from "../controllers/categoryController.js";
 import { adminAuth } from "../middlewares/authMiddleware.js";
@@ -16,7 +15,6 @@ import {
   categoryCreateValidation,
   categoryIdParamValidation,
   categoryListValidation,
-  categoryReorderValidation,
   categoryUpdateValidation,
 } from "../validators/categoryValidation.js";
 
@@ -40,13 +38,6 @@ router.put(
   categoryUpdateValidation,
   validateRequest,
   updateCategory,
-);
-router.patch(
-  "/reorder",
-  adminAuth,
-  categoryReorderValidation,
-  validateRequest,
-  reorderCategories,
 );
 router.delete(
   "/:id",

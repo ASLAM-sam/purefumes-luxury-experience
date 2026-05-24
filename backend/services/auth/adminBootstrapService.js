@@ -32,7 +32,28 @@ const resolveAdminName = ({ username, email }) => {
     .join(" ");
 };
 
+const migrateLegacySuperAdminUsers = async () => {
+  const result = await User.updateMany(
+    { role: "super-admin" },
+    {
+      $set: {
+        role: "admin",
+        refreshTokens: [],
+      },
+    },
+  );
+
+  if (result.modifiedCount > 0) {
+    logger.warn("Legacy super-admin users migrated to admin", {
+      modifiedCount: result.modifiedCount,
+      note: "Refresh tokens were cleared so affected admins must sign in again.",
+    });
+  }
+};
+
 export const ensureAdminAccount = async () => {
+  await migrateLegacySuperAdminUsers();
+
   const username = sanitizeUsername(env.ADMIN_USERNAME);
   const email = resolveAdminEmail();
 

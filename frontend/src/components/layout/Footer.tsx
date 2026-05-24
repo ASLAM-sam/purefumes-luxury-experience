@@ -50,8 +50,6 @@ const trustItems = [
   { label: "Fast Delivery Across India", Icon: Truck },
 ] as const;
 
-const paymentBadges = ["Razorpay", "UPI", "Cards", "Net Banking", "COD"];
-
 export const Footer = memo(function Footer() {
   return (
     <footer className="border-t border-border bg-[#fffaf4] text-[#5b3a29]">
@@ -158,18 +156,8 @@ export const Footer = memo(function Footer() {
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-5 border-t border-border pt-6 text-[clamp(0.75rem,0.16vw+0.72rem,0.82rem)] text-[#8b6b56] md:flex-row md:items-center md:justify-between">
+        <div className="mt-10 border-t border-border pt-6 text-[clamp(0.75rem,0.16vw+0.72rem,0.82rem)] text-[#8b6b56]">
           <p>© 2026 Purefumes Hyderabad. All rights reserved.</p>
-          <div className="flex flex-wrap gap-2">
-            {paymentBadges.map((badge) => (
-              <span
-                key={badge}
-                className="border border-[#c89b63]/30 bg-[#f7f3ed] px-3 py-1 text-[0.58rem] uppercase tracking-[0.2em] text-[#8b5f3d]"
-              >
-                {badge}
-              </span>
-            ))}
-          </div>
         </div>
       </Container>
     </footer>

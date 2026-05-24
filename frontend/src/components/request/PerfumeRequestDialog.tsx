@@ -18,10 +18,10 @@ const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_FILES = 3;
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const DISPLAY_BUDGET_OPTIONS = [
-  "Under Rs. 500",
-  "Rs. 500 - Rs. 1000",
-  "Rs. 1000 - Rs. 2000",
-  "Rs. 2000+",
+  "Under ₹500",
+  "₹500 - ₹1000",
+  "₹1000 - ₹2000",
+  "₹2000+",
   "Not sure",
 ] as const;
 

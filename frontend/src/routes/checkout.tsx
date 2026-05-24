@@ -1,13 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Minus, Plus, ShoppingBag } from "lucide-react";
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { AutoCouponSuggestion } from "@/components/common/AutoCouponSuggestion";
 import { Button } from "@/components/common/Button";
 import { Container } from "@/components/common/Container";
@@ -34,7 +27,8 @@ import {
   saveBuyNowSuccessState,
 } from "@/lib/buy-now";
 import { setRedirectAfterLogin } from "@/lib/auth-redirect";
-import { couponsApi, ordersApi, paymentsApi, type PaymentConfig } from "@/services/api";
+import { formatINR, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
+import { couponsApi, ordersApi, paymentsApi, type Order, type PaymentConfig } from "@/services/api";
 
 const RAZORPAY_URL = "https://checkout.razorpay.com/v1/checkout.js";
 
@@ -234,6 +228,50 @@ const upiOnlyDisplayConfig = {
   },
 };
 
+const wait = (duration: number) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, duration);
+  });
+
+const retryOperation = async <T,>(operation: () => Promise<T>, retries = 1): Promise<T> => {
+  try {
+    return await operation();
+  } catch (error) {
+    if (retries <= 0) throw error;
+    await wait(700);
+    return retryOperation(operation, retries - 1);
+  }
+};
+
+const orderItemsForSuccess = (order: Order) =>
+  Array.isArray(order.items)
+    ? order.items.map((item) => ({
+        productId: item.productId,
+        productName: item.productName || "Product",
+        brand: item.brand || "",
+        quantity: item.quantity || 1,
+        size: item.size || "Standard",
+        price: item.priceAtPurchase ?? item.price ?? 0,
+        productImage: item.productImage || "",
+      }))
+    : [];
+
+function PaymentVerificationOverlay({ message }: { message: string }) {
+  if (!message) return null;
+
+  return (
+    <div className="fixed inset-0 z-[2600] flex items-center justify-center bg-[#1e1b18]/55 px-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-2xl border border-gold/25 bg-[#fffaf4] px-6 py-7 text-center shadow-luxe">
+        <div className="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-gold/25 border-t-gold" />
+        <p className="mt-5 font-display text-2xl text-navy">{message}</p>
+        <p className="mt-2 text-sm leading-6 text-navy/58">
+          Please keep this tab open while we secure your order.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/checkout")({
   component: CheckoutPage,
 });
@@ -250,9 +288,9 @@ function DevelopmentPaymentPanel({
       <p className="text-[0.65rem] uppercase tracking-[0.4em] text-amber-700">Test payment mode</p>
       <h3 className="mt-2 font-display text-3xl text-navy">Complete checkout without Razorpay</h3>
       <p className="mt-2 text-sm leading-6 text-navy/68">
-        Test mode is enabled, so checkout will create real order records, update inventory,
-        preserve admin analytics visibility, and simulate multiple payment outcomes without real
-        gateway charges.
+        Test mode is enabled, so checkout will create real order records, update inventory, preserve
+        admin analytics visibility, and simulate multiple payment outcomes without real gateway
+        charges.
       </p>
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         {testPaymentOptions.map((option) => {
@@ -294,6 +332,7 @@ function CheckoutPage() {
   const [error, setError] = useState("");
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [paymentConfigError, setPaymentConfigError] = useState("");
+  const [verificationMessage, setVerificationMessage] = useState("");
   const [couponCode, setCouponCode] = useState("");
   const [appliedCoupon, setAppliedCoupon] = useState<AppliedCoupon | null>(null);
   const [couponMessage, setCouponMessage] = useState("");
@@ -337,19 +376,11 @@ function CheckoutPage() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!user) return;
-
-    setForm((current) =>
-      current.name.trim() || current.phone.trim() ? current : createDeliveryFormFromUser(user),
-    );
-  }, [user]);
-
   const maxQuantity = Math.max(1, product?.stock || 1);
 
   const subtotal = useMemo(() => {
     if (!size) return 0;
-    return size.price * quantity;
+    return multiplyMoney(size.price, quantity);
   }, [quantity, size]);
   const discount = appliedCoupon?.discount ?? 0;
   const finalTotal = appliedCoupon?.finalTotal ?? subtotal;
@@ -357,15 +388,18 @@ function CheckoutPage() {
   useEffect(() => {
     if (appliedCoupon && appliedCoupon.subtotal !== subtotal) {
       setAppliedCoupon(null);
-      setCouponMessage("Coupon removed because order details changed. Apply it again to recalculate.");
+      setCouponMessage(
+        "Coupon removed because order details changed. Apply it again to recalculate.",
+      );
       setCouponTone("info");
     }
   }, [appliedCoupon, subtotal]);
 
   const updateForm = useCallback(
-    (key: keyof DeliveryFormValues) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setForm((current) => ({ ...current, [key]: event.target.value }));
-    },
+    (key: keyof DeliveryFormValues) =>
+      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setForm((current) => ({ ...current, [key]: event.target.value }));
+      },
     [],
   );
 
@@ -403,17 +437,34 @@ function CheckoutPage() {
           items: [
             {
               productId: product.id,
+              name: product.name,
+              price: size.price,
               quantity,
               size: size.size,
             },
           ],
         });
 
+        if (!result || result.success === false) {
+          setAppliedCoupon(null);
+          setCouponMessage(result?.message || "Invalid coupon code");
+          setCouponTone("error");
+          return;
+        }
+
+        const discountAmount = normalizeMoney(
+          result.discount ?? result.coupon?.discountValue ?? 0,
+        );
+        const resultSubtotal = normalizeMoney(result.subtotal ?? subtotal);
+        const resultFinalTotal = normalizeMoney(
+          result.finalTotal ?? subtractMoney(resultSubtotal, discountAmount),
+        );
+
         setAppliedCoupon({
-          code: result.code,
-          discount: result.discount,
-          finalTotal: result.finalTotal,
-          subtotal: result.subtotal,
+          code: result.coupon?.code || result.code || trimmedCode.toUpperCase(),
+          discount: discountAmount,
+          finalTotal: resultFinalTotal,
+          subtotal: resultSubtotal,
         });
         setCouponMessage(result.message || "Coupon applied successfully");
         setCouponTone("success");
@@ -427,7 +478,7 @@ function CheckoutPage() {
         setCouponLoading(false);
       }
     },
-    [couponCode, product, quantity, size],
+    [couponCode, product, quantity, size, subtotal],
   );
 
   const removeCoupon = useCallback(() => {
@@ -497,40 +548,64 @@ function CheckoutPage() {
       };
 
       try {
-        const order = await ordersApi.create({
-          customerName: customer.name,
-          phone: customer.phone,
-          address: customer.address,
-          shippingAddress,
-          couponCode: appliedCoupon?.code || undefined,
-          items: [
-            {
-              productId: product.id,
-              quantity,
-              size: size.size,
-            },
-          ],
-          paymentId: paymentResponse.razorpay_payment_id,
-          paymentMethod: paymentName,
-          paymentGateway,
-          paymentOrderId: paymentResponse.razorpay_order_id,
-          paymentSignature: paymentResponse.razorpay_signature,
-          paymentStatus,
-        });
+        const order = await retryOperation(
+          () =>
+            ordersApi.create({
+              customerName: customer.name,
+              phone: customer.phone,
+              address: customer.address,
+              shippingAddress,
+              couponCode: appliedCoupon?.code || undefined,
+              items: [
+                {
+                  productId: product.id,
+                  quantity,
+                  size: size.size,
+                },
+              ],
+              paymentId: paymentResponse.razorpay_payment_id,
+              paymentMethod: paymentName,
+              paymentGateway,
+              paymentOrderId: paymentResponse.razorpay_order_id,
+              paymentSignature: paymentResponse.razorpay_signature,
+              paymentStatus,
+            }),
+          1,
+        );
+        const orderItems = orderItemsForSuccess(order);
 
         saveBuyNowSuccessState({
           buyNowProduct: product,
           buyNowSize: size,
           buyNowQuantity: quantity,
+          buyNowOrderItems: orderItems.length
+            ? orderItems
+            : [
+                {
+                  productId: product.id,
+                  productName: product.name,
+                  brand: product.brand,
+                  quantity,
+                  size: size.size,
+                  price: size.price,
+                  productImage: product.image || product.images?.[0] || "",
+                },
+              ],
           buyNowCustomer: customer,
           buyNowPaymentMethod: paymentName,
           buyNowPaymentId: paymentResponse.razorpay_payment_id,
+          buyNowPaymentOrderId: paymentResponse.razorpay_order_id,
           buyNowPaymentGateway: paymentGateway,
-          buyNowOrderId: order.id || order._id,
+          buyNowPaymentStatus: order.paymentStatus || paymentStatus,
+          buyNowOrderStatus: order.status || order.orderStatus,
+          buyNowOrderId: order.publicOrderId || "",
+          buyNowPublicOrderId: order.publicOrderId || "",
+          buyNowOrderDate: order.createdAt || new Date().toISOString(),
           buyNowCouponCode: order.couponCode || "",
           buyNowSubtotal: order.subtotalAmount ?? subtotal,
           buyNowDiscount: order.discountAmount ?? 0,
           buyNowFinalTotal: order.totalAmount,
+          buyNowShouldOpenWhatsApp: paymentStatus === "paid" && paymentGateway === "Razorpay",
         });
         clearBuyNowCheckoutState();
         addNotification(
@@ -550,19 +625,11 @@ function CheckoutPage() {
         setError(message);
         addNotification(message, "error");
       } finally {
+        setVerificationMessage("");
         setLoading(null);
       }
     },
-    [
-      addNotification,
-      appliedCoupon?.code,
-      form,
-      nav,
-      product,
-      quantity,
-      size,
-      subtotal,
-    ],
+    [addNotification, appliedCoupon?.code, form, nav, product, quantity, size, subtotal],
   );
 
   const handleBypassPayment = useCallback(
@@ -639,9 +706,7 @@ function CheckoutPage() {
         });
       } catch (orderError) {
         const message =
-          orderError instanceof Error
-            ? orderError.message
-            : "Payment order could not be created.";
+          orderError instanceof Error ? orderError.message : "Payment order could not be created.";
         setLoading(null);
         setError(message);
         addNotification(message, "error");
@@ -673,7 +738,9 @@ function CheckoutPage() {
         handler: (response) => {
           void (async () => {
             try {
-              await verifyRazorpayResponse(response);
+              setVerificationMessage("Verifying your payment...");
+              await retryOperation(() => verifyRazorpayResponse(response), 1);
+              setVerificationMessage("Saving your order...");
               await handleOrderSuccess(response, paymentName);
             } catch (verificationError) {
               const message =
@@ -681,6 +748,7 @@ function CheckoutPage() {
                   ? verificationError.message
                   : "Payment could not be verified.";
               setLoading(null);
+              setVerificationMessage("");
               setError(message);
               addNotification(message, "error");
             }
@@ -700,7 +768,9 @@ function CheckoutPage() {
         },
         modal: {
           ondismiss: () => {
-            setLoading(null);
+            if (!verificationMessage) {
+              setLoading(null);
+            }
           },
         },
         theme: {
@@ -729,6 +799,7 @@ function CheckoutPage() {
       quantity,
       size,
       validateCustomerDetails,
+      verificationMessage,
     ],
   );
 
@@ -782,6 +853,7 @@ function CheckoutPage() {
 
   return (
     <SiteShell>
+      <PaymentVerificationOverlay message={verificationMessage} />
       <section className="py-12 md:py-16">
         <Container>
           <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
@@ -820,7 +892,9 @@ function CheckoutPage() {
                   <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">
                     {product.brand}
                   </p>
-                  <h2 className="mt-2 font-display text-2xl text-navy sm:text-3xl">{product.name}</h2>
+                  <h2 className="mt-2 font-display text-2xl text-navy sm:text-3xl">
+                    {product.name}
+                  </h2>
                   <p className="mt-2 text-sm text-muted-foreground">{size.size}</p>
                   <p className="mt-4 text-sm leading-7 text-muted-foreground">
                     {product.description}
@@ -861,7 +935,7 @@ function CheckoutPage() {
                 <Button
                   type="submit"
                   variant="gold"
-                  disabled={Boolean(loading)}
+                  disabled={Boolean(loading || verificationMessage)}
                   className="mt-2 w-full rounded-full px-6 py-3 text-[0.72rem] font-semibold tracking-[0.28em]"
                 >
                   Confirm Order
@@ -870,7 +944,10 @@ function CheckoutPage() {
 
               {paymentConfigError && !paymentConfig ? (
                 <div className="mt-6">
-                  <ErrorState description={paymentConfigError} onRetry={() => void ensurePaymentConfig()} />
+                  <ErrorState
+                    description={paymentConfigError}
+                    onRetry={() => void ensurePaymentConfig()}
+                  />
                 </div>
               ) : null}
 
@@ -893,7 +970,7 @@ function CheckoutPage() {
               <div className="mt-5 space-y-4 text-sm text-beige/75">
                 <div className="flex items-center justify-between gap-4">
                   <span>Price</span>
-                  <span>Rs. {size.price}</span>
+                  <span>{formatINR(size.price)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>Quantity</span>
@@ -905,12 +982,12 @@ function CheckoutPage() {
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>Subtotal</span>
-                  <span>Rs. {subtotal.toLocaleString("en-IN")}</span>
+                  <span>{formatINR(subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span>Discount</span>
                   <span className={discount > 0 ? "text-green-300" : ""}>
-                    -Rs. {discount.toLocaleString("en-IN")}
+                    -{formatINR(discount)}
                   </span>
                 </div>
               </div>
@@ -918,9 +995,7 @@ function CheckoutPage() {
                 <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">
                   Final Total
                 </p>
-                <p className="mt-2 font-display text-4xl text-beige">
-                  Rs. {finalTotal.toLocaleString("en-IN")}
-                </p>
+                <p className="mt-2 font-display text-4xl text-beige">{formatINR(finalTotal)}</p>
                 {isBypassMode ? (
                   <p className="mt-3 text-xs uppercase tracking-[0.2em] text-amber-300">
                     TEST MODE
@@ -993,20 +1068,14 @@ function CartCheckout() {
   const nav = useNavigate();
   const { addNotification } = useNotification();
   const { user } = useAuth();
-  const {
-    cart,
-    cartTotal,
-    cartDiscount,
-    cartFinalTotal,
-    cartCouponCode,
-    clearCart,
-  } = useApp();
+  const { cart, cartTotal, cartDiscount, cartFinalTotal, cartCouponCode, clearCart } = useApp();
   const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(user));
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [paymentConfigError, setPaymentConfigError] = useState("");
+  const [verificationMessage, setVerificationMessage] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -1032,9 +1101,10 @@ function CartCheckout() {
   }, []);
 
   const updateForm = useCallback(
-    (key: keyof DeliveryFormValues) => (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-      setForm((current) => ({ ...current, [key]: event.target.value }));
-    },
+    (key: keyof DeliveryFormValues) =>
+      (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+        setForm((current) => ({ ...current, [key]: event.target.value }));
+      },
     [],
   );
 
@@ -1078,24 +1148,54 @@ function CartCheckout() {
       paymentStatus: "paid" | "failed" | "pending" | "cod" = "paid",
     ) => {
       try {
-        await ordersApi.create({
-          customerName: form.name.trim(),
-          phone: form.phone.trim(),
-          address: buildDeliveryAddressText(form),
-          shippingAddress: buildShippingAddress(form),
-          couponCode: cartCouponCode || undefined,
-          clearCart: true,
-          items: cart.map((item) => ({
-            productId: item.product.id || item.product._id || "",
-            quantity: item.quantity,
-            size: item.size.size,
-          })),
-          paymentId: paymentResponse.razorpay_payment_id,
-          paymentMethod: paymentName,
-          paymentGateway,
-          paymentOrderId: paymentResponse.razorpay_order_id,
-          paymentSignature: paymentResponse.razorpay_signature,
-          paymentStatus,
+        const address = buildDeliveryAddressText(form);
+        const order = await retryOperation(
+          () =>
+            ordersApi.create({
+              customerName: form.name.trim(),
+              phone: form.phone.trim(),
+              address,
+              shippingAddress: buildShippingAddress(form),
+              couponCode: cartCouponCode || undefined,
+              clearCart: true,
+              items: cart.map((item) => ({
+                productId: item.product.id || item.product._id || "",
+                quantity: item.quantity,
+                size: item.size.size,
+              })),
+              paymentId: paymentResponse.razorpay_payment_id,
+              paymentMethod: paymentName,
+              paymentGateway,
+              paymentOrderId: paymentResponse.razorpay_order_id,
+              paymentSignature: paymentResponse.razorpay_signature,
+              paymentStatus,
+            }),
+          1,
+        );
+        const orderItems = orderItemsForSuccess(order);
+
+        saveBuyNowSuccessState({
+          buyNowOrderItems: orderItems,
+          buyNowCustomer: {
+            ...form,
+            name: form.name.trim(),
+            phone: form.phone.trim(),
+            address,
+          },
+          buyNowPaymentMethod: paymentName,
+          buyNowPaymentId: paymentResponse.razorpay_payment_id,
+          buyNowPaymentOrderId: paymentResponse.razorpay_order_id,
+          buyNowPaymentGateway: paymentGateway,
+          buyNowPaymentStatus: order.paymentStatus || paymentStatus,
+          buyNowOrderStatus: order.status || order.orderStatus,
+          buyNowOrderId: order.publicOrderId || "",
+          buyNowPublicOrderId: order.publicOrderId || "",
+          buyNowOrderDate: order.createdAt || new Date().toISOString(),
+          buyNowCouponCode: order.couponCode || "",
+          buyNowSubtotal: order.subtotalAmount ?? cartTotal,
+          buyNowDiscount: order.discountAmount ?? cartDiscount,
+          buyNowFinalTotal: order.totalAmount ?? cartFinalTotal,
+          buyNowShouldOpenWhatsApp: paymentStatus === "paid" && paymentGateway === "Razorpay",
         });
 
         clearCart();
@@ -1108,16 +1208,27 @@ function CartCheckout() {
                 ? "Test COD order created."
                 : "Payment successful. Order placed.",
         );
-        nav({ to: "/my-orders" });
+        nav({ to: "/success" });
       } catch (ex) {
         const message = ex instanceof Error ? ex.message : "Order could not be saved.";
         setError(message);
         addNotification(message, "error");
       } finally {
+        setVerificationMessage("");
         setLoading(null);
       }
     },
-    [addNotification, cart, cartCouponCode, clearCart, form, nav],
+    [
+      addNotification,
+      cart,
+      cartCouponCode,
+      cartDiscount,
+      cartFinalTotal,
+      cartTotal,
+      clearCart,
+      form,
+      nav,
+    ],
   );
 
   const handleBypassPayment = useCallback(
@@ -1185,9 +1296,7 @@ function CartCheckout() {
         });
       } catch (orderError) {
         const message =
-          orderError instanceof Error
-            ? orderError.message
-            : "Payment order could not be created.";
+          orderError instanceof Error ? orderError.message : "Payment order could not be created.";
         setLoading(null);
         setError(message);
         addNotification(message, "error");
@@ -1219,7 +1328,9 @@ function CartCheckout() {
         handler: (response) => {
           void (async () => {
             try {
-              await verifyRazorpayResponse(response);
+              setVerificationMessage("Verifying your payment...");
+              await retryOperation(() => verifyRazorpayResponse(response), 1);
+              setVerificationMessage("Saving your order...");
               await handleOrderSuccess(response, paymentName);
             } catch (verificationError) {
               const message =
@@ -1227,6 +1338,7 @@ function CartCheckout() {
                   ? verificationError.message
                   : "Payment could not be verified.";
               setLoading(null);
+              setVerificationMessage("");
               setError(message);
               addNotification(message, "error");
             }
@@ -1242,7 +1354,11 @@ function CartCheckout() {
           paymentOption: paymentName,
         },
         modal: {
-          ondismiss: () => setLoading(null),
+          ondismiss: () => {
+            if (!verificationMessage) {
+              setLoading(null);
+            }
+          },
         },
         theme: { color: "#5B3A29" },
       });
@@ -1266,6 +1382,7 @@ function CartCheckout() {
       handleBypassPayment,
       handleOrderSuccess,
       validate,
+      verificationMessage,
     ],
   );
 
@@ -1273,6 +1390,7 @@ function CartCheckout() {
 
   return (
     <SiteShell>
+      <PaymentVerificationOverlay message={verificationMessage} />
       <section className="py-12 md:py-16">
         <Container>
           <header>
@@ -1287,13 +1405,21 @@ function CartCheckout() {
             >
               <DeliveryDetailsFields form={form} onChange={updateForm} />
               {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-              <Button type="submit" variant="gold" className="mt-6 w-full">
+              <Button
+                type="submit"
+                variant="gold"
+                disabled={Boolean(loading || verificationMessage)}
+                className="mt-6 w-full"
+              >
                 Continue to Payment
               </Button>
 
               {paymentConfigError && !paymentConfig ? (
                 <div className="mt-6">
-                  <ErrorState description={paymentConfigError} onRetry={() => void ensurePaymentConfig()} />
+                  <ErrorState
+                    description={paymentConfigError}
+                    onRetry={() => void ensurePaymentConfig()}
+                  />
                 </div>
               ) : null}
 
@@ -1312,36 +1438,32 @@ function CartCheckout() {
             </form>
 
             <aside className="h-fit rounded-lg border border-border bg-navy p-6 text-beige shadow-luxe">
-              <p className="text-[0.65rem] uppercase tracking-[0.32em] text-gold">
-                Order Summary
-              </p>
+              <p className="text-[0.65rem] uppercase tracking-[0.32em] text-gold">Order Summary</p>
               <div className="mt-5 space-y-4">
                 {cart.map((item) => (
                   <div key={item.key} className="flex justify-between gap-4 text-sm text-beige/75">
                     <span>
                       {item.product.name} x {item.quantity}
                     </span>
-                    <span>Rs. {(item.size.price * item.quantity).toLocaleString("en-IN")}</span>
+                    <span>{formatINR(multiplyMoney(item.size.price, item.quantity))}</span>
                   </div>
                 ))}
               </div>
               <div className="mt-5 border-t border-beige/10 pt-5 text-sm text-beige/75">
                 <div className="flex justify-between">
                   <span>Subtotal</span>
-                  <span>Rs. {cartTotal.toLocaleString("en-IN")}</span>
+                  <span>{formatINR(cartTotal)}</span>
                 </div>
                 <div className="mt-3 flex justify-between">
                   <span>Discount</span>
-                  <span>-Rs. {cartDiscount.toLocaleString("en-IN")}</span>
+                  <span>-{formatINR(cartDiscount)}</span>
                 </div>
               </div>
               <div className="mt-5 border-t border-beige/10 pt-5">
                 <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">
                   Final Total
                 </p>
-                <p className="mt-2 font-display text-4xl text-beige">
-                  Rs. {cartFinalTotal.toLocaleString("en-IN")}
-                </p>
+                <p className="mt-2 font-display text-4xl text-beige">{formatINR(cartFinalTotal)}</p>
                 {isBypassMode ? (
                   <p className="mt-3 text-xs uppercase tracking-[0.2em] text-amber-300">
                     TEST MODE

@@ -9,6 +9,9 @@ import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import { setRedirectAfterLogin } from "@/lib/auth-redirect";
+import { formatINR } from "@/lib/money";
+import { getOrderDisplayId } from "@/lib/order-id";
+import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-status";
 import { ordersApi, type Order } from "@/services/api";
 
 export const Route = createFileRoute("/my-orders")({
@@ -76,15 +79,26 @@ function MyOrdersPage() {
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <p className="text-[0.65rem] uppercase tracking-[0.25em] text-gold">
-                        Order {order.id || order._id}
+                        Order ID{" "}
+                        <span className="font-semibold text-navy">
+                          {getOrderDisplayId(order)}
+                        </span>
                       </p>
                       <p className="mt-2 text-sm text-navy/60">
-                        {new Date(order.createdAt).toLocaleDateString()} · {order.paymentStatus || "pending"} · {order.status}
+                        {new Date(order.createdAt).toLocaleDateString("en-IN")}
                       </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-[0.68rem] uppercase tracking-[0.16em]">
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">
+                          Payment Status: {formatPaymentStatusLabel(order.paymentStatus)}
+                        </span>
+                        <span className="rounded-full bg-navy/10 px-3 py-1 text-navy/70">
+                          Order Status: {formatOrderStatusLabel(order.status)}
+                        </span>
+                      </div>
                     </div>
                     <div className="text-left sm:text-right">
                       <p className="font-display text-3xl text-navy">
-                        Rs. {Number(order.totalAmount || 0).toLocaleString("en-IN")}
+                        {formatINR(order.totalAmount)}
                       </p>
                       <Button onClick={() => void reorder(order.id || order._id)} variant="outline" className="mt-3">
                         <RotateCcw className="mr-2 h-4 w-4" /> Reorder
@@ -112,7 +126,8 @@ function MyOrdersPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium text-navy">{item.productName}</p>
                           <p className="mt-1 text-sm text-navy/60">
-                            {item.quantity} x {item.size || "Standard"} · Rs. {Number(item.priceAtPurchase || item.price).toLocaleString("en-IN")}
+                            {item.quantity} x {item.size || "Standard"} ·{" "}
+                            {formatINR(item.priceAtPurchase ?? item.price)}
                           </p>
                         </div>
                       </div>

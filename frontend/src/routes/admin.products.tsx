@@ -8,6 +8,7 @@ import { useNotification } from "@/context/NotificationContext";
 import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
+import { formatINR } from "@/lib/money";
 import { brandsApi, categoriesApi, productsApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/products")({
@@ -387,7 +388,7 @@ function AdminProducts() {
                         </button>
                       </td>
                       <td className="px-6 py-4 text-right text-gold font-medium">
-                        Rs. {price.toLocaleString("en-IN")}
+                        {formatINR(price)}
                       </td>
                       <td
                         className={`px-6 py-4 text-right tabular-nums ${

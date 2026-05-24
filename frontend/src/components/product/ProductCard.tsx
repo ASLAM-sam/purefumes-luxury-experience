@@ -7,6 +7,7 @@ import type { Product } from "@/data/products";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { useApp } from "@/context/AppContext";
 import { useNotification } from "@/context/NotificationContext";
+import { formatINR } from "@/lib/money";
 
 type ProductCardProps = {
   product: Product;
@@ -35,7 +36,6 @@ export const ProductCard = memo(function ProductCard({
   const { addToCart } = useApp();
   const { addNotification } = useNotification();
   const startPrice = product.sizes[0]?.price ?? product.price ?? 0;
-  const formattedPrice = Number(startPrice || 0).toLocaleString("en-IN");
   const originalPrice = Number(product.originalPrice || 0);
   const hasDiscount = originalPrice > startPrice;
   const discountPercentage = hasDiscount
@@ -157,10 +157,10 @@ export const ProductCard = memo(function ProductCard({
           ) : null}
 
           <div className="product-price mt-2 flex items-center justify-center gap-2 text-[clamp(0.88rem,0.18vw+0.84rem,1rem)] text-[#5b3a29]">
-            <span className="font-medium">Rs. {formattedPrice}</span>
+            <span className="font-medium">{formatINR(startPrice)}</span>
             {hasDiscount ? (
               <span className="text-xs text-[#8b6b56]/70 line-through">
-                Rs. {originalPrice.toLocaleString("en-IN")}
+                {formatINR(originalPrice)}
               </span>
             ) : null}
           </div>

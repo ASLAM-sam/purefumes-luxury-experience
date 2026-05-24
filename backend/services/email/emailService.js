@@ -10,7 +10,6 @@ import {
 } from "./templates/resetPasswordTemplate.js";
 import { loginAlertTemplate } from "./templates/loginAlertTemplate.js";
 import { orderStatusTemplate, orderTemplate } from "./templates/orderTemplate.js";
-import { newsletterTemplate } from "./templates/newsletterTemplate.js";
 
 // Helper function to extract plain text from HTML for fallback
 const extractTextFromHtml = (html) => {
@@ -54,18 +53,6 @@ const templates = {
   orderStatus: {
     subject: "Your Purefumes Hyderabad order status changed",
     render: orderStatusTemplate,
-  },
-  newsletter: {
-    subject: "Purefumes Hyderabad fragrance edit",
-    render: newsletterTemplate,
-  },
-  promotion: {
-    subject: "A private fragrance offer from Purefumes Hyderabad",
-    render: newsletterTemplate,
-  },
-  abandonedCart: {
-    subject: "Your Purefumes Hyderabad cart is waiting",
-    render: newsletterTemplate,
   },
   testEmail: {
     subject: "Brevo SMTP Test",

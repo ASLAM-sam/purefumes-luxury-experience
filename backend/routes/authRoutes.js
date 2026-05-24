@@ -18,8 +18,8 @@ import {
 import { adminAuth, requireAuth } from "../middlewares/authMiddleware.js";
 import {
   authLimiter,
+  failedLoginLimiter,
   forgotPasswordLimiter,
-  loginLimiter,
   signupLimiter,
 } from "../middlewares/rateLimiter.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
@@ -52,7 +52,7 @@ router.get("/csrf-token", csrfToken);
 router.get("/me", requireAuth, getMe);
 
 router.post("/signup", signupLimiter, signupValidation, validateRequest, signupUser);
-router.post("/login", loginLimiter, loginValidation, validateRequest, loginUser);
+router.post("/login", failedLoginLimiter, loginValidation, validateRequest, loginUser);
 router.post("/logout", logoutUser);
 router.post("/refresh", refreshUserSession);
 router.post(

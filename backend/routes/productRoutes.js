@@ -147,16 +147,12 @@ const createProductValidation = [
     .withMessage("Stock is required")
     .isInt({ min: 0 })
     .withMessage("Stock must be positive"),
-  body("videoUrl")
-    .optional({ values: "falsy" })
-    .trim()
-    .matches(/\.(mp4|webm|mov)(\?.*)?$/i)
-    .withMessage("Video URL must point to an mp4, webm, or mov file"),
   body("isLatest")
     .optional()
     .isBoolean()
     .withMessage("isLatest must be a boolean"),
   body("description").optional().trim().isLength({ max: 4000 }),
+  body("type").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
 ];
 
 const updateProductValidation = [
@@ -201,16 +197,12 @@ const updateProductValidation = [
       }
     })
     .withMessage("existingImages must be a valid image list"),
-  body("videoUrl")
-    .optional({ values: "falsy" })
-    .trim()
-    .matches(/\.(mp4|webm|mov)(\?.*)?$/i)
-    .withMessage("Video URL must point to an mp4, webm, or mov file"),
   body("isLatest")
     .optional()
     .isBoolean()
     .withMessage("isLatest must be a boolean"),
   body("description").optional().trim().isLength({ max: 4000 }),
+  body("type").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
 ];
 
 const updateBestsellerValidation = [
@@ -258,6 +250,7 @@ router.post(
   body("products.*.brand").optional().trim().isLength({ max: 120 }),
   body("products.*.category").optional().trim().isLength({ max: 120 }),
   body("products.*.description").optional({ values: "falsy" }).trim().isLength({ max: 4000 }),
+  body("products.*.type").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
   validateRequest,
   bulkCreateProducts,
 );

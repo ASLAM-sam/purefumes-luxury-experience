@@ -19,7 +19,6 @@ const collectUploadedFiles = (req) => {
   }
 
   [
-    req.productVideoFile,
     req.categoryImageFile,
     req.categoryBannerImageFile,
     ...(Array.isArray(req.productImageFiles) ? req.productImageFiles : []),

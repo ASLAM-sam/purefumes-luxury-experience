@@ -149,10 +149,17 @@ export const useDateRangeFilter = ({
   }, []);
 
   const queryParams = useMemo(
-    () =>
-      range === "custom"
-        ? { range, from, to }
-        : { range },
+    () => ({
+      range,
+      startDate: from,
+      endDate: to,
+      from,
+      to,
+    }),
+    [from, range, to],
+  );
+  const queryKey = useMemo(
+    () => `${range}:${from}:${to}`,
     [from, range, to],
   );
 
@@ -160,10 +167,15 @@ export const useDateRangeFilter = ({
     range,
     from,
     to,
+    selectedRange: {
+      startDate: from,
+      endDate: to,
+    },
     maxDate: getTodayInputValue(),
     validationError,
     isValid,
     queryParams,
+    queryKey,
     setRange,
     setFrom,
     setTo,

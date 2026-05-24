@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import winston from "winston";
 import env from "./env.js";
+import { redactSensitive } from "../utils/redaction.js";
 
 const logsDir = path.resolve("logs");
 
@@ -12,6 +13,10 @@ if (!fs.existsSync(logsDir)) {
 const baseFormat = winston.format.combine(
   winston.format.timestamp(),
   winston.format.errors({ stack: true }),
+  winston.format((info) => {
+    Object.assign(info, redactSensitive(info));
+    return info;
+  })(),
   winston.format.json(),
 );
 

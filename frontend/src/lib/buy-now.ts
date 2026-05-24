@@ -22,17 +22,34 @@ export type BuyNowState = {
   buyNowSize?: Size;
 };
 
+export type OrderSuccessItem = {
+  productId?: string;
+  productName: string;
+  brand?: string;
+  quantity: number;
+  size?: string;
+  price?: number;
+  productImage?: string;
+};
+
 export type BuyNowSuccessState = BuyNowState & {
   buyNowQuantity?: number;
+  buyNowOrderItems?: OrderSuccessItem[];
   buyNowCustomer?: BuyNowCustomer;
   buyNowPaymentMethod?: string;
   buyNowPaymentId?: string;
+  buyNowPaymentOrderId?: string;
   buyNowPaymentGateway?: string;
+  buyNowPaymentStatus?: string;
+  buyNowOrderStatus?: string;
   buyNowOrderId?: string;
+  buyNowPublicOrderId?: string;
+  buyNowOrderDate?: string;
   buyNowCouponCode?: string;
   buyNowSubtotal?: number;
   buyNowDiscount?: number;
   buyNowFinalTotal?: number;
+  buyNowShouldOpenWhatsApp?: boolean;
 };
 
 const BUY_NOW_CHECKOUT_STORAGE_KEY = "purefumes_buy_now_checkout";

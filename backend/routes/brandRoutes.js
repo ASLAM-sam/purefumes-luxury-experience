@@ -12,7 +12,6 @@ import { adminAuth } from "../middlewares/authMiddleware.js";
 import { adminLimiter, uploadLimiter } from "../middlewares/rateLimiter.js";
 import { uploadBrandLogo } from "../middlewares/uploadMiddleware.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
-import { BRAND_CATEGORIES } from "../models/Brand.js";
 
 const router = express.Router();
 
@@ -43,9 +42,24 @@ const brandValidation = [
     .trim()
     .custom(isHttpImageUrl)
     .withMessage("Brand logo must be a valid URL"),
+  body("categoryId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Valid category id is required"),
   body("category")
-    .isIn(BRAND_CATEGORIES)
-    .withMessage("Invalid brand category"),
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 120 })
+    .withMessage("Brand category is too long"),
+  body("categoryName").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
+  body("categorySlug").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
+  body().custom((value) => {
+    if (value.categoryId || value.category || value.categoryName || value.categorySlug) {
+      return true;
+    }
+
+    throw new Error("Brand category is required");
+  }),
 ];
 
 const brandUpdateValidation = [
@@ -56,10 +70,17 @@ const brandUpdateValidation = [
     .trim()
     .custom(isHttpImageUrl)
     .withMessage("Brand logo must be a valid URL"),
+  body("categoryId")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Valid category id is required"),
   body("category")
     .optional()
-    .isIn(BRAND_CATEGORIES)
-    .withMessage("Invalid brand category"),
+    .trim()
+    .isLength({ max: 120 })
+    .withMessage("Brand category is too long"),
+  body("categoryName").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
+  body("categorySlug").optional({ values: "falsy" }).trim().isLength({ max: 120 }),
 ];
 
 router.get(
@@ -67,7 +88,8 @@ router.get(
   [
     query("category")
       .optional()
-      .isIn(BRAND_CATEGORIES)
+      .trim()
+      .isLength({ max: 120 })
       .withMessage("Invalid brand category"),
   ],
   validateRequest,

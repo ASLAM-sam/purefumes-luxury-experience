@@ -1,31 +1,7 @@
 import crypto from "crypto";
 import morgan from "morgan";
 import logger from "../config/logger.js";
-
-const SENSITIVE_QUERY_KEYS = new Set([
-  "token",
-  "code",
-  "password",
-  "resetToken",
-  "verificationToken",
-  "paymentSignature",
-]);
-
-const sanitizeUrl = (url = "") => {
-  try {
-    const parsed = new URL(url, "http://local.request");
-
-    parsed.searchParams.forEach((_value, key) => {
-      if (SENSITIVE_QUERY_KEYS.has(key)) {
-        parsed.searchParams.set(key, "[redacted]");
-      }
-    });
-
-    return `${parsed.pathname}${parsed.search}`;
-  } catch (_error) {
-    return String(url).replace(/([?&](?:token|code|password|resetToken|verificationToken|paymentSignature)=)[^&]+/gi, "$1[redacted]");
-  }
-};
+import { sanitizeUrl } from "../utils/redaction.js";
 
 export const attachRequestId = (req, res, next) => {
   req.id = req.headers["x-request-id"] || crypto.randomUUID();

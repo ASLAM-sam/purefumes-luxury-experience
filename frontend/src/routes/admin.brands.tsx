@@ -14,7 +14,9 @@ import {
 } from "@/components/ui/dialog";
 import { useNotification } from "@/context/NotificationContext";
 import type { Brand } from "@/data/brands";
-import { brandsApi } from "@/services/api";
+import type { Category } from "@/data/categories";
+import { frontendEventBus } from "@/lib/performance/event-bus";
+import { brandsApi, categoriesApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/brands")({
   component: AdminBrands,
@@ -29,9 +31,10 @@ const formatCategory = (category: Brand["category"]) =>
 function AdminBrands() {
   const { addNotification } = useNotification();
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<"all" | Brand["category"]>("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | string>("all");
   const [sortMode, setSortMode] = useState<"name-asc" | "name-desc" | "products-desc">("name-asc");
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkModalOpen, setBulkModalOpen] = useState(false);
@@ -72,31 +75,70 @@ function AdminBrands() {
     loadBrands();
   }, [loadBrands]);
 
+  const loadCategories = useCallback(async () => {
+    try {
+      const nextCategories = await categoriesApi.listAdmin({ forceFresh: true });
+      setCategories(nextCategories.filter((category) => !category.isDeleted));
+    } catch (_ex) {
+      setCategories([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCategories();
+
+    const unsubscribe = frontendEventBus.subscribe("catalog:changed", ({ scope }) => {
+      if (scope === "categories" || scope === "all") {
+        void loadCategories();
+      }
+    });
+
+    return unsubscribe;
+  }, [loadCategories]);
+
   const modalTitle = useMemo(
     () => (editingBrand ? `Edit ${editingBrand.name}` : "New Brand"),
     [editingBrand],
   );
 
   const categoryCounts = useMemo(() => {
-    const counts = {
+    const counts: Record<string, number> = {
       all: brands.length,
-      "middle-eastern": 0,
-      designer: 0,
-      niche: 0,
     };
 
     brands.forEach((brand) => {
-      counts[brand.category] += 1;
+      const category = brand.category || brand.categorySlug || "";
+      if (!category) return;
+      counts[category] = (counts[category] || 0) + 1;
     });
 
     return counts;
   }, [brands]);
 
+  const categoryFilterOptions = useMemo(() => {
+    const bySlug = new Map<string, string>();
+
+    categories.forEach((category) => {
+      bySlug.set(category.slug, category.name);
+    });
+
+    brands.forEach((brand) => {
+      const slug = brand.category || brand.categorySlug || "";
+      if (slug && !bySlug.has(slug)) {
+        bySlug.set(slug, brand.categoryName || formatCategory(slug));
+      }
+    });
+
+    return [...bySlug.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((left, right) => left.label.localeCompare(right.label));
+  }, [brands, categories]);
+
   const visibleBrands = useMemo(() => {
     const filtered =
       categoryFilter === "all"
         ? [...brands]
-        : brands.filter((brand) => brand.category === categoryFilter);
+        : brands.filter((brand) => (brand.category || brand.categorySlug) === categoryFilter);
 
     filtered.sort((left, right) => {
       if (sortMode === "name-desc") {
@@ -172,15 +214,15 @@ function AdminBrands() {
         </div>
         <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
           <p className="text-xs uppercase tracking-[0.18em] text-navy/50">Middle Eastern</p>
-          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts["middle-eastern"]}</p>
+          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts["middle-eastern"] || 0}</p>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
           <p className="text-xs uppercase tracking-[0.18em] text-navy/50">Designer</p>
-          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.designer}</p>
+          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.designer || 0}</p>
         </div>
         <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
           <p className="text-xs uppercase tracking-[0.18em] text-navy/50">Niche</p>
-          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.niche}</p>
+          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.niche || 0}</p>
         </div>
       </section>
 
@@ -193,14 +235,16 @@ function AdminBrands() {
             <select
               value={categoryFilter}
               onChange={(event) =>
-                setCategoryFilter(event.target.value as "all" | Brand["category"])
+                setCategoryFilter(event.target.value as "all" | string)
               }
               className={`${controlCls} mt-2`}
             >
               <option value="all">All Categories</option>
-              <option value="middle-eastern">Middle Eastern</option>
-              <option value="designer">Designer</option>
-              <option value="niche">Niche</option>
+              {categoryFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
             </select>
           </label>
 
@@ -276,7 +320,9 @@ function AdminBrands() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h2 className="truncate text-lg font-medium text-navy">{brand.name}</h2>
-                      <p className="mt-1 text-sm text-navy/60">{formatCategory(brand.category)}</p>
+                      <p className="mt-1 text-sm text-navy/60">
+                        {brand.categoryName || formatCategory(brand.category)}
+                      </p>
                     </div>
 
                     <div className="rounded-xl border border-border bg-beige/30 px-3 py-2 text-right">
@@ -378,7 +424,7 @@ function AdminBrands() {
                     </td>
                     <td className="px-4 py-4 font-medium text-navy sm:px-6">{brand.name}</td>
                     <td className="px-4 py-4 text-navy/70 sm:px-6">
-                      {formatCategory(brand.category)}
+                      {brand.categoryName || formatCategory(brand.category)}
                     </td>
                     <td className="px-4 py-4 text-right text-navy/70 sm:px-6">
                       {brand.productCount ?? 0}

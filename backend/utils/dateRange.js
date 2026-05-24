@@ -47,15 +47,24 @@ export const isFutureDate = (value) => {
   return parsed ? startOfDay(parsed) > startOfDay(new Date()) : false;
 };
 
-export const isValidDateWindow = ({ from, to } = {}) => {
-  const parsedFrom = parseDateValue(from);
-  const parsedTo = parseDateValue(to);
+const getRangeStartInput = ({ from, startDate } = {}) => from || startDate;
+const getRangeEndInput = ({ to, endDate } = {}) => to || endDate;
 
-  if (!parsedFrom || !parsedTo) {
+export const isValidDateWindow = ({ from, to, startDate, endDate } = {}) => {
+  const startInput = getRangeStartInput({ from, startDate });
+  const endInput = getRangeEndInput({ to, endDate });
+  const normalizedFrom = parseDateValue(startInput);
+  const normalizedTo = parseDateValue(endInput);
+
+  if (!normalizedFrom || !normalizedTo) {
     return false;
   }
 
-  return startOfDay(parsedFrom) <= startOfDay(parsedTo) && !isFutureDate(from) && !isFutureDate(to);
+  return (
+    startOfDay(normalizedFrom) <= startOfDay(normalizedTo) &&
+    !isFutureDate(startInput) &&
+    !isFutureDate(endInput)
+  );
 };
 
 export const normalizeDateRangeKey = (range) => {
@@ -64,9 +73,24 @@ export const normalizeDateRangeKey = (range) => {
   return DATE_RANGE_KEYS.includes(key) ? key : "30d";
 };
 
-export const getDateRange = ({ range, from, to } = {}) => {
+export const getDateRange = ({ range, from, to, startDate: rawStartDate, endDate: rawEndDate } = {}) => {
   const now = new Date();
+  const requestedRange = String(range || "").trim();
   const normalizedRange = normalizeDateRangeKey(range);
+  const startInput = getRangeStartInput({ from, startDate: rawStartDate });
+  const endInput = getRangeEndInput({ to, endDate: rawEndDate });
+  const hasExplicitWindow = Boolean(startInput || endInput);
+
+  if (
+    hasExplicitWindow &&
+    isValidDateWindow({ startDate: startInput, endDate: endInput })
+  ) {
+    return {
+      key: requestedRange ? normalizedRange : "custom",
+      startDate: startOfDay(parseDateValue(startInput)),
+      endDate: endOfDay(parseDateValue(endInput)),
+    };
+  }
 
   if (normalizedRange === "today") {
     return {
@@ -109,11 +133,11 @@ export const getDateRange = ({ range, from, to } = {}) => {
     };
   }
 
-  if (normalizedRange === "custom" && isValidDateWindow({ from, to })) {
+  if (normalizedRange === "custom" && isValidDateWindow({ startDate: startInput, endDate: endInput })) {
     return {
       key: normalizedRange,
-      startDate: startOfDay(parseDateValue(from)),
-      endDate: endOfDay(parseDateValue(to)),
+      startDate: startOfDay(parseDateValue(startInput)),
+      endDate: endOfDay(parseDateValue(endInput)),
     };
   }
 
@@ -125,7 +149,7 @@ export const getDateRange = ({ range, from, to } = {}) => {
 };
 
 export const getCreatedAtRangeFilter = (query = {}) => {
-  if (!query.range && !query.from && !query.to) {
+  if (!query.range && !query.from && !query.to && !query.startDate && !query.endDate) {
     return null;
   }
 

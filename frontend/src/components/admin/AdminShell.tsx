@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
+import { formatINR } from "@/lib/money";
 import { isUsingMock, ordersApi, type Order } from "@/services/api";
 
 const items = [
@@ -77,7 +78,7 @@ function OrderNotificationsPanel({
                   {order.productName || order.items?.[0]?.productName || "New order"}
                 </p>
                 <p className="mt-1 text-xs font-medium text-gold">
-                  Rs. {Number(order.totalAmount || order.price || 0).toLocaleString("en-IN")}
+                  {formatINR(order.totalAmount ?? order.price ?? 0)}
                 </p>
               </div>
               <button
@@ -252,7 +253,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
                 to={to}
                 title={desktopSidebarCollapsed ? label : undefined}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm transition-colors ${
-                  active ? "bg-beige text-navy" : "text-beige/70 hover:bg-beige/10 hover:text-beige"
+                  active ? "bg-beige text-navy" : "text-beige/82 hover:bg-beige/12 hover:text-beige"
                 } ${desktopSidebarCollapsed ? "justify-center px-3" : ""}`}
               >
                 <Icon className="w-4 h-4 shrink-0" />
@@ -267,7 +268,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
             type="button"
             onClick={() => setNotificationOpen((open) => !open)}
             title={desktopSidebarCollapsed ? "New orders" : undefined}
-            className={`relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-beige/70 transition hover:bg-beige/10 hover:text-beige ${
+            className={`relative flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-beige/82 transition hover:bg-beige/12 hover:text-beige ${
               desktopSidebarCollapsed ? "justify-center px-3" : ""
             }`}
           >
@@ -299,7 +300,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
           <Link
             to="/"
             title={desktopSidebarCollapsed ? "View site" : undefined}
-            className={`flex items-center gap-2 text-xs text-beige/60 hover:text-beige px-4 py-2 ${
+            className={`flex items-center gap-2 text-xs text-beige/74 hover:text-beige px-4 py-2 ${
               desktopSidebarCollapsed ? "justify-center px-3" : ""
             }`}
           >
@@ -309,7 +310,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
           <button
             onClick={() => void onLogout()}
             title={desktopSidebarCollapsed ? "Sign out" : undefined}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-beige/70 hover:bg-beige/10 hover:text-beige transition ${
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-beige/82 hover:bg-beige/12 hover:text-beige transition ${
               desktopSidebarCollapsed ? "justify-center px-3" : ""
             }`}
           >
@@ -415,7 +416,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
                       className={`flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm transition-colors ${
                         active
                           ? "bg-navy text-beige"
-                          : "text-navy/70 hover:bg-beige/60 hover:text-navy"
+                          : "text-navy/78 hover:bg-beige/60 hover:text-navy"
                       }`}
                     >
                       <Icon className="h-4 w-4" /> {label}
@@ -426,7 +427,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
                 <Link
                   to="/"
                   onClick={() => setMobileMenuOpen(false)}
-                  className="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/60 hover:text-navy"
+                  className="flex min-h-11 items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/78 transition hover:bg-beige/60 hover:text-navy"
                 >
                   <ExternalLink className="h-4 w-4" /> View site
                 </Link>
@@ -434,7 +435,7 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
                 <button
                   type="button"
                   onClick={() => void onLogout()}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/60 hover:text-navy"
+                  className="flex min-h-11 w-full items-center gap-3 rounded-xl px-4 py-3 text-sm text-navy/78 transition hover:bg-beige/60 hover:text-navy"
                 >
                   <LogOut className="h-4 w-4" /> Sign out
                 </button>

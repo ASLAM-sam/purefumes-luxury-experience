@@ -2,7 +2,8 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import env from "../../config/env.js";
 import logger from "../../config/logger.js";
-import User from "../../models/User.js";
+import { captureMessage } from "../../config/sentry.js";
+import User, { normalizeUserRole } from "../../models/User.js";
 import { ApiError } from "../../middlewares/errorMiddleware.js";
 import { clearAuthCookies, getCookieOptions, setCsrfCookie } from "../../middlewares/securityMiddleware.js";
 import { createRandomToken, hashToken } from "../../utils/crypto.js";
@@ -20,6 +21,7 @@ const ACCESS_COOKIE = "token";
 const REFRESH_COOKIE = "refreshToken";
 const MAX_FAILED_LOGINS = 5;
 const LOCK_MINUTES = 15;
+const REFRESH_RACE_GRACE_MS = 10 * 1000;
 
 export const passwordRules =
   /^.{6,}$/;
@@ -40,7 +42,7 @@ export const serializeUser = (user) => {
     email: raw.email,
     username: raw.username || "",
     mobile: raw.mobile || "",
-    role: raw.role,
+    role: normalizeUserRole(raw.role),
     profileImage: raw.profileImage || "",
     addresses: raw.addresses || [],
     totalOrders: raw.totalOrders || 0,
@@ -91,7 +93,7 @@ const signAccessToken = (user) =>
       id: user._id.toString(),
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: normalizeUserRole(user.role),
       type: "access",
     },
     env.JWT_SECRET,
@@ -102,40 +104,42 @@ const signRefreshToken = ({ user, family }) =>
   jwt.sign(
     {
       sub: user._id.toString(),
-      role: user.role,
+      role: normalizeUserRole(user.role),
       type: "refresh",
       family,
+      jti: createRandomToken(12),
     },
     env.REFRESH_SECRET,
     { algorithm: "HS256", expiresIn: env.REFRESH_EXPIRE },
   );
 
-const addRefreshToken = async ({ user, token, family, req }) => {
-  const { ip, userAgent } = getClientInfo(req);
-  const expiresAt = new Date(Date.now() + parseDurationToMs(env.REFRESH_EXPIRE, 30 * 86400000));
+const getRefreshTokenExpiresAt = () =>
+  new Date(Date.now() + parseDurationToMs(env.REFRESH_EXPIRE, 30 * 86400000));
 
-  user.refreshTokens = (user.refreshTokens || []).filter(
-    (stored) => !stored.revokedAt && stored.expiresAt > new Date(),
-  );
-  user.refreshTokens.push({
+const buildRefreshTokenRecord = ({ token, family, req, now = new Date() }) => {
+  const { ip, userAgent } = getClientInfo(req);
+
+  return {
     tokenHash: hashToken(token),
     family,
     ip,
     userAgent,
-    expiresAt,
-    createdAt: new Date(),
-    lastUsedAt: new Date(),
-  });
+    expiresAt: getRefreshTokenExpiresAt(),
+    createdAt: now,
+    lastUsedAt: now,
+  };
+};
+
+const addRefreshToken = async ({ user, token, family, req }) => {
+  user.refreshTokens = (user.refreshTokens || []).filter(
+    (stored) => !stored.revokedAt && stored.expiresAt > new Date(),
+  );
+  user.refreshTokens.push(buildRefreshTokenRecord({ token, family, req }));
 
   await user.save();
 };
 
-const issueTokens = async ({ user, req, res, family = createRandomToken(12) }) => {
-  const accessToken = signAccessToken(user);
-  const refreshToken = signRefreshToken({ user, family });
-
-  await addRefreshToken({ user, token: refreshToken, family, req });
-
+const setSessionCookies = ({ res, accessToken, refreshToken }) => {
   res.cookie(
     ACCESS_COOKIE,
     accessToken,
@@ -152,6 +156,14 @@ const issueTokens = async ({ user, req, res, family = createRandomToken(12) }) =
     }),
   );
   setCsrfCookie(res);
+};
+
+const issueTokens = async ({ user, req, res, family = createRandomToken(12) }) => {
+  const accessToken = signAccessToken(user);
+  const refreshToken = signRefreshToken({ user, family });
+
+  await addRefreshToken({ user, token: refreshToken, family, req });
+  setSessionCookies({ res, accessToken, refreshToken });
 
   logger.info("JWT created", {
     userId: user.id,
@@ -205,6 +217,18 @@ const updateLoginFailure = async (user, req) => {
     failedLoginAttempts: user.failedLoginAttempts,
     ip: getClientInfo(req).ip,
   });
+
+  if (user.failedLoginAttempts >= MAX_FAILED_LOGINS) {
+    captureMessage("User account locked after repeated login failures", "warning", {
+      req,
+      tags: { area: "auth", action: "login_lockout" },
+      extra: {
+        userId: user.id,
+        role: normalizeUserRole(user.role),
+        failedLoginAttempts: user.failedLoginAttempts,
+      },
+    });
+  }
 };
 
 const clearExpiredAccountLock = async (user) => {
@@ -352,6 +376,21 @@ export const loginWithGoogle = async ({ profile, req, res }) => {
   };
 };
 
+const hasRecentRefreshReplacement = (user, family, now = new Date()) => {
+  if (!family) return false;
+
+  return (user.refreshTokens || []).some((stored) => {
+    const createdAt = stored.createdAt ? new Date(stored.createdAt).getTime() : 0;
+    return (
+      stored.family === family &&
+      !stored.revokedAt &&
+      stored.expiresAt > now &&
+      createdAt > 0 &&
+      now.getTime() - createdAt <= REFRESH_RACE_GRACE_MS
+    );
+  });
+};
+
 export const refreshSession = async ({ req, res }) => {
   const token = req.cookies?.[REFRESH_COOKIE] || "";
 
@@ -374,30 +413,101 @@ export const refreshSession = async ({ req, res }) => {
   const user = await User.findById(decoded.sub).select("+refreshTokens +accountLockedUntil");
   await ensureCanLogin(user);
 
+  const now = new Date();
   const tokenHash = hashToken(token);
-  const storedToken = user.refreshTokens.find(
-    (stored) =>
-      stored.tokenHash === tokenHash && !stored.revokedAt && stored.expiresAt > new Date(),
+  const family = decoded.family || createRandomToken(12);
+  const accessToken = signAccessToken(user);
+  const refreshToken = signRefreshToken({ user, family });
+  const refreshTokenRecord = buildRefreshTokenRecord({ token: refreshToken, family, req, now });
+  const rotation = await User.updateOne(
+    {
+      _id: user._id,
+      refreshTokens: {
+        $elemMatch: {
+          tokenHash,
+          revokedAt: null,
+          expiresAt: { $gt: now },
+        },
+      },
+    },
+    [
+      {
+        $set: {
+          refreshTokens: {
+            $concatArrays: [
+              {
+                $map: {
+                  input: "$refreshTokens",
+                  as: "stored",
+                  in: {
+                    $cond: [
+                      {
+                        $and: [
+                          { $eq: ["$$stored.tokenHash", tokenHash] },
+                          { $gt: ["$$stored.expiresAt", now] },
+                        ],
+                      },
+                      {
+                        $mergeObjects: [
+                          "$$stored",
+                          {
+                            revokedAt: now,
+                            lastUsedAt: now,
+                          },
+                        ],
+                      },
+                      "$$stored",
+                    ],
+                  },
+                },
+              },
+              [refreshTokenRecord],
+            ],
+          },
+        },
+      },
+    ],
   );
 
-  if (!storedToken) {
-    revokeRefreshFamily(user, decoded.family);
-    await user.save();
-    clearAuthCookies(res);
-    logger.warn("Refresh token reuse or replay detected", {
-      userId: user.id,
-      family: decoded.family || "",
-      ip: getClientInfo(req).ip,
-    });
-    throw new ApiError(401, "Refresh token has expired");
+  if (rotation.modifiedCount === 1) {
+    setSessionCookies({ res, accessToken, refreshToken });
+    logger.info("User session refreshed", { userId: user.id, role: normalizeUserRole(user.role) });
+    return serializeUser(user);
   }
 
-  storedToken.revokedAt = new Date();
-  storedToken.lastUsedAt = new Date();
-  await issueTokens({ user, req, res, family: decoded.family || storedToken.family });
-  logger.info("User session refreshed", { userId: user.id, role: user.role });
+  const latestUser = await User.findById(decoded.sub).select("+refreshTokens +accountLockedUntil");
+  await ensureCanLogin(latestUser);
 
-  return serializeUser(user);
+  if (hasRecentRefreshReplacement(latestUser, family, now)) {
+    setCsrfCookie(res);
+    logger.info("Concurrent refresh replay absorbed", {
+      userId: latestUser.id,
+      family,
+      ip: getClientInfo(req).ip,
+    });
+    return serializeUser(latestUser);
+  }
+
+  if (latestUser) {
+    revokeRefreshFamily(latestUser, family);
+    await latestUser.save();
+    clearAuthCookies(res);
+    logger.warn("Refresh token reuse or replay detected", {
+      userId: latestUser.id,
+      family,
+      ip: getClientInfo(req).ip,
+    });
+    captureMessage("Refresh token reuse or replay detected", "warning", {
+      req,
+      tags: { area: "auth", action: "refresh_replay" },
+      extra: {
+        userId: latestUser.id,
+        role: normalizeUserRole(latestUser.role),
+      },
+    });
+  }
+
+  throw new ApiError(401, "Refresh token has expired");
 };
 
 export const logout = async ({ req, res }) => {

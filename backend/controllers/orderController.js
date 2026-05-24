@@ -2,13 +2,12 @@ import mongoose from "mongoose";
 import Order, { ORDER_STATUSES } from "../models/Order.js";
 import { ApiError, asyncHandler } from "../middlewares/errorMiddleware.js";
 import { clearProductCache } from "./productController.js";
-import { createPaginationMeta, getPagination } from "../utils/apiFeatures.js";
-import { getCreatedAtRangeFilter } from "../utils/dateRange.js";
-import { applyCouponToSubtotal } from "../services/couponService.js";
 import {
-  buildPreparedOrderItems,
-  normalizeOrderItems,
-} from "../services/pricingService.js";
+  createPaginationMeta,
+  escapeRegex,
+  getPagination,
+} from "../utils/apiFeatures.js";
+import { getCreatedAtRangeFilter } from "../utils/dateRange.js";
 import {
   cancelOwnedOrder,
   createAuthenticatedOrder,
@@ -17,51 +16,26 @@ import {
   serializeOrder,
   updateOrderStatusAndNotify,
 } from "../services/orders/orderService.js";
+import { ensureOrdersPublicIds } from "../services/orders/publicOrderIdService.js";
 import { mergeGuestCart } from "../services/cart/cartService.js";
+import { buildOrderStatusFilter } from "../utils/orderStatusFilter.js";
 
-const normalizeOrderResponse = (order) => {
-  const raw =
-    typeof order?.toObject === "function"
-      ? order.toObject({ virtuals: true })
-      : order;
-  if (!raw) return raw;
+const buildOrderSearchFilter = (search = "") => {
+  const normalized = String(search || "").trim();
+  if (!normalized) return {};
 
-  const firstItem = raw.items?.[0] || {};
-  const productId =
-    raw.productId ||
-    raw.product?.toString?.() ||
-    raw.product ||
-    firstItem.productId?._id?.toString?.() ||
-    firstItem.productId?.toString?.() ||
-    firstItem.productId ||
-    "";
-  const { __v, ...cleanOrder } = raw;
+  const withoutHash = normalized.replace(/^#/, "");
+  const safeSearch = escapeRegex(normalized);
+  const safePublicOrderId = escapeRegex(withoutHash);
 
   return {
-    ...cleanOrder,
-    id: raw.id || raw._id?.toString?.() || raw._id,
-    product: raw.product || productId,
-    productId,
-    productName:
-      raw.productName ||
-      firstItem.productName ||
-      firstItem.productId?.name ||
-      "",
-    brand: raw.brand || firstItem.brand || firstItem.productId?.brand || "",
-    size: raw.size || firstItem.size || "",
-    price: Number(raw.price || firstItem.price || raw.totalAmount || 0),
-    totalAmount: Number(raw.totalAmount || raw.price || firstItem.price || 0),
-    subtotalAmount: Number(
-      raw.subtotalAmount || raw.totalAmount || raw.price || firstItem.price || 0,
-    ),
-    discountAmount: Number(raw.discountAmount || 0),
-    couponCode: raw.couponCode || "",
-    paymentId: raw.paymentId || "",
-    paymentMethod: raw.paymentMethod || "",
-    paymentGateway: raw.paymentGateway || "",
-    paymentOrderId: raw.paymentOrderId || "",
-    paymentSignature: raw.paymentSignature || "",
-    items: Array.isArray(raw.items) ? raw.items : [],
+    $or: [
+      { publicOrderId: { $regex: safePublicOrderId, $options: "i" } },
+      { customerName: { $regex: safeSearch, $options: "i" } },
+      { phone: { $regex: safeSearch, $options: "i" } },
+      { mobile: { $regex: safeSearch, $options: "i" } },
+      { "shippingAddress.mobile": { $regex: safeSearch, $options: "i" } },
+    ],
   };
 };
 
@@ -76,7 +50,11 @@ export const placeOrder = asyncHandler(async (req, res) => {
 
 export const getMyOrders = asyncHandler(async (req, res) => {
   const { page, limit } = getPagination(req.query);
-  const { orders, total } = await getUserOrders({ user: req.user, page, limit });
+  const { orders, total } = await getUserOrders({
+    user: req.user,
+    page,
+    limit,
+  });
 
   res.json({
     success: true,
@@ -101,7 +79,10 @@ export const cancelOrder = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid order id");
   }
 
-  const order = await cancelOwnedOrder({ orderId: req.params.id, user: req.user });
+  const order = await cancelOwnedOrder({
+    orderId: req.params.id,
+    user: req.user,
+  });
   res.json({ success: true, data: order });
 });
 
@@ -124,16 +105,23 @@ export const reorder = asyncHandler(async (req, res) => {
 });
 
 export const getOrders = asyncHandler(async (req, res) => {
-  const filter = {};
+  const filterParts = [];
 
   if (req.query.status) {
-    filter.status = req.query.status;
+    filterParts.push(buildOrderStatusFilter(req.query.status));
   }
 
   const createdAt = getCreatedAtRangeFilter(req.query);
   if (createdAt) {
-    filter.createdAt = createdAt;
+    filterParts.push({ createdAt });
   }
+
+  const searchFilter = buildOrderSearchFilter(req.query.search);
+  if (Object.keys(searchFilter).length) {
+    filterParts.push(searchFilter);
+  }
+
+  const filter = filterParts.length ? { $and: filterParts } : {};
 
   const shouldPaginate =
     req.query.page !== undefined || req.query.limit !== undefined;
@@ -145,9 +133,11 @@ export const getOrders = asyncHandler(async (req, res) => {
       .populate("items.productId", "name brand category image images stock")
       .lean({ virtuals: true });
 
+    const ordersWithPublicIds = await ensureOrdersPublicIds(orders);
+
     return res.json({
       success: true,
-      data: orders.map(normalizeOrderResponse),
+      data: ordersWithPublicIds.map(serializeOrder),
     });
   }
 
@@ -164,10 +154,12 @@ export const getOrders = asyncHandler(async (req, res) => {
     Order.countDocuments(filter),
   ]);
 
+  const ordersWithPublicIds = await ensureOrdersPublicIds(orders);
+
   res.json({
     success: true,
     data: {
-      orders: orders.map(normalizeOrderResponse),
+      orders: ordersWithPublicIds.map(serializeOrder),
       pagination: createPaginationMeta({ page, limit, total }),
     },
   });
@@ -180,9 +172,11 @@ export const getUnseenOrders = asyncHandler(async (_req, res) => {
     .populate("items.productId", "name brand category image images stock")
     .lean({ virtuals: true });
 
+  const ordersWithPublicIds = await ensureOrdersPublicIds(orders);
+
   res.json({
     success: true,
-    data: orders.map(normalizeOrderResponse),
+    data: ordersWithPublicIds.map(serializeOrder),
   });
 });
 
@@ -223,5 +217,7 @@ export const markOrderSeen = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Order not found");
   }
 
-  res.json({ success: true, data: normalizeOrderResponse(order) });
+  const [orderWithPublicId] = await ensureOrdersPublicIds([order]);
+
+  res.json({ success: true, data: serializeOrder(orderWithPublicId) });
 });

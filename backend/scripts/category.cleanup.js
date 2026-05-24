@@ -3,7 +3,6 @@ import connectDB from "../config/db.js";
 import Category, {
   createCategoryLookupKey,
   createCategorySlug,
-  normalizeCategoryColor,
   normalizeCategoryName,
 } from "../models/Category.js";
 import Product from "../models/Product.js";
@@ -13,22 +12,22 @@ const FALLBACK_CATEGORY_NAME = "Designer";
 const uniqueStrings = (values = []) =>
   [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
 
-const buildSlugFactory = () => {
-  const used = new Set();
+const getPublicCategorySlug = (name = "") => {
+  const slug = createCategorySlug(name);
 
-  return (value = "") => {
-    const baseSlug = createCategorySlug(value);
-    let candidate = baseSlug || "category";
-    let suffix = 2;
+  if (slug === "designer" || slug === "designer-fragrances") {
+    return "designer";
+  }
 
-    while (used.has(candidate)) {
-      candidate = `${baseSlug || "category"}-${suffix}`;
-      suffix += 1;
-    }
+  if (slug === "middle-eastern" || slug === "middle-eastern-fragrances") {
+    return "middle-eastern";
+  }
 
-    used.add(candidate);
-    return candidate;
-  };
+  if (slug === "niche" || slug === "niche-fragrances") {
+    return "niche";
+  }
+
+  return slug;
 };
 
 const sortCanonicalCandidates = (categories = []) =>
@@ -36,11 +35,6 @@ const sortCanonicalCandidates = (categories = []) =>
     const deletedDelta = Number(Boolean(left.isDeleted)) - Number(Boolean(right.isDeleted));
     if (deletedDelta !== 0) {
       return deletedDelta;
-    }
-
-    const featuredDelta = Number(Boolean(right.featured)) - Number(Boolean(left.featured));
-    if (featuredDelta !== 0) {
-      return featuredDelta;
     }
 
     const leftCreatedAt = new Date(left.createdAt || 0).getTime();
@@ -65,10 +59,9 @@ const run = async () => {
     productCollection.dropIndexes().catch(() => undefined),
   ]);
 
-  const slugFactory = buildSlugFactory();
   const canonicalNameMap = new Map();
-
   const rawCategoryGroups = new Map();
+
   rawCategories.forEach((category) => {
     const normalizedName = createCategoryLookupKey(category.name || "");
     if (!normalizedName) {
@@ -102,15 +95,8 @@ const run = async () => {
     canonicalNameMap.set(normalizedName, {
       id: primary?._id || new mongoose.Types.ObjectId(),
       name: canonicalName,
-      slug: slugFactory(primary?.slug || canonicalName),
       description: String(primary?.description || "").trim(),
       image: String(primary?.image || "").trim(),
-      icon: String(primary?.icon || "").trim(),
-      color: normalizeCategoryColor(primary?.color || "#8b5f3d"),
-      sortOrder: Number(primary?.sortOrder ?? primary?.displayOrder ?? 0),
-      isActive: primary?.isActive !== false && primary?.active !== false,
-      isDeleted: false,
-      featured: Boolean(primary?.featured),
       createdAt: primary?.createdAt || new Date(),
       updatedAt: new Date(),
       duplicateIds: orderedCandidates.slice(1).map((category) => category._id),
@@ -122,15 +108,8 @@ const run = async () => {
     canonicalNameMap.set(createCategoryLookupKey(FALLBACK_CATEGORY_NAME), {
       id: fallbackId,
       name: FALLBACK_CATEGORY_NAME,
-      slug: slugFactory(FALLBACK_CATEGORY_NAME),
       description: "",
       image: "",
-      icon: "",
-      color: "#8b5f3d",
-      sortOrder: 0,
-      isActive: true,
-      isDeleted: false,
-      featured: false,
       createdAt: new Date(),
       updatedAt: new Date(),
       duplicateIds: [],
@@ -139,20 +118,12 @@ const run = async () => {
 
   const duplicateIdMap = new Map();
   const canonicalCategoryDocs = [...canonicalNameMap.values()]
-    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
-    .map((category, index) => ({
+    .sort((left, right) => left.name.localeCompare(right.name))
+    .map((category) => ({
       _id: category.id,
       name: category.name,
-      normalizedName: createCategoryLookupKey(category.name),
-      slug: category.slug,
       description: category.description,
       image: category.image,
-      icon: category.icon,
-      color: category.color,
-      sortOrder: index,
-      isActive: category.isActive,
-      isDeleted: false,
-      featured: category.featured,
       createdAt: category.createdAt,
       updatedAt: new Date(),
     }));
@@ -230,7 +201,7 @@ const run = async () => {
             categories: orderedCategories.map((category) => category._id),
             primaryCategory: primaryCategory._id,
             categoryNames: orderedCategories.map((category) => category.name),
-            categorySlugs: orderedCategories.map((category) => category.slug),
+            categorySlugs: orderedCategories.map((category) => getPublicCategorySlug(category.name)),
           },
           $unset: {
             category: "",

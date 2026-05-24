@@ -6,6 +6,7 @@ import {
   deleteCoupon,
   listCoupons,
   toggleCouponStatus,
+  updateCoupon,
 } from "../controllers/couponController.js";
 import { adminAuth } from "../middlewares/authMiddleware.js";
 import { adminLimiter, couponLimiter } from "../middlewares/rateLimiter.js";
@@ -48,6 +49,18 @@ const couponFieldValidation = [
     .optional()
     .isBoolean()
     .withMessage("isActive must be a boolean"),
+  body("applicabilityType")
+    .optional({ values: "falsy" })
+    .isIn(["all", "selected"])
+    .withMessage("Applicability type must be all or selected"),
+  body("applicableProducts")
+    .optional()
+    .isArray()
+    .withMessage("Applicable products must be an array"),
+  body("applicableProducts.*")
+    .optional({ values: "falsy" })
+    .isMongoId()
+    .withMessage("Applicable product ids must be valid"),
   body().custom((_, { req }) => {
     const discountType = String(req.body.discountType || "").trim();
     const discountValue = Number(req.body.discountValue);
@@ -104,8 +117,30 @@ const applyCouponValidation = [
 ];
 
 router.get("/", adminLimiter, adminAuth, listCoupons);
-router.post("/", adminLimiter, adminAuth, couponFieldValidation, validateRequest, createCoupon);
-router.post("/apply", couponLimiter, applyCouponValidation, validateRequest, applyCoupon);
+router.post(
+  "/",
+  adminLimiter,
+  adminAuth,
+  couponFieldValidation,
+  validateRequest,
+  createCoupon,
+);
+router.post(
+  "/apply",
+  couponLimiter,
+  applyCouponValidation,
+  validateRequest,
+  applyCoupon,
+);
+router.put(
+  "/:id",
+  adminLimiter,
+  adminAuth,
+  couponIdParam,
+  couponFieldValidation,
+  validateRequest,
+  updateCoupon,
+);
 router.patch(
   "/:id/toggle",
   adminLimiter,

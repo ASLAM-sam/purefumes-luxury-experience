@@ -1,6 +1,9 @@
 import { baseTemplate, p } from "./baseTemplate.js";
+import { formatINR } from "../../../utils/money.js";
 
-const formatCurrency = (amount) => `Rs. ${Number(amount || 0).toLocaleString("en-IN")}`;
+const formatCurrency = formatINR;
+const formatOrderNumber = (order = {}) =>
+  order.publicOrderId ? `order #${order.publicOrderId}` : "your order";
 
 export const orderTemplate = ({ name, order }) => {
   const items = (order.items || [])
@@ -19,7 +22,7 @@ export const orderTemplate = ({ name, order }) => {
     preheader: "Your fragrance order has been placed.",
     body: [
       p(`Hello ${name},`),
-      p(`We have received your order ${order.id || order._id}. You will receive tracking updates as soon as it moves.`),
+      p(`We have received ${formatOrderNumber(order)}. You will receive tracking updates as soon as it moves.`),
       `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:18px;font-size:14px;">
         <tr><th align="left">Product</th><th align="center">Qty</th><th align="right">Price</th></tr>
         ${items}
@@ -35,7 +38,7 @@ export const orderStatusTemplate = ({ name, order }) =>
     preheader: `Your order is now ${order.status}.`,
     body: [
       p(`Hello ${name},`),
-      p(`Your order ${order.id || order._id} is now ${order.status}.`),
+      p(`${formatOrderNumber(order)} is now ${order.status}.`),
       order.trackingId ? p(`Tracking ID: ${order.trackingId}`) : "",
     ].join(""),
   });

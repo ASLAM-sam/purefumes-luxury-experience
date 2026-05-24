@@ -14,6 +14,10 @@ import {
 } from "../services/auth/authService.js";
 import { getUserProfile } from "../services/user/userService.js";
 import { setCsrfCookie } from "../middlewares/securityMiddleware.js";
+import {
+  recordFailedLoginAttempt,
+  resetLoginRateLimit,
+} from "../middlewares/rateLimiter.js";
 
 const sanitizeRedirectPath = (value, fallback = "/") => {
   const redirectPath = String(value || fallback).trim();
@@ -45,8 +49,15 @@ export const signupUser = asyncHandler(async (req, res) => {
 
 export const loginUser = asyncHandler(async (req, res) => {
   const identifier = req.body.identifier || req.body.email || req.body.mobile;
-  const user = await login({ identifier, password: req.body.password, req, res });
-  res.json({ success: true, data: { user } });
+
+  try {
+    const user = await login({ identifier, password: req.body.password, req, res });
+    resetLoginRateLimit(req, identifier);
+    res.json({ success: true, data: { user } });
+  } catch (error) {
+    recordFailedLoginAttempt(req, identifier);
+    throw error;
+  }
 });
 
 export const logoutUser = asyncHandler(async (req, res) => {

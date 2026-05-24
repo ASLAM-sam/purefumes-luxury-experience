@@ -5,9 +5,11 @@ import {
   IndianRupee,
   RefreshCw,
   ShoppingCart,
+  Trash2,
   TriangleAlert,
   Users,
 } from "lucide-react";
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -21,26 +23,51 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { AnalyticsChart } from "@/components/admin/AnalyticsChart";
 import { StatCard } from "@/components/admin/StatCard";
 import { Button } from "@/components/common/Button";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
+import { useNotification } from "@/context/NotificationContext";
 import { useAdminAnalytics } from "@/hooks/useAdminAnalytics";
+import { formatCompactINR, formatINR } from "@/lib/money";
+import { adminApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
 });
 
-const formatCurrency = (value: number) =>
-  `Rs. ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const formatCurrency = formatINR;
 
 const formatNumber = (value: number) => Number(value || 0).toLocaleString("en-IN");
 
 function AdminDashboard() {
+  const { addNotification } = useNotification();
   const { analytics, error, loading, refreshing, refresh } = useAdminAnalytics({
     initialRange: "30d",
   });
+  const [clearAnalyticsOpen, setClearAnalyticsOpen] = useState(false);
+  const [clearingAnalytics, setClearingAnalytics] = useState(false);
   const summary = analytics?.summary;
   const revenueTrend = analytics?.trends?.revenue || [];
+
+  const handleClearAnalytics = async () => {
+    setClearingAnalytics(true);
+    try {
+      const result = await adminApi.clearAnalytics();
+      await refresh();
+      addNotification(
+        `Analytics cleared. ${result.deletedOrders || 0} orders and ${result.deletedActivity || 0} activity entries removed.`,
+      );
+      setClearAnalyticsOpen(false);
+    } catch (clearError) {
+      addNotification(
+        clearError instanceof Error ? clearError.message : "Analytics could not be cleared.",
+        "error",
+      );
+    } finally {
+      setClearingAnalytics(false);
+    }
+  };
 
   return (
     <AdminShell>
@@ -69,6 +96,15 @@ function AdminDashboard() {
             >
               <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button
+              variant="destructive"
+              className="gap-2"
+              disabled={clearingAnalytics}
+              onClick={() => setClearAnalyticsOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear Analytics
             </Button>
             <Link
               to="/admin/analytics"
@@ -143,7 +179,7 @@ function AdminDashboard() {
                   <XAxis dataKey="label" tick={{ fill: "#5f6573", fontSize: 12 }} />
                   <YAxis
                     tick={{ fill: "#5f6573", fontSize: 12 }}
-                    tickFormatter={(value) => `Rs.${Number(value || 0) / 1000}k`}
+                    tickFormatter={(value) => formatCompactINR(value)}
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [
@@ -292,6 +328,16 @@ function AdminDashboard() {
           )}
         </AnalyticsChart>
       </div>
+
+      <ConfirmModal
+        isOpen={clearAnalyticsOpen}
+        title="Clear Analytics"
+        message="Are you sure? This action cannot be undone."
+        confirmLabel="Clear Analytics"
+        loading={clearingAnalytics}
+        onClose={() => setClearAnalyticsOpen(false)}
+        onConfirm={handleClearAnalytics}
+      />
     </AdminShell>
   );
 }

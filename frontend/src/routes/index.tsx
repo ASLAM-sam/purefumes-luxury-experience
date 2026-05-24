@@ -4,7 +4,6 @@ import { SiteShell } from "@/components/layout/SiteShell";
 import { Hero } from "@/components/sections/Hero";
 import { Categories } from "@/components/sections/Categories";
 import { Bestsellers } from "@/components/sections/Bestsellers";
-import { Container } from "@/components/common/Container";
 import { DeferredSection } from "@/components/common/DeferredSection";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
 import { adaptiveComponentFactory } from "@/lib/performance/component-factory";
@@ -150,34 +149,6 @@ function Index() {
           <PerfumeRequestSection />
         </Suspense>
       </DeferredSection>
-      <section className="bg-[#f7f3ed] py-[var(--section-space)]">
-        <Container>
-          <form
-            onSubmit={(event) => event.preventDefault()}
-            className="mx-auto max-w-3xl rounded-[var(--radius-panel)] border border-border bg-[#fffaf4] px-5 py-8 text-center shadow-soft sm:px-6 md:px-12 md:py-10"
-          >
-            <p className="fluid-eyebrow uppercase text-gold">
-              Join the Inner Circle
-            </p>
-            <h2 className="mt-4 font-display text-[clamp(1.7rem,2vw+1.2rem,2.8rem)] text-foreground">
-              Private fragrance notes, arrivals and edits
-            </h2>
-            <div className="mx-auto mt-8 flex max-w-lg flex-col gap-3 sm:flex-row">
-              <input
-                type="email"
-                placeholder="your@email.com"
-                className="min-h-12 flex-1 rounded-full border border-border bg-[#f7f3ed] px-4 text-sm text-foreground outline-none transition focus:border-gold"
-              />
-              <button
-                type="submit"
-                className="min-h-12 rounded-full bg-[#8b5f3d] px-6 fluid-button-label uppercase tracking-[0.26em] text-[#fffaf4] transition hover:bg-[#5b3a29]"
-              >
-                Subscribe
-              </button>
-            </div>
-          </form>
-        </Container>
-      </section>
     </SiteShell>
   );
 }

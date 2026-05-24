@@ -41,10 +41,29 @@ const brandSchema = new mongoose.Schema(
       maxlength: [1000, "Brand logo URL cannot exceed 1000 characters"],
       default: "",
     },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      default: null,
+      index: true,
+    },
+    categoryName: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+    },
+    categorySlug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      default: "",
+      index: true,
+    },
     category: {
       type: String,
       required: [true, "Brand category is required"],
-      enum: BRAND_CATEGORIES,
+      trim: true,
       index: true,
     },
   },
@@ -62,6 +81,13 @@ brandSchema.pre("validate", function normalizeBrand(next) {
   }
 
   this.logo = String(this.logo || "").trim();
+  this.category = String(this.category || this.categorySlug || this.categoryName || "")
+    .trim()
+    .toLowerCase();
+  this.categorySlug = String(this.categorySlug || this.category)
+    .trim()
+    .toLowerCase();
+  this.categoryName = String(this.categoryName || "").trim();
 
   next();
 });

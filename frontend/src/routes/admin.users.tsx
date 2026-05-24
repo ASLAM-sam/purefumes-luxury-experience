@@ -27,11 +27,15 @@ import { FilterDropdown } from "@/components/admin/FilterDropdown";
 import { SearchBar } from "@/components/admin/SearchBar";
 import { StatCard } from "@/components/admin/StatCard";
 import { Button } from "@/components/common/Button";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { useNotification } from "@/context/NotificationContext";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { formatINR } from "@/lib/money";
+import { getOrderDisplayId } from "@/lib/order-id";
+import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-status";
 import {
   adminApi,
   type AdminUser,
@@ -114,7 +118,7 @@ const formatDateTime = (value: unknown, fallback = "Not available") => {
     : fallback;
 };
 
-const formatCurrency = (value: unknown) => `Rs. ${safeNumber(value).toLocaleString("en-IN")}`;
+const formatCurrency = formatINR;
 
 const getInitials = (value: string) =>
   value
@@ -158,6 +162,8 @@ function AdminUsersPage() {
   const [selectedUserLoading, setSelectedUserLoading] = useState(false);
   const [selectedUserError, setSelectedUserError] = useState("");
   const [mutatingUserId, setMutatingUserId] = useState("");
+  const [clearUsersOpen, setClearUsersOpen] = useState(false);
+  const [clearingUsers, setClearingUsers] = useState(false);
 
   useEffect(() => {
     setPage(1);
@@ -367,6 +373,26 @@ function AdminUsersPage() {
     }
   }, [addNotification, selectedUser?.user?.id]);
 
+  const handleClearUsers = useCallback(async () => {
+    try {
+      setClearingUsers(true);
+      const result = await adminApi.clearUsers();
+      setSelectedUserId("");
+      setSelectedUser(null);
+      setPage(1);
+      await loadUsers("refresh");
+      addNotification(`Users cleared. ${result.deletedUsers || 0} customer accounts removed.`);
+      setClearUsersOpen(false);
+    } catch (clearError) {
+      addNotification(
+        clearError instanceof Error ? clearError.message : "Users could not be cleared.",
+        "error",
+      );
+    } finally {
+      setClearingUsers(false);
+    }
+  }, [addNotification, loadUsers]);
+
   const renderSortLabel = useCallback(
     (label: string, field: SortField) => (
       <button
@@ -548,6 +574,15 @@ function AdminUsersPage() {
             <Button variant="soft" className="gap-2" onClick={() => void loadUsers("refresh")}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
+            </Button>
+            <Button
+              variant="destructive"
+              className="gap-2"
+              disabled={clearingUsers}
+              onClick={() => setClearUsersOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear Users
             </Button>
           </div>
         </header>
@@ -903,14 +938,20 @@ function AdminUsersPage() {
                           >
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <div>
-                                <p className="font-medium text-navy">{order.productName || order.items?.[0]?.productName || "Order"}</p>
+                                <p className="font-medium text-navy">
+                                  {order.productName ||
+                                    order.items?.[0]?.productName ||
+                                    `Order ${getOrderDisplayId(order)}`}
+                                </p>
                                 <p className="mt-1 text-sm text-navy/58">
-                                  {formatDateTime(order.createdAt)} - {order.status || order.orderStatus || "Pending"}
+                                  {formatDateTime(order.createdAt)} - {formatOrderStatusLabel(order.status || order.orderStatus)}
                                 </p>
                               </div>
                               <div className="text-sm text-right">
                                 <p className="font-semibold text-navy">{formatCurrency(order.totalAmount)}</p>
-                                <p className="mt-1 text-navy/52">{order.paymentStatus || "pending"}</p>
+                                <p className="mt-1 text-navy/52">
+                                  Payment: {formatPaymentStatusLabel(order.paymentStatus)}
+                                </p>
                               </div>
                             </div>
                           </div>
@@ -928,6 +969,16 @@ function AdminUsersPage() {
           </>
         ) : null}
       </AnimatePresence>
+
+      <ConfirmModal
+        isOpen={clearUsersOpen}
+        title="Clear Users"
+        message="This will remove all customer accounts."
+        confirmLabel="Clear Users"
+        loading={clearingUsers}
+        onClose={() => setClearUsersOpen(false)}
+        onConfirm={handleClearUsers}
+      />
     </AdminShell>
   );
 }

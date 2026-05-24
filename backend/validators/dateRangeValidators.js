@@ -14,10 +14,18 @@ export const dateRangeQueryValidation = [
     .optional({ values: "falsy" })
     .isISO8601()
     .withMessage("End date is invalid"),
+  query("startDate")
+    .optional({ values: "falsy" })
+    .isISO8601()
+    .withMessage("Start date is invalid"),
+  query("endDate")
+    .optional({ values: "falsy" })
+    .isISO8601()
+    .withMessage("End date is invalid"),
   query().custom((_, { req }) => {
     const range = String(req.query.range || "").trim();
-    const from = String(req.query.from || "").trim();
-    const to = String(req.query.to || "").trim();
+    const from = String(req.query.from || req.query.startDate || "").trim();
+    const to = String(req.query.to || req.query.endDate || "").trim();
 
     if (!range && !from && !to) return true;
 

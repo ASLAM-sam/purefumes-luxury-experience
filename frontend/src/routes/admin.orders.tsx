@@ -1,13 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, PackageOpen, RefreshCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, PackageOpen, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { DateRangeFilter } from "@/components/admin/DateRangeFilter";
 import { Button } from "@/components/common/Button";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useNotification } from "@/context/NotificationContext";
 import { useDateRangeFilter } from "@/hooks/useDateRangeFilter";
-import { ordersApi, type Order } from "@/services/api";
+import { formatINR } from "@/lib/money";
+import { getOrderDisplayId } from "@/lib/order-id";
+import { formatPaymentStatusLabel } from "@/lib/order-status";
+import { adminApi, ordersApi, type Order } from "@/services/api";
 
 export const Route = createFileRoute("/admin/orders")({
   component: AdminOrders,
@@ -15,6 +19,7 @@ export const Route = createFileRoute("/admin/orders")({
 
 const STATUSES: Order["status"][] = [
   "Pending",
+  "Confirmed",
   "Processing",
   "Shipped",
   "Delivered",
@@ -25,6 +30,7 @@ const PAGE_SIZE = 12;
 
 const statusColor: Record<Order["status"], string> = {
   Pending: "bg-amber-100 text-amber-800",
+  Confirmed: "bg-emerald-100 text-emerald-800",
   Processing: "bg-sky-100 text-sky-800",
   Shipped: "bg-indigo-100 text-indigo-800",
   Delivered: "bg-green-100 text-green-800",
@@ -39,16 +45,19 @@ function AdminOrders() {
   });
   const [orders, setOrders] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState<Order["status"] | "">("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [clearOrdersOpen, setClearOrdersOpen] = useState(false);
+  const [clearingOrders, setClearingOrders] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
     setPage(1);
-  }, [dateRange.from, dateRange.range, dateRange.to, statusFilter]);
+  }, [dateRange.from, dateRange.range, dateRange.to, search, statusFilter]);
 
   const load = useCallback(
     async (silent = false) => {
@@ -71,6 +80,7 @@ function AdminOrders() {
           page,
           limit: PAGE_SIZE,
           status: statusFilter,
+          search: search.trim() || undefined,
           ...dateRange.queryParams,
         });
         setOrders(response.orders);
@@ -87,7 +97,15 @@ function AdminOrders() {
         setRefreshing(false);
       }
     },
-    [addNotification, dateRange.isValid, dateRange.queryParams, dateRange.validationError, page, statusFilter],
+    [
+      addNotification,
+      dateRange.isValid,
+      dateRange.queryParams,
+      dateRange.validationError,
+      page,
+      search,
+      statusFilter,
+    ],
   );
 
   useEffect(() => {
@@ -135,6 +153,24 @@ function AdminOrders() {
     [addNotification, load],
   );
 
+  const handleClearOrders = async () => {
+    setClearingOrders(true);
+    try {
+      const result = await adminApi.clearOrders();
+      setPage(1);
+      await load(true);
+      addNotification(`Test orders cleared. ${result.deletedOrders || 0} orders removed.`);
+      setClearOrdersOpen(false);
+    } catch (clearError) {
+      addNotification(
+        clearError instanceof Error ? clearError.message : "Orders could not be cleared.",
+        "error",
+      );
+    } finally {
+      setClearingOrders(false);
+    }
+  };
+
   return (
     <AdminShell>
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -162,24 +198,46 @@ function AdminOrders() {
           onFromChange={dateRange.setFrom}
           onToChange={dateRange.setTo}
           action={
-            <Button
-              variant="soft"
-              size="sm"
-              className="gap-2"
-              disabled={refreshing || Boolean(dateRange.validationError)}
-              onClick={() => load(true)}
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="soft"
+                size="sm"
+                className="gap-2"
+                disabled={refreshing || Boolean(dateRange.validationError)}
+                onClick={() => load(true)}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-2"
+                disabled={clearingOrders}
+                onClick={() => setClearOrdersOpen(true)}
+              >
+                <Trash2 className="h-4 w-4" />
+                Clear Test Orders
+              </Button>
+            </div>
           }
         />
 
-        <section className="rounded-[var(--radius-panel)] border border-white/70 bg-white/75 p-4 shadow-[0_16px_36px_rgba(7,31,63,0.07)]">
+        <section className="grid gap-3 rounded-[var(--radius-panel)] border border-white/70 bg-white/75 p-4 shadow-[0_16px_36px_rgba(7,31,63,0.07)]">
           <label className="flex flex-col gap-2">
             <span className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/45">
-              Status
+              Search
             </span>
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Order ID, customer, phone"
+              className="h-12 rounded-2xl border border-border bg-white/90 px-4 text-sm text-navy outline-none transition placeholder:text-navy/35 focus:border-gold/70"
+            />
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/45">Status</span>
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value as Order["status"] | "")}
@@ -221,8 +279,13 @@ function AdminOrders() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
+                        <p className="mb-1 text-[0.65rem] font-semibold uppercase tracking-[0.18em] text-gold">
+                          {getOrderDisplayId(order)}
+                        </p>
                         <p className="font-medium text-navy">{order.customerName || "Customer"}</p>
-                        <p className="mt-1 text-xs text-navy/60">{order.phone || "Phone unavailable"}</p>
+                        <p className="mt-1 text-xs text-navy/60">
+                          {order.phone || "Phone unavailable"}
+                        </p>
                       </div>
                       <select
                         value={order.status}
@@ -243,8 +306,11 @@ function AdminOrders() {
                     </div>
                     <div className="mt-4 grid gap-2 text-sm text-navy/70">
                       <p className="font-medium text-navy">{productName}</p>
-                      <p>{order.brand || "Brand unavailable"} - {order.size || "Size unavailable"}</p>
-                      <p className="font-semibold text-gold">Rs. {Number(price).toLocaleString("en-IN")}</p>
+                      <p>
+                        {order.brand || "Brand unavailable"} - {order.size || "Size unavailable"}
+                      </p>
+                      <p>Payment Status: {formatPaymentStatusLabel(order.paymentStatus)}</p>
+                      <p className="font-semibold text-gold">{formatINR(price)}</p>
                     </div>
                   </article>
                 );
@@ -257,31 +323,34 @@ function AdminOrders() {
           <table className="w-full text-sm">
             <thead className="bg-beige/50 text-navy/70 text-xs uppercase tracking-[0.2em]">
               <tr>
+                <th className="text-left px-6 py-4">Order ID</th>
                 <th className="text-left px-6 py-4">Customer</th>
                 <th className="text-left px-6 py-4">Product</th>
                 <th className="text-left px-6 py-4">Size</th>
                 <th className="text-right px-6 py-4">Price</th>
+                <th className="text-left px-6 py-4">Payment</th>
                 <th className="text-left px-6 py-4">Status</th>
+                <th className="text-left px-6 py-4">Date</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-navy/50">
+                  <td colSpan={8} className="px-6 py-10 text-center text-navy/50">
                     Loading orders...
                   </td>
                 </tr>
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-red-600">
+                  <td colSpan={8} className="px-6 py-10 text-center text-red-600">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && orders.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-navy/50">
+                  <td colSpan={8} className="px-6 py-10 text-center text-navy/50">
                     No orders found in this range.
                   </td>
                 </tr>
@@ -300,6 +369,11 @@ function AdminOrders() {
                       className="hover:bg-beige/30 transition-colors align-top"
                     >
                       <td className="px-6 py-4">
+                        <span className="font-semibold text-navy">
+                          {getOrderDisplayId(order)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
                         <p className="font-medium text-navy">{order.customerName}</p>
                         <p className="text-xs text-navy/60">{order.phone}</p>
                         <p className="text-xs text-navy/50 mt-1 max-w-xs truncate">
@@ -312,7 +386,10 @@ function AdminOrders() {
                       </td>
                       <td className="px-6 py-4 text-navy/70">{size}</td>
                       <td className="px-6 py-4 text-right text-gold font-medium">
-                        Rs. {Number(price).toLocaleString("en-IN")}
+                        {formatINR(price)}
+                      </td>
+                      <td className="px-6 py-4 text-navy/70">
+                        {formatPaymentStatusLabel(order.paymentStatus)}
                       </td>
                       <td className="px-6 py-4">
                         <select
@@ -331,6 +408,9 @@ function AdminOrders() {
                             </option>
                           ))}
                         </select>
+                      </td>
+                      <td className="px-6 py-4 text-navy/60">
+                        {new Date(order.createdAt).toLocaleDateString("en-IN")}
                       </td>
                     </tr>
                   );
@@ -368,6 +448,16 @@ function AdminOrders() {
           </Button>
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={clearOrdersOpen}
+        title="Clear Test Orders"
+        message="Delete all test/fake orders permanently?"
+        confirmLabel="Delete"
+        loading={clearingOrders}
+        onClose={() => setClearOrdersOpen(false)}
+        onConfirm={handleClearOrders}
+      />
     </AdminShell>
   );
 }

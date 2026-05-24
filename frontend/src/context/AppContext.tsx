@@ -18,6 +18,7 @@ import {
   type CartApiResponse,
 } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
+import { addMoney, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
 import { uiActionObserver, uiStateObserver } from "@/lib/performance/state-observers";
 
 export type CartItem = {
@@ -100,7 +101,7 @@ const readGuestCart = (): CartItem[] => {
       .map<CartItem | null>((item) => {
         if (!item?.product?.id || !item?.size?.size) return null;
 
-        const price = Number(item.size.price);
+        const price = normalizeMoney(item.size.price);
         const quantity = clampQuantity(Number(item.quantity), Number(item.product.stock || 1));
 
         if (!Number.isFinite(price)) return null;
@@ -168,7 +169,7 @@ const readStoredWishlist = (): Product[] => {
           sizes:
             Array.isArray(nextProduct.sizes) && nextProduct.sizes.length
               ? nextProduct.sizes
-              : [{ size: "Standard", price: Number(nextProduct.price || 0) }],
+              : [{ size: "Standard", price: normalizeMoney(nextProduct.price || 0) }],
         };
       })
       .filter((product): product is Product => Boolean(product));
@@ -183,11 +184,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [cart, setCart] = useState<CartItem[]>(guestCartRef.current);
   const [cartSummary, setCartSummary] = useState<CartSummary>({
     totalItems: guestCartRef.current.reduce((sum, item) => sum + item.quantity, 0),
-    subtotal: guestCartRef.current.reduce((sum, item) => sum + item.size.price * item.quantity, 0),
+    subtotal: addMoney(
+      ...guestCartRef.current.map((item) => multiplyMoney(item.size.price, item.quantity)),
+    ),
     discount: 0,
-    finalTotal: guestCartRef.current.reduce(
-      (sum, item) => sum + item.size.price * item.quantity,
-      0,
+    finalTotal: addMoney(
+      ...guestCartRef.current.map((item) => multiplyMoney(item.size.price, item.quantity)),
     ),
   });
   const [wishlist, setWishlist] = useState<Product[]>(readStoredWishlist);
@@ -241,7 +243,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     guestCartRef.current = items;
     writeGuestCart(items);
     setCart(items);
-    const subtotal = items.reduce((sum, item) => sum + item.size.price * item.quantity, 0);
+    const subtotal = addMoney(...items.map((item) => multiplyMoney(item.size.price, item.quantity)));
     setCartSummary({
       totalItems: items.reduce((sum, item) => sum + item.quantity, 0),
       subtotal,
@@ -512,16 +514,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
           code: trimmedCode,
           items: cart.map((item) => ({
             productId: item.product.id || item.product._id || "",
+            name: item.product.name,
+            price: item.size.price,
             quantity: item.quantity,
             size: item.size.size,
           })),
         });
 
+        if (!result || result.success === false) {
+          setCartCoupon(null);
+          setCartCouponMessage(result?.message || "Invalid coupon code");
+          setCartCouponTone("error");
+          return false;
+        }
+
+        const discountAmount = normalizeMoney(
+          result.discount ?? result.coupon?.discountValue ?? 0,
+        );
+        const resultSubtotal = normalizeMoney(result.subtotal ?? cartSummary.subtotal);
+        const resultFinalTotal = normalizeMoney(
+          result.finalTotal ?? subtractMoney(resultSubtotal, discountAmount),
+        );
+
         setCartCoupon({
-          code: result.code,
-          discount: result.discount,
-          finalTotal: result.finalTotal,
-          subtotal: result.subtotal,
+          code: result.coupon?.code || result.code || trimmedCode.toUpperCase(),
+          discount: discountAmount,
+          finalTotal: resultFinalTotal,
+          subtotal: resultSubtotal,
         });
         setCartCouponMessage(result.message || "Coupon applied successfully");
         setCartCouponTone("success");
@@ -537,7 +556,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setCartCouponLoading(false);
       }
     },
-    [cart],
+    [cart, cartSummary.subtotal],
   );
 
   const removeCartCoupon = useCallback(() => {
@@ -694,8 +713,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const guestCartCount = useMemo(() => cart.reduce((sum, item) => sum + item.quantity, 0), [cart]);
   const guestSubtotal = useMemo(
-    () => cart.reduce((sum, item) => sum + item.size.price * item.quantity, 0),
-    [cart],
+    () => addMoney(...cart.map((item) => multiplyMoney(item.size.price, item.quantity))),
+    [cart, cartSummary.subtotal],
   );
   const cartCount = user ? cartSummary.totalItems : guestCartCount;
   const cartTotal = user ? cartSummary.subtotal : guestSubtotal;

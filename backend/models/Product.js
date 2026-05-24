@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { normalizeMoney } from "../utils/money.js";
 
 export const PRODUCT_USAGES = ["Day", "Night", "Day & Night"];
 export const PRODUCT_SEASONS = ["Spring", "Summer", "Autumn", "Winter"];
@@ -141,6 +142,12 @@ const productSchema = new mongoose.Schema(
       maxlength: [4000, "Description cannot exceed 4000 characters"],
       default: "",
     },
+    type: {
+      type: String,
+      trim: true,
+      maxlength: [120, "Type cannot exceed 120 characters"],
+      default: "",
+    },
     images: {
       type: [
         {
@@ -159,18 +166,6 @@ const productSchema = new mongoose.Schema(
         message: "Products must have between 1 and 5 images",
       },
     },
-    videoUrl: {
-      type: String,
-      trim: true,
-      maxlength: [1000, "Video URL cannot exceed 1000 characters"],
-      default: "",
-      validate: {
-        validator(value) {
-          return !value || /\.(mp4|webm|mov)(\?.*)?$/i.test(value);
-        },
-        message: "Video URL must point to an mp4, webm, or mov file",
-      },
-    },
     gender: {
       type: String,
       trim: true,
@@ -182,7 +177,6 @@ const productSchema = new mongoose.Schema(
     middleNotes: { type: [String], default: [] },
     baseNotes: { type: [String], default: [] },
     accords: { type: [accordSchema], default: [] },
-    longevity: { type: String, trim: true, default: "" },
     sillage: { type: String, trim: true, default: "" },
     usage: { type: String, enum: PRODUCT_USAGES, default: "Day & Night" },
     timeOfDay: { type: String, trim: true, default: "" },
@@ -219,7 +213,7 @@ const productSchema = new mongoose.Schema(
   },
 );
 
-productSchema.index({ name: "text", brand: "text", description: "text" });
+productSchema.index({ name: "text", brand: "text", description: "text", type: "text" });
 productSchema.index({ createdAt: -1 });
 productSchema.index({ brand: 1, categoryNames: 1 });
 productSchema.index({ brandId: 1, categories: 1 });
@@ -236,6 +230,14 @@ productSchema.pre("validate", function normalizeProduct(next) {
   if ((!this.price || this.price === 0) && this.sizes?.length && this.sizes[0].price) {
     this.price = this.sizes[0].price;
   }
+  this.price = normalizeMoney(this.price);
+  this.originalPrice = normalizeMoney(this.originalPrice);
+  if (Array.isArray(this.sizes)) {
+    this.sizes = this.sizes.map((size) => ({
+      size: String(size.size || "").trim(),
+      price: normalizeMoney(size.price),
+    }));
+  }
 
   const images = Array.isArray(this.images)
     ? this.images.map((image) => String(image).trim()).filter(Boolean)
@@ -244,8 +246,8 @@ productSchema.pre("validate", function normalizeProduct(next) {
 
   this.images = [...new Set(images.length ? images : legacyImage ? [legacyImage] : [])];
   this.image = this.images[0] || "";
-  this.videoUrl = String(this.videoUrl || "").trim();
   this.gender = String(this.gender || "").trim();
+  this.type = String(this.type || "").trim();
   this.categoryNames = [...new Set(normalizeStringList(this.categoryNames))];
   this.categorySlugs = [...new Set(normalizeStringList(this.categorySlugs).map((slug) => slug.toLowerCase()))];
   this.categories = normalizeObjectIdList(this.categories);
@@ -366,7 +368,6 @@ const normalizeProductOutput = (_doc, ret) => {
       : ret.season || [];
   ret.timeOfDay = ret.timeOfDay || ret.usage || "";
   ret.bestTime = Array.isArray(ret.bestTime) ? ret.bestTime : [];
-  ret.videoUrl = String(ret.videoUrl || "");
   ret.isLatest = Boolean(ret.isLatest);
   delete ret.__v;
   return ret;

@@ -3,7 +3,9 @@ import Cart from "../../models/Cart.js";
 import Order from "../../models/Order.js";
 import Product from "../../models/Product.js";
 import User from "../../models/User.js";
-import { getDateRange, startOfDay } from "../../utils/dateRange.js";
+import { getDateRange } from "../../utils/dateRange.js";
+import { formatINR, normalizeMoney } from "../../utils/money.js";
+import { buildOrderStatusFilter } from "../../utils/orderStatusFilter.js";
 
 const LOW_STOCK_THRESHOLD = 10;
 const PREMIUM_SPENT_THRESHOLD = 15000;
@@ -15,32 +17,56 @@ const toSafeNumber = (value) => {
 };
 
 const getOrderCustomerExpression = () => ({
-  $ifNull: [
-    {
-      $cond: [
-        { $ne: ["$userId", null] },
-        { $concat: ["user:", { $toString: "$userId" }] },
-        null,
-      ],
+  $let: {
+    vars: {
+      email: { $ifNull: ["$email", ""] },
+      mobile: { $ifNull: ["$mobile", ""] },
+      phone: { $ifNull: ["$phone", ""] },
     },
-    {
-      $cond: [
-        { $ne: ["$email", ""] },
-        { $concat: ["email:", "$email"] },
+    in: {
+      $ifNull: [
         {
           $cond: [
-            { $ne: ["$mobile", ""] },
-            { $concat: ["mobile:", "$mobile"] },
-            { $concat: ["guest:", { $toString: "$_id" }] },
+            { $ne: ["$userId", null] },
+            { $concat: ["user:", { $toString: "$userId" }] },
+            null,
+          ],
+        },
+        {
+          $cond: [
+            { $ne: ["$$email", ""] },
+            { $concat: ["email:", "$$email"] },
+            {
+              $cond: [
+                { $ne: ["$$mobile", ""] },
+                { $concat: ["mobile:", "$$mobile"] },
+                {
+                  $cond: [
+                    { $ne: ["$$phone", ""] },
+                    { $concat: ["phone:", "$$phone"] },
+                    { $concat: ["guest:", { $toString: "$_id" }] },
+                  ],
+                },
+              ],
+            },
           ],
         },
       ],
     },
-  ],
+  },
 });
 
 const buildTimeBucket = ({ rangeKey, startDate, endDate }) => {
-  const daysInRange = Math.ceil((endDate.getTime() - startDate.getTime()) / 86400000);
+  const daysInRange = Math.ceil(
+    (endDate.getTime() - startDate.getTime()) / 86400000,
+  );
+
+  if (daysInRange <= 1) {
+    return {
+      format: "%Y-%m-%d %H:00",
+    };
+  }
+
   return rangeKey === "6m" || rangeKey === "1y" || daysInRange > 120
     ? {
         format: "%Y-%m",
@@ -56,8 +82,16 @@ const sumRevenue = async (match) => {
     { $group: { _id: null, revenue: { $sum: "$totalAmount" } } },
   ]);
 
-  return toSafeNumber(result[0]?.revenue);
+  return normalizeMoney(result[0]?.revenue);
 };
+
+const getDateToString = (format) => ({
+  $dateToString: {
+    format,
+    date: "$createdAt",
+    timezone: "Asia/Kolkata",
+  },
+});
 
 const getTrendPipeline = ({ startDate, endDate, rangeKey }) => {
   const bucket = buildTimeBucket({ rangeKey, startDate, endDate });
@@ -71,12 +105,7 @@ const getTrendPipeline = ({ startDate, endDate, rangeKey }) => {
     },
     {
       $group: {
-        _id: {
-          $dateToString: {
-            format: bucket.format,
-            date: "$createdAt",
-          },
-        },
+        _id: getDateToString(bucket.format),
         revenue: { $sum: "$totalAmount" },
         orders: { $sum: 1 },
       },
@@ -85,69 +114,64 @@ const getTrendPipeline = ({ startDate, endDate, rangeKey }) => {
   ];
 };
 
-const buildRecentActivity = ({ recentOrders, recentUsers, analyticsEvents }) =>
-  [...recentOrders, ...recentUsers, ...analyticsEvents]
+const buildRecentActivity = ({ analyticsEvents }) =>
+  [...analyticsEvents]
     .filter((item) => item.at)
-    .sort((left, right) => new Date(right.at).getTime() - new Date(left.at).getTime())
+    .sort(
+      (left, right) =>
+        new Date(right.at).getTime() - new Date(left.at).getTime(),
+    )
     .slice(0, 12);
 
-export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
-  const { key: rangeKey, startDate, endDate } = getDateRange({ range, from, to });
+export const getDashboardAnalytics = async ({ range, from, to, startDate: rawStartDate, endDate: rawEndDate } = {}) => {
+  const {
+    key: rangeKey,
+    startDate,
+    endDate,
+  } = getDateRange({ range, from, to, startDate: rawStartDate, endDate: rawEndDate });
   const timeBucket = buildTimeBucket({ rangeKey, startDate, endDate });
-  const todayStart = startOfDay(new Date());
-  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-  const paidOrderMatch = { status: { $ne: "Cancelled" } };
+  const dateFilter = { $gte: startDate, $lte: endDate };
   const rangeOrderMatch = {
     status: { $ne: "Cancelled" },
-    createdAt: { $gte: startDate, $lte: endDate },
+    createdAt: dateFilter,
   };
 
   const [
-    totalUsers,
     activeUsers,
     blockedUsers,
-    newUsersToday,
-    premiumCustomers,
-    totalOrders,
+    newUsersInRange,
     ordersInRange,
     pendingOrders,
     lowStockAlerts,
-    totalRevenue,
-    revenueToday,
-    monthlyRevenue,
     revenueInRange,
     repeatCustomersResult,
     rangeCustomersResult,
+    premiumCustomersResult,
     abandonedCartResult,
     revenueTrend,
     userGrowth,
     topProductsResult,
     topCustomers,
-    recentOrdersRaw,
-    recentUsersRaw,
     analyticsEventsRaw,
   ] = await Promise.all([
-    User.countDocuments({ role: "user" }),
-    User.countDocuments({ role: "user", lastLogin: { $gte: startDate, $lte: endDate } }),
-    User.countDocuments({ role: "user", isBanned: true }),
-    User.countDocuments({ role: "user", createdAt: { $gte: todayStart } }),
     User.countDocuments({
       role: "user",
-      $or: [
-        { totalSpent: { $gte: PREMIUM_SPENT_THRESHOLD } },
-        { totalOrders: { $gte: PREMIUM_ORDER_THRESHOLD } },
-      ],
+      lastLogin: dateFilter,
     }),
-    Order.countDocuments(paidOrderMatch),
+    User.countDocuments({
+      role: "user",
+      isBanned: true,
+      createdAt: dateFilter,
+    }),
+    User.countDocuments({ role: "user", createdAt: dateFilter }),
     Order.countDocuments(rangeOrderMatch),
-    Order.countDocuments({ status: "Pending" }),
+    Order.countDocuments({
+      $and: [buildOrderStatusFilter("Pending"), { createdAt: dateFilter }],
+    }),
     Product.countDocuments({ stock: { $lte: LOW_STOCK_THRESHOLD } }),
-    sumRevenue(paidOrderMatch),
-    sumRevenue({ ...paidOrderMatch, createdAt: { $gte: todayStart } }),
-    sumRevenue({ ...paidOrderMatch, createdAt: { $gte: monthStart } }),
     sumRevenue(rangeOrderMatch),
     Order.aggregate([
-      { $match: paidOrderMatch },
+      { $match: rangeOrderMatch },
       { $addFields: { customerKey: getOrderCustomerExpression() } },
       { $group: { _id: "$customerKey", orderCount: { $sum: 1 } } },
       { $match: { orderCount: { $gte: 2 } } },
@@ -157,6 +181,26 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       { $match: rangeOrderMatch },
       { $addFields: { customerKey: getOrderCustomerExpression() } },
       { $group: { _id: "$customerKey", orderCount: { $sum: 1 } } },
+      { $count: "total" },
+    ]),
+    Order.aggregate([
+      { $match: rangeOrderMatch },
+      { $addFields: { customerKey: getOrderCustomerExpression() } },
+      {
+        $group: {
+          _id: "$customerKey",
+          totalOrders: { $sum: 1 },
+          totalSpent: { $sum: "$totalAmount" },
+        },
+      },
+      {
+        $match: {
+          $or: [
+            { totalSpent: { $gte: PREMIUM_SPENT_THRESHOLD } },
+            { totalOrders: { $gte: PREMIUM_ORDER_THRESHOLD } },
+          ],
+        },
+      },
       { $count: "total" },
     ]),
     Cart.aggregate([
@@ -177,6 +221,7 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
                   $and: [
                     { $eq: ["$userId", "$$userId"] },
                     { $gte: ["$createdAt", "$$cartUpdatedAt"] },
+                    { $lte: ["$createdAt", endDate] },
                     { $ne: ["$status", "Cancelled"] },
                   ],
                 },
@@ -192,15 +237,12 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     ]),
     Order.aggregate(getTrendPipeline({ startDate, endDate, rangeKey })),
     User.aggregate([
-      { $match: { role: "user", createdAt: { $gte: startDate, $lte: endDate } } },
+      {
+        $match: { role: "user", createdAt: dateFilter },
+      },
       {
         $group: {
-          _id: {
-            $dateToString: {
-              format: timeBucket.format,
-              date: "$createdAt",
-            },
-          },
+          _id: getDateToString(timeBucket.format),
           users: { $sum: 1 },
         },
       },
@@ -229,33 +271,53 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       },
       { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
     ]),
-    User.find({ role: "user" })
-      .sort({ totalSpent: -1, totalOrders: -1 })
-      .limit(8)
-      .select("name email mobile totalOrders totalSpent lastLogin createdAt emailVerified isBanned")
-      .lean(),
-    Order.find(rangeOrderMatch)
+    Order.aggregate([
+      { $match: rangeOrderMatch },
+      { $addFields: { customerKey: getOrderCustomerExpression() } },
+      {
+        $group: {
+          _id: "$customerKey",
+          userId: { $first: "$userId" },
+          name: { $first: "$customerName" },
+          email: { $first: "$email" },
+          mobile: { $first: "$mobile" },
+          phone: { $first: "$phone" },
+          totalOrders: { $sum: 1 },
+          totalSpent: { $sum: "$totalAmount" },
+          lastOrderAt: { $max: "$createdAt" },
+          createdAt: { $min: "$createdAt" },
+        },
+      },
+      { $sort: { totalSpent: -1, totalOrders: -1, lastOrderAt: -1 } },
+      { $limit: 8 },
+      {
+        $lookup: {
+          from: "users",
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+    ]),
+    AnalyticsEvent.find({ createdAt: dateFilter })
       .sort({ createdAt: -1 })
-      .limit(6)
-      .select("customerName totalAmount status orderStatus createdAt paymentStatus")
-      .lean({ virtuals: true }),
-    User.find({ role: "user" })
-      .sort({ createdAt: -1 })
-      .limit(6)
-      .select("name email createdAt")
-      .lean(),
-    AnalyticsEvent.find({ createdAt: { $gte: startDate, $lte: endDate } })
-      .sort({ createdAt: -1 })
-      .limit(6)
+      .limit(12)
       .lean(),
   ]);
 
   const repeatCustomers = toSafeNumber(repeatCustomersResult[0]?.total);
-  const purchasingCustomersInRange = toSafeNumber(rangeCustomersResult[0]?.total);
+  const purchasingCustomersInRange = toSafeNumber(
+    rangeCustomersResult[0]?.total,
+  );
+  const premiumCustomers = toSafeNumber(premiumCustomersResult[0]?.total);
   const abandonedCarts = toSafeNumber(abandonedCartResult[0]?.total);
-  const averageOrderValue = ordersInRange > 0 ? Number((revenueInRange / ordersInRange).toFixed(2)) : 0;
+  const averageOrderValue =
+    ordersInRange > 0 ? normalizeMoney(revenueInRange / ordersInRange) : 0;
   const conversionRate =
-    activeUsers > 0 ? Number(((purchasingCustomersInRange / activeUsers) * 100).toFixed(1)) : 0;
+    activeUsers > 0
+      ? Number(((purchasingCustomersInRange / activeUsers) * 100).toFixed(1))
+      : 0;
 
   const topProducts = topProductsResult.map((product) => ({
     productId: product._id?.toString?.() || String(product._id || ""),
@@ -263,25 +325,7 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     brand: product.product?.brand || "",
     image: product.product?.image || product.product?.images?.[0] || "",
     quantity: toSafeNumber(product.quantity),
-    revenue: toSafeNumber(product.revenue),
-  }));
-
-  const recentOrders = recentOrdersRaw.map((order) => ({
-    id: order.id || order._id?.toString?.() || String(order._id || ""),
-    title: `Order from ${order.customerName || "Customer"}`,
-    description: `${order.status || order.orderStatus || "Pending"} | ${order.paymentStatus || "pending"}`,
-    amount: toSafeNumber(order.totalAmount),
-    at: order.createdAt || null,
-    type: "order",
-  }));
-
-  const recentUsers = recentUsersRaw.map((user) => ({
-    id: user._id?.toString?.() || String(user._id || ""),
-    title: `${user.name || "Customer"} joined`,
-    description: user.email || "New customer account",
-    amount: 0,
-    at: user.createdAt || null,
-    type: "signup",
+    revenue: normalizeMoney(product.revenue),
   }));
 
   const analyticsEvents = analyticsEventsRaw.map((event) => ({
@@ -289,9 +333,9 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     title: String(event.type || "activity").replace(/[-_]/g, " "),
     description:
       toSafeNumber(event.revenue) > 0
-        ? `Revenue Rs. ${toSafeNumber(event.revenue).toLocaleString("en-IN")}`
+        ? `Revenue ${formatINR(event.revenue)}`
         : "Tracked ecommerce event",
-    amount: toSafeNumber(event.revenue),
+    amount: normalizeMoney(event.revenue),
     at: event.createdAt || null,
     type: String(event.type || "activity"),
   }));
@@ -303,11 +347,11 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       to: endDate.toISOString(),
     },
     summary: {
-      totalRevenue,
-      revenueToday,
-      monthlyRevenue,
+      totalRevenue: revenueInRange,
+      revenueToday: revenueInRange,
+      monthlyRevenue: revenueInRange,
       revenueInRange,
-      totalOrders,
+      totalOrders: ordersInRange,
       ordersInRange,
       averageOrderValue,
       conversionRate,
@@ -315,16 +359,16 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
       activeUsers,
       abandonedCarts,
       lowStockAlerts,
-      totalUsers,
+      totalUsers: purchasingCustomersInRange,
       blockedUsers,
-      newUsersToday,
+      newUsersToday: newUsersInRange,
       premiumCustomers,
       pendingOrders,
     },
     trends: {
       revenue: revenueTrend.map((item) => ({
         label: item._id,
-        revenue: toSafeNumber(item.revenue),
+        revenue: normalizeMoney(item.revenue),
         orders: toSafeNumber(item.orders),
       })),
       users: userGrowth.map((item) => ({
@@ -334,20 +378,22 @@ export const getDashboardAnalytics = async ({ range, from, to } = {}) => {
     },
     topProducts,
     topCustomers: topCustomers.map((customer) => ({
-      id: customer._id?.toString?.() || String(customer._id || ""),
-      name: customer.name || "Customer",
-      email: customer.email || "",
-      mobile: customer.mobile || "",
+      id:
+        customer.userId?.toString?.() ||
+        customer._id?.toString?.() ||
+        String(customer._id || ""),
+      name: customer.name || customer.user?.name || "Customer",
+      email: customer.email || customer.user?.email || "",
+      mobile: customer.mobile || customer.phone || customer.user?.mobile || "",
       totalOrders: toSafeNumber(customer.totalOrders),
-      totalSpent: toSafeNumber(customer.totalSpent),
-      lastLogin: customer.lastLogin || null,
+      totalSpent: normalizeMoney(customer.totalSpent),
+      lastLogin: customer.user?.lastLogin || null,
+      lastOrderAt: customer.lastOrderAt || null,
       createdAt: customer.createdAt || null,
-      emailVerified: Boolean(customer.emailVerified),
-      isBanned: Boolean(customer.isBanned),
+      emailVerified: Boolean(customer.user?.emailVerified),
+      isBanned: Boolean(customer.user?.isBanned),
     })),
     recentActivity: buildRecentActivity({
-      recentOrders,
-      recentUsers,
       analyticsEvents,
     }),
   };

@@ -11,24 +11,20 @@ const __dirname = path.dirname(__filename);
 const uploadsRoot = path.join(__dirname, "..", "uploads");
 const tempImageUploadDir = path.join(uploadsRoot, "tmp");
 const productUploadDir = path.join(uploadsRoot, "products");
-const productVideoUploadDir = path.join(uploadsRoot, "product-videos");
 const brandUploadDir = path.join(uploadsRoot, "brands");
 const bannerUploadDir = path.join(uploadsRoot, "banners");
 const categoryUploadDir = path.join(uploadsRoot, "categories");
 const perfumeRequestUploadDir = path.join(uploadsRoot, "requests");
 
 const IMAGE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024;
-const VIDEO_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 const WEBP_QUALITY = 80;
 const MAX_IMAGE_INPUT_PIXELS = 50_000_000;
 const IMAGE_UPLOAD_MESSAGE = "Only JPG, PNG, and WEBP images are allowed";
 const IMAGE_SIZE_MESSAGE = "Image size must be under 5MB";
-const VIDEO_SIZE_MESSAGE = "Video size must be under 10MB";
 
 [
   tempImageUploadDir,
   productUploadDir,
-  productVideoUploadDir,
   brandUploadDir,
   bannerUploadDir,
   categoryUploadDir,
@@ -47,8 +43,6 @@ const allowedImageMimeTypes = new Set([
 ]);
 const allowedImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
 const allowedDecodedImageFormats = new Set(["jpeg", "png", "webp"]);
-const allowedVideoTypes = new Set(["video/mp4", "video/webm", "video/quicktime"]);
-const allowedVideoExtensions = new Set([".mp4", ".webm", ".mov"]);
 
 class UploadValidationError extends Error {
   constructor(message, statusCode = 400) {
@@ -57,9 +51,6 @@ class UploadValidationError extends Error {
     this.statusCode = statusCode;
   }
 }
-
-const isVideoField = (fieldname = "") =>
-  fieldname === "video" || fieldname === "videoFile";
 
 const normalizeMimeType = (mimetype = "") => String(mimetype || "").trim().toLowerCase();
 
@@ -91,10 +82,6 @@ const isAllowedImageCandidate = (file) =>
   allowedImageExtensions.has(normalizeExtension(file.originalname)) &&
   allowedImageMimeTypes.has(normalizeMimeType(file.mimetype));
 
-const isAllowedVideo = (file) =>
-  allowedVideoTypes.has(normalizeMimeType(file.mimetype)) &&
-  allowedVideoExtensions.has(normalizeExtension(file.originalname));
-
 const createImageFileFilter = (_req, file, callback) => {
   if (!isAllowedImageCandidate(file)) {
     callback(new UploadValidationError(IMAGE_UPLOAD_MESSAGE));
@@ -103,34 +90,6 @@ const createImageFileFilter = (_req, file, callback) => {
 
   callback(null, true);
 };
-
-const productMediaFileFilter = (_req, file, callback) => {
-  if (isVideoField(file.fieldname)) {
-    if (!isAllowedVideo(file)) {
-      callback(new UploadValidationError("Only MP4, WebM, or MOV video uploads are allowed"));
-      return;
-    }
-
-    callback(null, true);
-    return;
-  }
-
-  if (!isAllowedImageCandidate(file)) {
-    callback(new UploadValidationError(IMAGE_UPLOAD_MESSAGE));
-    return;
-  }
-
-  callback(null, true);
-};
-
-const productStorage = multer.diskStorage({
-  destination(_req, file, callback) {
-    callback(null, isVideoField(file.fieldname) ? productVideoUploadDir : tempImageUploadDir);
-  },
-  filename(_req, file, callback) {
-    callback(null, getSafeUploadFilename(file, isVideoField(file.fieldname) ? "product-video" : "product"));
-  },
-});
 
 const createTempImageStorage = (fallback) =>
   multer.diskStorage({
@@ -165,7 +124,6 @@ const getUploadedFilesFromRequest = (req) => {
   }
 
   [
-    req.productVideoFile,
     req.categoryImageFile,
     req.categoryBannerImageFile,
     ...(Array.isArray(req.productImageFiles) ? req.productImageFiles : []),
@@ -267,7 +225,7 @@ const sendUploadError = async (req, res, error, fallbackMessage) => {
 
   if (error instanceof multer.MulterError) {
     if (error.code === "LIMIT_FILE_SIZE") {
-      message = isVideoField(error.field) ? VIDEO_SIZE_MESSAGE : IMAGE_SIZE_MESSAGE;
+      message = IMAGE_SIZE_MESSAGE;
     } else if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
       message = "Too many files were uploaded";
     } else {
@@ -292,18 +250,14 @@ const registerFailedResponseCleanup = (req, res) => {
   });
 };
 
-const productMediaUploader = multer({
-  storage: productStorage,
-  fileFilter: productMediaFileFilter,
+const productImageUploader = multer({
+  storage: createTempImageStorage("product"),
+  fileFilter: createImageFileFilter,
   limits: {
-    fileSize: VIDEO_SIZE_LIMIT_BYTES,
-    files: 6,
+    fileSize: IMAGE_SIZE_LIMIT_BYTES,
+    files: 5,
   },
-}).fields([
-  { name: "images", maxCount: 5 },
-  { name: "video", maxCount: 1 },
-  { name: "videoFile", maxCount: 1 },
-]);
+}).array("images", 5);
 
 const brandLogoUploader = multer({
   storage: createTempImageStorage("brand"),
@@ -345,17 +299,12 @@ const perfumeRequestImageUploader = multer({
 }).array("images", 3);
 
 export const uploadProductImages = (req, res, next) => {
-  productMediaUploader(req, res, async (error) => {
+  productImageUploader(req, res, async (error) => {
     if (error) {
-      return sendUploadError(req, res, error, "Product media upload failed");
+      return sendUploadError(req, res, error, "Product image upload failed");
     }
 
-    const filesByField = req.files && !Array.isArray(req.files) ? req.files : {};
-    const imageFiles = Array.isArray(filesByField.images) ? filesByField.images : [];
-    const videoFiles = [
-      ...(Array.isArray(filesByField.video) ? filesByField.video : []),
-      ...(Array.isArray(filesByField.videoFile) ? filesByField.videoFile : []),
-    ];
+    const imageFiles = Array.isArray(req.files) ? req.files : [];
 
     try {
       await assertImageSizeLimit(imageFiles);
@@ -365,13 +314,11 @@ export const uploadProductImages = (req, res, next) => {
       });
 
       req.productImageFiles = convertedImages;
-      req.productVideoFile = videoFiles[0] || null;
       req.files = convertedImages;
       registerFailedResponseCleanup(req, res);
       next();
     } catch (conversionError) {
-      await cleanupUploadedFiles(videoFiles);
-      return sendUploadError(req, res, conversionError, "Product media upload failed");
+      return sendUploadError(req, res, conversionError, "Product image upload failed");
     }
   });
 };
@@ -486,25 +433,6 @@ export const storeUploadedImage = async (
     });
     await deleteFile(file.path);
     return result.secure_url || result.url || "";
-  }
-
-  return `/uploads/${localSubdirectory}/${file.filename}`;
-};
-
-export const storeUploadedVideo = async (
-  file,
-  {
-    cloudinaryFolder = "purefumes-hyderabad/product-videos",
-    localSubdirectory = "product-videos",
-  } = {},
-) => {
-  if (isCloudinaryConfigured) {
-    const result = await cloudinary.uploader.upload(file.path, {
-      folder: cloudinaryFolder,
-      resource_type: "video",
-    });
-    await deleteFile(file.path);
-    return result.secure_url;
   }
 
   return `/uploads/${localSubdirectory}/${file.filename}`;

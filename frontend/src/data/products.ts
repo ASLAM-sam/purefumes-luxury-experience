@@ -29,14 +29,13 @@ export type Product = {
   reviewsCount?: number;
   image: string;
   images: string[];
-  videoUrl?: string;
   description: string;
+  type?: string;
   notes?: string[];
   topNotes: string[];
   middleNotes: string[];
   baseNotes: string[];
   accords: Accord[];
-  longevity: string;
   sillage: string;
   usage: "Day" | "Night" | "Day & Night";
   timeOfDay?: "Day" | "Night" | "Day & Night" | string;

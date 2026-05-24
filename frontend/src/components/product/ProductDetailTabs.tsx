@@ -49,13 +49,24 @@ export const ProductDetailTabs = memo(function ProductDetailTabs({ product }: { 
 
               <div className="rounded-[1.5rem] border border-border/60 bg-card p-5">
                 <p className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/50">
-                  Category
+                  About this fragrance
                 </p>
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center gap-3 text-sm text-navy/70">
                     <Sparkles className="h-4 w-4 text-gold" />
-                    {product.category}
+                    <span>
+                      <span className="font-medium text-navy">Category:</span>{" "}
+                      {product.category}
+                    </span>
                   </div>
+                  {product.type ? (
+                    <div className="flex items-center gap-3 text-sm text-navy/70">
+                      <Sparkles className="h-4 w-4 text-gold" />
+                      <span>
+                        <span className="font-medium text-navy">Type:</span> {product.type}
+                      </span>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             </div>

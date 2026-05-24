@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import env from "../config/env.js";
-import User from "../models/User.js";
+import User, { normalizeUserRole } from "../models/User.js";
 
 const getBearerToken = (req) => {
   const authHeader = req.headers.authorization || "";
@@ -21,6 +21,7 @@ export const optionalAuth = async (req, _res, next) => {
 
     const user = await User.findById(decoded.sub);
     if (user && !user.isBanned) {
+      user.role = normalizeUserRole(user.role);
       req.user = user;
     }
   } catch (_error) {
@@ -64,6 +65,12 @@ export const requireAuth = async (req, res, next) => {
         success: false,
         message: "Your account has been disabled",
       });
+    }
+
+    const normalizedRole = normalizeUserRole(user.role);
+    if (user.role !== normalizedRole) {
+      user.role = normalizedRole;
+      await user.save();
     }
 
     req.user = user;

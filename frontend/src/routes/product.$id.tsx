@@ -17,6 +17,28 @@ import { productsApi } from "@/services/api";
 import { useApp } from "@/context/AppContext";
 import { useNotification } from "@/context/NotificationContext";
 
+const MIN_VIEWERS = 1;
+const MAX_VIEWERS = 10;
+
+const getRandomViewerCount = () =>
+  Math.floor(Math.random() * (MAX_VIEWERS - MIN_VIEWERS + 1)) + MIN_VIEWERS;
+
+const getRandomViewerDelay = () => Math.floor(Math.random() * 7001) + 8000;
+
+const clampViewerCount = (value: number) => Math.min(MAX_VIEWERS, Math.max(MIN_VIEWERS, value));
+
+const getNearbyViewerCount = (current: number) => {
+  const deltas = [-2, -1, -1, 1, 1, 2];
+  const delta = deltas[Math.floor(Math.random() * deltas.length)] || 1;
+  const next = clampViewerCount(current + delta);
+
+  if (next !== current) {
+    return next;
+  }
+
+  return current === MIN_VIEWERS ? current + 1 : current - 1;
+};
+
 export const Route = createFileRoute("/product/$id")({
   loader: async ({ params }) => {
     const product = await productsApi.get(params.id);
@@ -52,7 +74,7 @@ function ProductPage() {
   const { addNotification } = useNotification();
   const nav = useNavigate();
   const [size, setSize] = useState(product.sizes[0]);
-  const [viewers, setViewers] = useState(10);
+  const [viewers, setViewers] = useState<number | null>(null);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
   const [relatedError, setRelatedError] = useState("");
@@ -66,24 +88,29 @@ function ProductPage() {
   }, [product]);
 
   useEffect(() => {
-    let timeoutId: number | null = null;
+    let timeoutId: number | undefined;
+    let latestViewerCount = getRandomViewerCount();
 
     const scheduleNext = () => {
       timeoutId = window.setTimeout(() => {
-        setViewers(Math.floor(Math.random() * 21) + 5);
+        setViewers((current) => {
+          const nextViewerCount = getNearbyViewerCount(current ?? latestViewerCount);
+          latestViewerCount = nextViewerCount;
+          return nextViewerCount;
+        });
         scheduleNext();
-      }, Math.floor(Math.random() * 5000) + 5000);
+      }, getRandomViewerDelay());
     };
 
-    setViewers(Math.floor(Math.random() * 21) + 5);
+    setViewers(latestViewerCount);
     scheduleNext();
 
     return () => {
-      if (timeoutId) {
+      if (timeoutId !== undefined) {
         window.clearTimeout(timeoutId);
       }
     };
-  }, []);
+  }, [product.id]);
 
   useEffect(() => {
     let isActive = true;
@@ -125,7 +152,7 @@ function ProductPage() {
     return () => {
       isActive = false;
     };
-  }, [product.brand, product.brandId, product.id]);
+  }, [product.brand, product.brandId, product.category, product.id]);
 
   const { user } = useAuth();
 
@@ -175,7 +202,6 @@ function ProductPage() {
             <ProductImageGallery
               productName={product.name}
               images={galleryImages}
-              videoUrl={product.videoUrl}
               discountPercentage={galleryDiscount}
             />
 

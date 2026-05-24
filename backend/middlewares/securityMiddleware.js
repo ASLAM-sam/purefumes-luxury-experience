@@ -4,7 +4,9 @@ import helmet from "helmet";
 import mongoSanitize from "express-mongo-sanitize";
 import env from "../config/env.js";
 import logger from "../config/logger.js";
+import { captureMessage } from "../config/sentry.js";
 import { createRandomToken, timingSafeEqual } from "../utils/crypto.js";
+import { getRequestLogContext } from "../utils/redaction.js";
 
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"]);
 const csrfHeaderName = "X-CSRF-Token";
@@ -71,14 +73,22 @@ export const csrfProtection = (req, res, next) => {
   }
 
   logger.warn("CSRF token validation failed", {
-    requestId: req.id,
-    method: req.method,
-    path: req.originalUrl,
-    origin: req.get("origin") || "",
+    ...getRequestLogContext(req),
     hasAccessCookie: Boolean(req.cookies?.token || req.cookies?.accessToken),
     hasRefreshCookie: Boolean(req.cookies?.refreshToken),
     hasCsrfCookie: Boolean(csrfCookie),
     hasCsrfHeader: Boolean(csrfHeader),
+  });
+
+  captureMessage("CSRF token validation failed", "warning", {
+    req,
+    tags: { area: "csrf" },
+    extra: {
+      hasAccessCookie: Boolean(req.cookies?.token || req.cookies?.accessToken),
+      hasRefreshCookie: Boolean(req.cookies?.refreshToken),
+      hasCsrfCookie: Boolean(csrfCookie),
+      hasCsrfHeader: Boolean(csrfHeader),
+    },
   });
 
   return res.status(403).json({

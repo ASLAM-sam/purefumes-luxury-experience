@@ -5,6 +5,7 @@ import { AdminShell } from "@/components/admin/AdminShell";
 import { useNotification } from "@/context/NotificationContext";
 import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
+import { formatINR } from "@/lib/money";
 import {
   BESTSELLERS_CHANGED_EVENT,
   DATA_EVENT_STORAGE_KEY,
@@ -433,7 +434,7 @@ function AdminBestsellers() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-right font-medium text-gold">
-                        Rs. {price.toLocaleString("en-IN")}
+                        {formatINR(price)}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-end gap-2">
@@ -535,7 +536,7 @@ function AdminBestsellers() {
                       <td className="px-6 py-4 text-navy/70">{product.brand}</td>
                       <td className="px-6 py-4 text-navy/70">{product.category}</td>
                       <td className="px-6 py-4 text-right font-medium text-gold">
-                        Rs. {price.toLocaleString("en-IN")}
+                        {formatINR(price)}
                       </td>
                       <td className="px-6 py-4">
                         <span

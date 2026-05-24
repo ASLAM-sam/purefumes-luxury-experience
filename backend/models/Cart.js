@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { normalizeMoney, subtractMoney } from "../utils/money.js";
 
 const selectedVariantSchema = new mongoose.Schema(
   {
@@ -86,9 +87,13 @@ cartSchema.pre("validate", function normalizeCart(next) {
   this.totalItems = Array.isArray(this.items)
     ? this.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0)
     : 0;
-  this.subtotal = Number(this.subtotal || 0);
-  this.discount = Number(this.discount || 0);
-  this.finalTotal = Math.max(0, Number(this.finalTotal || this.subtotal - this.discount));
+  this.subtotal = normalizeMoney(this.subtotal);
+  this.discount = normalizeMoney(this.discount);
+  this.finalTotal = normalizeMoney(
+    this.finalTotal && this.finalTotal > 0
+      ? this.finalTotal
+      : subtractMoney(this.subtotal, this.discount),
+  );
   next();
 });
 

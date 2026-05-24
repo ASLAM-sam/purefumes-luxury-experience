@@ -1,6 +1,6 @@
 /**
  * API service layer for the Purefumes Hyderabad backend.
- * Product, category, and order data must come from MongoDB through VITE_API_URL.
+ * Product, category, and order data must come from MongoDB through the configured API path.
  */
 
 import type { Brand, BrandPreviewProduct } from "@/data/brands";
@@ -10,7 +10,14 @@ import { apiTrafficProxy } from "@/lib/performance/api-proxy";
 import { perfInstrumentation } from "@/lib/performance/instrumentation";
 import { frontendMediator } from "@/lib/performance/mediator";
 import runtimeConfig from "@/lib/runtime-config";
+import {
+  captureFrontendException,
+  captureFrontendMessage,
+  sanitizeFrontendUrl,
+} from "@/lib/sentry";
 import { applyProductImageOverride } from "@/lib/static-image-overrides";
+import { addMoney, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
+import { normalizeDisplayOrderStatus, normalizePaymentStatus } from "@/lib/order-status";
 
 const BASE = runtimeConfig.apiUrl.replace(/\/$/, "");
 const CATALOG_CACHE_TTL_MS = 30 * 1000;
@@ -25,13 +32,27 @@ const inflightCatalogRequests = new Map<string, Promise<unknown>>();
 let authCacheVersion = 0;
 let csrfTokenCache = "";
 let csrfTokenRequest: Promise<string> | null = null;
+let refreshSessionRequest: Promise<boolean> | null = null;
 export const PRODUCTS_CHANGED_EVENT = "purefumes:products-changed";
 export const BESTSELLERS_CHANGED_EVENT = "purefumes:bestsellers-changed";
 export const LATEST_PRODUCTS_CHANGED_EVENT = "purefumes:latest-products-changed";
+export const BANNERS_CHANGED_EVENT = "purefumes:banners-changed";
 export const DATA_EVENT_STORAGE_KEY = "purefumes:data-event";
 
 const API_ORIGIN = runtimeConfig.apiOrigin;
 const AUTH_URL = runtimeConfig.authUrl;
+const AUTH_REFRESH_LOCK_NAME = "purefumes-auth-refresh";
+const AUTH_REFRESH_LOCK_KEY = "purefumes:auth-refresh-lock";
+const AUTH_REFRESH_LAST_SUCCESS_KEY = "purefumes:auth-refresh-last-success";
+const AUTH_REFRESH_LOCK_TTL_MS = 10_000;
+const AUTH_REFRESH_RECENT_SUCCESS_MS = 1_500;
+const AUTH_REFRESH_LOCK_POLL_MS = 120;
+
+type NavigatorWithLocks = Navigator & {
+  locks?: {
+    request<T>(name: string, callback: () => T | Promise<T>): Promise<T>;
+  };
+};
 
 const clearLegacyStoredAccessTokens = () => {
   if (typeof window === "undefined") return;
@@ -80,13 +101,14 @@ type CatalogRequestOptions = {
 };
 
 type BrandListParams = {
-  category?: Brand["category"];
+  category?: Brand["category"] | string;
 };
 
 type CategoryListOptions = {
   featured?: boolean;
   includeInactive?: boolean;
   search?: string;
+  forceFresh?: boolean;
 };
 
 type ProductPayload = Partial<Product> & {
@@ -153,6 +175,7 @@ export type Banner = {
 type BannerPayload = Partial<Banner> & {
   _id?: string;
   id?: string;
+  imageUrl?: string;
 };
 
 export type BulkBrandImportRow = {
@@ -187,6 +210,7 @@ export type BulkProductImportRow = {
   name: string;
   brand: string;
   category?: string;
+  type?: string;
   price: string | number;
   stock: string | number;
   description?: string;
@@ -200,6 +224,7 @@ export type BulkProductImportIssue = {
   name: string;
   brand: string;
   category: string;
+  type?: string;
   price: string | number;
   stock: string | number;
   description: string;
@@ -232,6 +257,7 @@ export type OrderItem = {
 export type Order = {
   _id: string;
   id?: string;
+  publicOrderId?: string;
   customerName: string;
   phone: string;
   address: string;
@@ -240,8 +266,8 @@ export type Order = {
   subtotalAmount?: number;
   discountAmount?: number;
   couponCode?: string;
-  status: "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
-  orderStatus?: "Pending" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
+  status: "Pending" | "Confirmed" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
+  orderStatus?: "Pending" | "Confirmed" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
   createdAt: string;
   product?: string;
   productId?: string;
@@ -256,9 +282,21 @@ export type Order = {
   paymentOrderId?: string;
   paymentSignature?: string;
   paymentStatus?: "pending" | "paid" | "failed" | "refunded";
+  isTestData?: boolean;
 };
 
 export type CouponDiscountType = "percentage" | "fixed";
+export type CouponApplicabilityType = "all" | "selected";
+
+export type CouponApplicableProduct = {
+  _id: string;
+  id: string;
+  name: string;
+  brand?: string;
+  image?: string;
+  images?: string[];
+  price?: number;
+};
 
 export type Coupon = {
   _id: string;
@@ -270,6 +308,9 @@ export type Coupon = {
   maxDiscount: number | null;
   expiryDate: string | null;
   isActive: boolean;
+  applicabilityType: CouponApplicabilityType;
+  applicableProductIds: string[];
+  applicableProducts: CouponApplicableProduct[];
   createdAt: string;
   updatedAt: string;
 };
@@ -277,10 +318,21 @@ export type Coupon = {
 type CouponPayload = Partial<Coupon> & {
   _id?: string;
   id?: string;
+  discount?: number;
+  applicableProducts?: Array<CouponApplicableProduct | string>;
+  applicableProductIds?: string[];
+};
+
+type ApplyCouponPayload = Partial<ApplyCouponResult> & {
+  coupon?: CouponPayload | null;
 };
 
 export type CouponOrderItemInput = {
-  productId: string;
+  productId?: string;
+  _id?: string;
+  id?: string;
+  name?: string;
+  price?: number;
   quantity: number;
   size?: string;
 };
@@ -297,6 +349,9 @@ export type ApplyCouponResult = {
   discount: number;
   finalTotal: number;
   subtotal: number;
+  eligibleSubtotal?: number;
+  ineligibleSubtotal?: number;
+  partialApplication?: boolean;
   message?: string;
   coupon?: Coupon | null;
 };
@@ -353,6 +408,7 @@ type OrderListParams = DateRangeParams & {
   page?: number;
   limit?: number;
   status?: Order["status"] | "";
+  search?: string;
 };
 
 type PerfumeRequestListParams = DateRangeParams & {
@@ -420,6 +476,15 @@ export type AdminUserDetailsResponse = {
     lastOrderAt: string | null;
     recentRevenue: number;
   };
+};
+
+export type AdminClearResponse = {
+  deletedOrders?: number;
+  deletedActivity?: number;
+  deletedUsers?: number;
+  resetUsers?: number;
+  clearedCarts?: number;
+  detachedOrders?: number;
 };
 
 export type Address = {
@@ -550,6 +615,43 @@ const requireBackend = () => {
       "API URL is required. Set VITE_API_URL to point the frontend at your Express API.",
     );
   }
+};
+
+const shouldReportApiFailure = (path: string, status?: number) => {
+  if (!status) return true;
+  if (status >= 500) return true;
+  if (path.startsWith("/auth/refresh") && [401, 403].includes(status)) return true;
+  if (path.startsWith("/payments") && status >= 400) return true;
+
+  return false;
+};
+
+const reportApiFailure = (
+  error: unknown,
+  {
+    method,
+    path,
+    phase,
+    requestId,
+    status,
+  }: {
+    method: string;
+    path: string;
+    phase: string;
+    requestId?: string | null;
+    status?: number;
+  },
+) => {
+  if (!shouldReportApiFailure(path, status)) return;
+
+  captureFrontendException(error, {
+    source: "api",
+    phase,
+    method,
+    path: sanitizeFrontendUrl(path),
+    status,
+    requestId: requestId || "",
+  });
 };
 
 const queryString = (params: Record<string, unknown> = {}) => {
@@ -708,6 +810,11 @@ const rememberCsrfToken = (token: string) => {
   return csrfTokenCache;
 };
 
+const forgetCsrfToken = () => {
+  csrfTokenCache = "";
+  csrfTokenRequest = null;
+};
+
 const fetchCsrfToken = async () => {
   const response = await fetch(`${BASE}/auth/csrf-token`, {
     method: "GET",
@@ -718,9 +825,9 @@ const fetchCsrfToken = async () => {
     },
   });
 
-  const payload = (await response.json().catch(() => null)) as
-    | ApiEnvelope<{ csrfToken?: string }>
-    | null;
+  const payload = (await response.json().catch(() => null)) as ApiEnvelope<{
+    csrfToken?: string;
+  }> | null;
   const responseToken = response.headers.get("X-CSRF-Token") || payload?.data?.csrfToken || "";
 
   if (!response.ok || payload?.success === false || !responseToken) {
@@ -734,11 +841,155 @@ const ensureCsrfToken = async () => {
   const currentToken = getCsrfToken();
   if (currentToken) return currentToken;
 
-  csrfTokenRequest = csrfTokenRequest || fetchCsrfToken().finally(() => {
-    csrfTokenRequest = null;
-  });
+  csrfTokenRequest =
+    csrfTokenRequest ||
+    fetchCsrfToken().finally(() => {
+      csrfTokenRequest = null;
+    });
 
   return csrfTokenRequest;
+};
+
+const delay = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const readStorageNumber = (key: string) => {
+  if (typeof window === "undefined") return 0;
+
+  try {
+    return Number(window.localStorage.getItem(key) || 0) || 0;
+  } catch (_error) {
+    return 0;
+  }
+};
+
+const writeStorageNumber = (key: string, value: number) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    window.localStorage.setItem(key, String(value));
+  } catch (_error) {
+    // Cross-tab refresh coordination is best effort when storage is unavailable.
+  }
+};
+
+const markAuthRefreshSucceeded = () => {
+  writeStorageNumber(AUTH_REFRESH_LAST_SUCCESS_KEY, Date.now());
+  bumpAuthCacheVersion();
+};
+
+const wasAuthRefreshRecentlyCompleted = (startedAt: number) => {
+  const lastSuccessAt = readStorageNumber(AUTH_REFRESH_LAST_SUCCESS_KEY);
+  return (
+    lastSuccessAt >= startedAt ||
+    (lastSuccessAt > 0 && Date.now() - lastSuccessAt <= AUTH_REFRESH_RECENT_SUCCESS_MS)
+  );
+};
+
+const createLockId = () => {
+  const cryptoApi = typeof globalThis.crypto !== "undefined" ? globalThis.crypto : null;
+  if (cryptoApi && "randomUUID" in cryptoApi) {
+    return cryptoApi.randomUUID();
+  }
+
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+};
+
+const tryAcquireStorageRefreshLock = (lockId: string) => {
+  if (typeof window === "undefined") return true;
+
+  try {
+    const now = Date.now();
+    const current = JSON.parse(window.localStorage.getItem(AUTH_REFRESH_LOCK_KEY) || "null") as {
+      id?: string;
+      expiresAt?: number;
+    } | null;
+
+    if (current?.expiresAt && current.expiresAt > now && current.id !== lockId) {
+      return false;
+    }
+
+    window.localStorage.setItem(
+      AUTH_REFRESH_LOCK_KEY,
+      JSON.stringify({ id: lockId, expiresAt: now + AUTH_REFRESH_LOCK_TTL_MS }),
+    );
+
+    const next = JSON.parse(window.localStorage.getItem(AUTH_REFRESH_LOCK_KEY) || "null") as {
+      id?: string;
+    } | null;
+    return next?.id === lockId;
+  } catch (_error) {
+    return true;
+  }
+};
+
+const releaseStorageRefreshLock = (lockId: string) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    const current = JSON.parse(window.localStorage.getItem(AUTH_REFRESH_LOCK_KEY) || "null") as {
+      id?: string;
+    } | null;
+
+    if (current?.id === lockId) {
+      window.localStorage.removeItem(AUTH_REFRESH_LOCK_KEY);
+    }
+  } catch (_error) {
+    // A stale lock expires quickly and should not block the next refresh attempt.
+  }
+};
+
+const runWithStorageRefreshLock = async <T,>(action: () => Promise<T>): Promise<T> => {
+  const lockId = createLockId();
+  const deadline = Date.now() + AUTH_REFRESH_LOCK_TTL_MS + 2_000;
+
+  while (!tryAcquireStorageRefreshLock(lockId)) {
+    if (Date.now() > deadline) {
+      throw new Error("Authentication refresh is still in progress. Please try again.");
+    }
+
+    await delay(AUTH_REFRESH_LOCK_POLL_MS);
+  }
+
+  try {
+    return await action();
+  } finally {
+    releaseStorageRefreshLock(lockId);
+  }
+};
+
+const runWithRefreshLock = async <T,>(action: () => Promise<T>): Promise<T> => {
+  const lockManager = (typeof navigator !== "undefined"
+    ? (navigator as NavigatorWithLocks).locks
+    : undefined);
+
+  if (lockManager?.request) {
+    return lockManager.request(AUTH_REFRESH_LOCK_NAME, action);
+  }
+
+  return runWithStorageRefreshLock(action);
+};
+
+const getRequiredCsrfToken = async (context: string) => {
+  try {
+    const token = await ensureCsrfToken();
+    if (!token) {
+      throw new Error("CSRF token was empty");
+    }
+
+    return token;
+  } catch (error) {
+    forgetCsrfToken();
+    captureFrontendException(error, {
+      source: "csrf.bootstrap",
+      context,
+    });
+
+    if (import.meta.env.DEV) {
+      console.debug(`[API] CSRF bootstrap before ${context} failed`, error);
+    }
+
+    throw new Error("Unable to initialize a secure session. Please refresh and try again.");
+  }
 };
 
 const setStoredAccessToken = (_token: string) => {
@@ -751,7 +1002,7 @@ const setStoredAccessToken = (_token: string) => {
 const clearStoredAccessToken = () => {
   if (typeof window === "undefined") return;
   clearLegacyStoredAccessTokens();
-  csrfTokenCache = "";
+  forgetCsrfToken();
   bumpAuthCacheVersion();
 };
 
@@ -766,32 +1017,65 @@ const shouldAttemptRefresh = (path: string) =>
   !path.startsWith("/auth/verify-email");
 
 const refreshAuthSession = async () => {
-  const headers = new Headers({ "Content-Type": "application/json" });
-  const csrfToken = await ensureCsrfToken().catch((error) => {
-    if (import.meta.env.DEV) {
-      console.debug("[API] CSRF bootstrap before refresh failed", error);
-    }
-
-    return "";
-  });
-
-  if (csrfToken) {
-    headers.set("X-CSRF-Token", csrfToken);
+  if (refreshSessionRequest) {
+    return refreshSessionRequest;
   }
 
-  const response = await fetch(`${BASE}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-    headers,
+  const startedAt = Date.now();
+
+  refreshSessionRequest = runWithRefreshLock(async () => {
+    if (wasAuthRefreshRecentlyCompleted(startedAt)) {
+      return true;
+    }
+
+    const headers = new Headers({ "Content-Type": "application/json" });
+    headers.set("X-CSRF-Token", await getRequiredCsrfToken("POST /auth/refresh"));
+
+    let response: Response;
+
+    try {
+      response = await fetch(`${BASE}/auth/refresh`, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        cache: "no-store",
+      });
+    } catch (error) {
+      reportApiFailure(error, {
+        method: "POST",
+        path: "/auth/refresh",
+        phase: "refresh_network",
+      });
+      throw error;
+    }
+
+    rememberCsrfToken(response.headers.get("X-CSRF-Token") || "");
+
+    if (response.ok) {
+      markAuthRefreshSucceeded();
+      return true;
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      clearStoredAccessToken();
+    }
+
+    captureFrontendMessage("Authentication refresh failed", "warning", {
+      source: "api",
+      phase: "refresh_response",
+      method: "POST",
+      path: "/auth/refresh",
+      status: response.status,
+      requestId: response.headers.get("X-Request-Id") || "",
+    });
+
+    return false;
+  }).finally(() => {
+    refreshSessionRequest = null;
   });
 
-  rememberCsrfToken(response.headers.get("X-CSRF-Token") || "");
-
-  return response.ok;
+  return refreshSessionRequest;
 };
-
-const isBrandCategory = (value: unknown): value is Brand["category"] =>
-  value === "middle-eastern" || value === "designer" || value === "niche";
 
 const isUsage = (value: unknown): value is Product["usage"] =>
   value === "Day" || value === "Night" || value === "Day & Night";
@@ -889,7 +1173,10 @@ const normalizeBrand = (brand: BrandPayload): Brand => ({
   fallbackLetter: String(
     brand.fallbackLetter || brand.name?.toString()?.trim()?.charAt(0) || "#",
   ).toUpperCase(),
-  category: isBrandCategory(brand.category) ? brand.category : "designer",
+  category: String(brand.category || brand.categorySlug || "").trim(),
+  categoryId: brand.categoryId ? String(brand.categoryId) : null,
+  categoryName: String(brand.categoryName || "").trim(),
+  categorySlug: String(brand.categorySlug || brand.category || "").trim(),
   productCount: Number.isFinite(Number(brand.productCount)) ? Number(brand.productCount) : 0,
   previewProducts: Array.isArray(brand.previewProducts)
     ? brand.previewProducts.map(
@@ -903,7 +1190,7 @@ const normalizeBrand = (brand: BrandPayload): Brand => ({
             category: String(product?.category || ""),
             image: resolveImageUrl(product?.image || ""),
             images: asImageStringArray(product?.images).map(resolveImageUrl),
-            price: Number.isFinite(Number(product?.price)) ? Number(product?.price) : 0,
+            price: normalizeMoney(product?.price),
           }) satisfies BrandPreviewProduct,
       )
     : [],
@@ -916,7 +1203,7 @@ const normalizeBanner = (banner: BannerPayload): Banner => ({
   id: String(banner.id || banner._id || ""),
   title: String(banner.title || ""),
   subtitle: String(banner.subtitle || ""),
-  image: resolveImageUrl(banner.image || ""),
+  image: resolveImageUrl(banner.image || banner.imageUrl || ""),
   buttonText: String(banner.buttonText || ""),
   link: String(banner.link || ""),
   isActive: banner.isActive !== false,
@@ -976,8 +1263,15 @@ const createDerivedCategory = (
 });
 
 const normalizeProduct = (product: ProductPayload): Product => {
-  const sizes = Array.isArray(product.sizes) ? product.sizes : [];
-  const price = Number(product.price ?? sizes[0]?.price ?? 0);
+  const sizes = Array.isArray(product.sizes)
+    ? product.sizes
+        .map((size) => ({
+          size: String(size?.size || "Standard").trim() || "Standard",
+          price: normalizeMoney(size?.price),
+        }))
+        .filter((size) => size.size)
+    : [];
+  const price = normalizeMoney(product.price ?? sizes[0]?.price ?? 0);
   const images = asImageStringArray(product.images).map(resolveImageUrl);
   const legacyImage = resolveImageUrl(product.image || "");
   const normalizedImages = images.length
@@ -1022,7 +1316,9 @@ const normalizeProduct = (product: ProductPayload): Product => {
           .map((category) => {
             if (!category) return "";
             if (typeof category === "object") {
-              return String((category as CategoryPayload).id || (category as CategoryPayload)._id || "").trim();
+              return String(
+                (category as CategoryPayload).id || (category as CategoryPayload)._id || "",
+              ).trim();
             }
 
             return String(category || "").trim();
@@ -1054,15 +1350,15 @@ const normalizeProduct = (product: ProductPayload): Product => {
   const categories = categoryObjects.length
     ? categoryObjects
     : categoryIds.map((id, index) =>
-        createDerivedCategory(id, categoryNames[index] || categoryNames[0] || "", categorySlugs[index] || ""),
+        createDerivedCategory(
+          id,
+          categoryNames[index] || categoryNames[0] || "",
+          categorySlugs[index] || "",
+        ),
       );
   const normalizedBrandId = String(product.brandId || brandDetails?.id || "").trim();
   const normalizedCategoryId = String(
-    product.primaryCategory ||
-      product.categoryId ||
-      categoryDetails?.id ||
-      categoryIds[0] ||
-      "",
+    product.primaryCategory || product.categoryId || categoryDetails?.id || categoryIds[0] || "",
   ).trim();
   const normalizedCategory = String(
     product.category || categoryDetails?.name || categoryNames[0] || "",
@@ -1082,7 +1378,9 @@ const normalizeProduct = (product: ProductPayload): Product => {
     primaryCategory: normalizedCategoryId || null,
     category: normalizedCategory || "Uncategorized",
     categoryId: normalizedCategoryId || null,
-    categorySlug: String(product.categorySlug || categoryDetails?.slug || categorySlugs[0] || "").trim(),
+    categorySlug: String(
+      product.categorySlug || categoryDetails?.slug || categorySlugs[0] || "",
+    ).trim(),
     categoryDetails,
     price,
     gender: String(product.gender || ""),
@@ -1091,14 +1389,13 @@ const normalizeProduct = (product: ProductPayload): Product => {
     reviewsCount: Number(product.reviewsCount ?? product.reviewCount ?? 0),
     image,
     images: normalizedImages,
-    videoUrl: String(product.videoUrl || ""),
     description: String(product.description || ""),
+    type: String(product.type || "").trim(),
     notes,
     topNotes: asStringArray(product.topNotes).length ? asStringArray(product.topNotes) : notes,
     middleNotes: asStringArray(product.middleNotes),
     baseNotes: asStringArray(product.baseNotes),
     accords: normalizeAccords(product.accords),
-    longevity: String(product.longevity || ""),
     sillage: String(product.sillage || ""),
     usage,
     timeOfDay: String(product.timeOfDay || usage),
@@ -1107,7 +1404,10 @@ const normalizeProduct = (product: ProductPayload): Product => {
     seasons,
     sizes: sizes.length ? sizes : [{ size: "Standard", price }],
     stock: Number(product.stock ?? 0),
-    originalPrice: product.originalPrice,
+    originalPrice:
+      product.originalPrice === undefined || product.originalPrice === null
+        ? undefined
+        : normalizeMoney(product.originalPrice),
     isBestseller: Boolean(product.isBestseller),
     isLatest: Boolean(product.isLatest),
     bestsellerOrder: Number(product.bestsellerOrder ?? product.displayOrder ?? 0),
@@ -1117,23 +1417,42 @@ const normalizeProduct = (product: ProductPayload): Product => {
   });
 };
 
-const normalizeOrder = (order: Order): Order => ({
-  ...order,
-  productName: order.productName ?? order.items?.[0]?.productName ?? "",
-  brand: order.brand ?? order.items?.[0]?.brand ?? "",
-  size: order.size ?? order.items?.[0]?.size ?? "",
-  price: order.price ?? order.items?.[0]?.price ?? order.totalAmount,
-  subtotalAmount: order.subtotalAmount ?? order.totalAmount,
-  discountAmount: order.discountAmount ?? 0,
-  couponCode: order.couponCode ?? "",
-  isSeen: Boolean(order.isSeen),
-  orderStatus: order.orderStatus ?? order.status,
-  paymentId: order.paymentId ?? "",
-  paymentMethod: order.paymentMethod ?? "",
-  paymentGateway: order.paymentGateway ?? "",
-  paymentOrderId: order.paymentOrderId ?? "",
-  paymentSignature: order.paymentSignature ?? "",
-});
+const normalizeOrder = (order: Order): Order => {
+  const items = Array.isArray(order.items)
+    ? order.items.map((item) => ({
+        ...item,
+        quantity: Number(item.quantity || 1),
+        price: normalizeMoney(item.price ?? item.priceAtPurchase ?? 0),
+        priceAtPurchase: normalizeMoney(item.priceAtPurchase ?? item.price ?? 0),
+      }))
+    : [];
+  const firstItem = items[0];
+  const paymentStatus = normalizePaymentStatus(order.paymentStatus);
+  const displayStatus = normalizeDisplayOrderStatus(paymentStatus, order.status, order.orderStatus);
+
+  return {
+    ...order,
+    items,
+    productName: order.productName ?? firstItem?.productName ?? "",
+    brand: order.brand ?? firstItem?.brand ?? "",
+    size: order.size ?? firstItem?.size ?? "",
+    price: normalizeMoney(order.price ?? firstItem?.price ?? order.totalAmount),
+    totalAmount: normalizeMoney(order.totalAmount ?? order.price ?? firstItem?.price),
+    subtotalAmount: normalizeMoney(order.subtotalAmount ?? order.totalAmount),
+    discountAmount: normalizeMoney(order.discountAmount ?? 0),
+    couponCode: order.couponCode ?? "",
+    publicOrderId: String(order.publicOrderId || "").trim(),
+    status: displayStatus,
+    isSeen: Boolean(order.isSeen),
+    orderStatus: displayStatus,
+    paymentStatus,
+    paymentId: order.paymentId ?? "",
+    paymentMethod: order.paymentMethod ?? "",
+    paymentGateway: order.paymentGateway ?? "",
+    paymentOrderId: order.paymentOrderId ?? "",
+    paymentSignature: order.paymentSignature ?? "",
+  };
+};
 
 const normalizeAddress = (address: Partial<Address> = {}): Address => {
   const mobile = String(address.mobile || address.phone || "").trim();
@@ -1209,14 +1528,54 @@ const normalizeCoupon = (coupon: CouponPayload): Coupon => ({
   id: String(coupon.id || coupon._id || ""),
   code: String(coupon.code || "").toUpperCase(),
   discountType: coupon.discountType === "fixed" ? "fixed" : "percentage",
-  discountValue: Number(coupon.discountValue || 0),
-  minOrderAmount: Number(coupon.minOrderAmount || 0),
+  discountValue: normalizeMoney(coupon.discountValue || 0),
+  minOrderAmount: normalizeMoney(coupon.minOrderAmount || 0),
   maxDiscount:
     coupon.maxDiscount === null || coupon.maxDiscount === undefined
       ? null
-      : Number(coupon.maxDiscount || 0),
+      : normalizeMoney(coupon.maxDiscount || 0),
   expiryDate: coupon.expiryDate ? String(coupon.expiryDate) : null,
   isActive: Boolean(coupon.isActive),
+  applicabilityType: coupon.applicabilityType === "selected" ? "selected" : "all",
+  applicableProductIds: Array.from(
+    new Set(
+      [
+        ...(Array.isArray(coupon.applicableProductIds) ? coupon.applicableProductIds : []),
+        ...(Array.isArray(coupon.applicableProducts)
+          ? coupon.applicableProducts.map((product) =>
+              typeof product === "string" ? product : product.id || product._id || "",
+            )
+          : []),
+      ]
+        .map((productId) => String(productId || "").trim())
+        .filter(Boolean),
+    ),
+  ),
+  applicableProducts: Array.isArray(coupon.applicableProducts)
+    ? coupon.applicableProducts
+        .map((product): CouponApplicableProduct | null => {
+          if (!product || typeof product === "string") {
+            const productId = String(product || "").trim();
+            return productId
+              ? { _id: productId, id: productId, name: "", brand: "", image: "", images: [] }
+              : null;
+          }
+
+          const productId = String(product.id || product._id || "").trim();
+          if (!productId) return null;
+
+          return {
+            _id: productId,
+            id: productId,
+            name: String(product.name || ""),
+            brand: String(product.brand || ""),
+            image: resolveImageUrl(product.image || product.images?.[0] || ""),
+            images: asImageStringArray(product.images).map(resolveImageUrl),
+            price: normalizeMoney(product.price || 0),
+          };
+        })
+        .filter((product): product is CouponApplicableProduct => Boolean(product))
+    : [],
   createdAt: String(coupon.createdAt || ""),
   updatedAt: String(coupon.updatedAt || ""),
 });
@@ -1280,17 +1639,7 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
   }
 
   if (isMutationMethod(method)) {
-    const csrfToken = await ensureCsrfToken().catch((error) => {
-      if (import.meta.env.DEV) {
-        console.debug(`[API] CSRF bootstrap before ${method} ${path} failed`, error);
-      }
-
-      return "";
-    });
-
-    if (csrfToken) {
-      headers.set("X-CSRF-Token", csrfToken);
-    }
+    headers.set("X-CSRF-Token", await getRequiredCsrfToken(`${method} ${path}`));
   }
 
   if (import.meta.env.DEV) {
@@ -1298,12 +1647,24 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
   }
 
   const executeRequest = async () => {
-    const res = await fetch(`${BASE}${path}`, {
-      ...requestInit,
-      cache: requestInit.cache ?? (cacheableCatalogRequest && !forceFresh ? "default" : "no-store"),
-      credentials: requestInit.credentials ?? "include",
-      headers,
-    });
+    let res: Response;
+
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        ...requestInit,
+        cache: requestInit.cache ?? (cacheableCatalogRequest && !forceFresh ? "default" : "no-store"),
+        credentials: requestInit.credentials ?? "include",
+        headers,
+      });
+    } catch (error) {
+      reportApiFailure(error, {
+        method,
+        path,
+        phase: "network",
+      });
+      throw error;
+    }
+
     rememberCsrfToken(res.headers.get("X-CSRF-Token") || "");
 
     const payload = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
@@ -1325,7 +1686,15 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
         Array.isArray((payload as { errors?: Array<{ message?: string }> } | null)?.errors) &&
         (payload as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
 
-      throw new Error(firstError || payload?.message || `${res.status} ${res.statusText}`);
+      const apiError = new Error(firstError || payload?.message || `${res.status} ${res.statusText}`);
+      reportApiFailure(apiError, {
+        method,
+        path,
+        phase: "response",
+        status: res.status,
+        requestId: res.headers.get("X-Request-Id"),
+      });
+      throw apiError;
     }
 
     const data =
@@ -1369,7 +1738,7 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
   }
 }
 
-const parseUploadPayload = <T,>(responseText: string): ApiEnvelope<T> | null => {
+const parseUploadPayload = <T>(responseText: string): ApiEnvelope<T> | null => {
   try {
     return responseText ? (JSON.parse(responseText) as ApiEnvelope<T>) : null;
   } catch (_error) {
@@ -1385,13 +1754,7 @@ async function uploadFormData<T>(
 ): Promise<T> {
   requireBackend();
 
-  const csrfToken = await ensureCsrfToken().catch((error) => {
-    if (import.meta.env.DEV) {
-      console.debug(`[API] CSRF bootstrap before ${method} ${path} failed`, error);
-    }
-
-    return "";
-  });
+  const csrfToken = await getRequiredCsrfToken(`${method} ${path}`);
 
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -1416,7 +1779,14 @@ async function uploadFormData<T>(
       const payload = parseUploadPayload<T>(xhr.responseText);
 
       if (xhr.status === 401 && !options.skipAuthRefresh && shouldAttemptRefresh(path)) {
-        const refreshed = await refreshAuthSession();
+        let refreshed = false;
+
+        try {
+          refreshed = await refreshAuthSession();
+        } catch (error) {
+          reject(error);
+          return;
+        }
 
         if (refreshed) {
           try {
@@ -1437,19 +1807,35 @@ async function uploadFormData<T>(
           Array.isArray((payload as { errors?: Array<{ message?: string }> } | null)?.errors) &&
           (payload as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
 
-        reject(new Error(firstError || payload?.message || `${xhr.status} ${xhr.statusText}`));
+        const uploadError = new Error(
+          firstError || payload?.message || `${xhr.status} ${xhr.statusText}`,
+        );
+        reportApiFailure(uploadError, {
+          method,
+          path,
+          phase: "upload_response",
+          status: xhr.status,
+          requestId: xhr.getResponseHeader("X-Request-Id"),
+        });
+        reject(uploadError);
         return;
       }
 
       options.onUploadProgress?.(100);
       const data =
-        payload && typeof payload === "object" && "data" in payload
-          ? payload.data
-          : (payload as T);
+        payload && typeof payload === "object" && "data" in payload ? payload.data : (payload as T);
       resolve(data as T);
     };
 
-    xhr.onerror = () => reject(new Error("Upload failed. Check your connection and try again."));
+    xhr.onerror = () => {
+      const uploadError = new Error("Upload failed. Check your connection and try again.");
+      reportApiFailure(uploadError, {
+        method,
+        path,
+        phase: "upload_network",
+      });
+      reject(uploadError);
+    };
     xhr.onabort = () => reject(new Error("Upload was cancelled."));
     xhr.send(formData);
   });
@@ -1659,8 +2045,10 @@ export const productsApi = {
 };
 
 export const brandsApi = {
-  list: async (params: BrandListParams = {}): Promise<Brand[]> => {
-    const data = await http<BrandPayload[]>(`/brands${queryString(params)}`);
+  list: async (params: BrandListParams = {}, options: CatalogRequestOptions = {}): Promise<Brand[]> => {
+    const data = await http<BrandPayload[]>(`/brands${queryString(params)}`, {
+      forceFresh: options.forceFresh,
+    });
     return data.map(normalizeBrand);
   },
   get: async (id: string): Promise<Brand | undefined> => {
@@ -1714,8 +2102,10 @@ export const categoriesApi = {
     );
     return data.map(normalizeCategory);
   },
-  listAdmin: async (_options: CategoryListOptions = {}): Promise<Category[]> => {
-    const data = await http<CategoryPayload[]>("/categories/manage");
+  listAdmin: async (options: CategoryListOptions = {}): Promise<Category[]> => {
+    const data = await http<CategoryPayload[]>("/categories/manage", {
+      forceFresh: options.forceFresh,
+    });
     return data.map(normalizeCategory);
   },
   listAdminPage: async (
@@ -1723,8 +2113,6 @@ export const categoriesApi = {
       page?: number;
       limit?: number;
       search?: string;
-      featured?: "featured" | "standard";
-      state?: "active" | "inactive" | "deleted";
     } = {},
   ): Promise<AdminCategoryListResponse> => {
     const data = await http<{
@@ -1761,17 +2149,6 @@ export const categoriesApi = {
     clearCatalogCache("/products");
     return normalizeCategory(updatedCategory);
   },
-  reorder: async (
-    items: Array<{ id: string; displayOrder?: number; sortOrder?: number }>,
-  ): Promise<Category[]> => {
-    const data = await http<CategoryPayload[]>("/categories/reorder", {
-      method: "PATCH",
-      body: JSON.stringify({ items }),
-    });
-    clearCatalogCache("/categories");
-    clearCatalogCache("/products");
-    return data.map(normalizeCategory);
-  },
   remove: async (id: string): Promise<void> => {
     await http<{ id: string }>(`/categories/${id}`, { method: "DELETE" });
     clearCatalogCache("/categories");
@@ -1780,9 +2157,14 @@ export const categoriesApi = {
 };
 
 export const bannersApi = {
-  listActive: async (): Promise<Banner[]> => {
-    const data = await http<BannerPayload[]>("/banners");
-    return data.map(normalizeBanner);
+  listActive: async (options: CatalogRequestOptions = {}): Promise<Banner[]> => {
+    const data = await http<BannerPayload[]>("/banners", {
+      forceFresh: options.forceFresh,
+    });
+    return data
+      .map(normalizeBanner)
+      .filter((banner) => banner.isActive && banner.image)
+      .sort((left, right) => left.order - right.order);
   },
   listAdmin: async (): Promise<Banner[]> => {
     const data = await http<BannerPayload[]>("/banners/manage");
@@ -1794,6 +2176,7 @@ export const bannersApi = {
       body: formData,
     });
     clearCatalogCache("/banners");
+    emitDataEvent(BANNERS_CHANGED_EVENT);
     return normalizeBanner(banner);
   },
   updateWithImage: async (id: string, formData: FormData): Promise<Banner> => {
@@ -1802,6 +2185,7 @@ export const bannersApi = {
       body: formData,
     });
     clearCatalogCache("/banners");
+    emitDataEvent(BANNERS_CHANGED_EVENT);
     return normalizeBanner(banner);
   },
   toggle: async (id: string): Promise<Banner> => {
@@ -1809,6 +2193,7 @@ export const bannersApi = {
       method: "PATCH",
     });
     clearCatalogCache("/banners");
+    emitDataEvent(BANNERS_CHANGED_EVENT);
     return normalizeBanner(banner);
   },
   remove: async (id: string): Promise<void> => {
@@ -1816,6 +2201,7 @@ export const bannersApi = {
       method: "DELETE",
     });
     clearCatalogCache("/banners");
+    emitDataEvent(BANNERS_CHANGED_EVENT);
   },
 };
 
@@ -1904,6 +2290,8 @@ export const couponsApi = {
     maxDiscount?: number | null;
     expiryDate?: string | null;
     isActive?: boolean;
+    applicabilityType?: CouponApplicabilityType;
+    applicableProducts?: string[];
   }): Promise<Coupon> => {
     const coupon = await http<CouponPayload>("/coupons", {
       method: "POST",
@@ -1911,15 +2299,54 @@ export const couponsApi = {
     });
     return normalizeCoupon(coupon);
   },
-  apply: async (payload: ApplyCouponInput): Promise<ApplyCouponResult> => {
-    const response = await http<ApplyCouponResult>("/coupons/apply", {
-      method: "POST",
+  update: async (
+    id: string,
+    payload: {
+      code: string;
+      discountType: CouponDiscountType;
+      discountValue: number;
+      minOrderAmount?: number;
+      maxDiscount?: number | null;
+      expiryDate?: string | null;
+      isActive?: boolean;
+      applicabilityType?: CouponApplicabilityType;
+      applicableProducts?: string[];
+    },
+  ): Promise<Coupon> => {
+    const coupon = await http<CouponPayload>(`/coupons/${id}`, {
+      method: "PUT",
       body: JSON.stringify(payload),
     });
+    return normalizeCoupon(coupon);
+  },
+  apply: async (payload: ApplyCouponInput): Promise<ApplyCouponResult> => {
+    const response =
+      (await http<ApplyCouponPayload | null>("/coupons/apply", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })) || {};
+    const coupon = response.coupon ? normalizeCoupon(response.coupon) : null;
+    const couponDiscount =
+      response.coupon?.discountValue ?? response.coupon?.discount ?? 0;
+    const discount = normalizeMoney(response.discount ?? couponDiscount);
+    const subtotal = normalizeMoney(response.subtotal ?? payload.cartTotal ?? 0);
+    const finalTotal = normalizeMoney(
+      response.finalTotal ?? subtractMoney(subtotal, discount),
+    );
 
     return {
-      ...response,
-      coupon: response.coupon ? normalizeCoupon(response.coupon) : null,
+      success: response.success !== false,
+      code: String(response.code || coupon?.code || payload.code || "")
+        .trim()
+        .toUpperCase(),
+      discount,
+      finalTotal,
+      subtotal,
+      eligibleSubtotal: normalizeMoney(response.eligibleSubtotal ?? subtotal),
+      ineligibleSubtotal: normalizeMoney(response.ineligibleSubtotal ?? 0),
+      partialApplication: Boolean(response.partialApplication),
+      message: response.message,
+      coupon,
     };
   },
   toggle: async (id: string): Promise<Coupon> => {
@@ -2164,8 +2591,14 @@ export const accountApi = {
       range?: AnalyticsRangeKey;
       from?: string;
       to?: string;
+      startDate?: string;
+      endDate?: string;
     } = {},
-  ): Promise<AdminAnalytics> => http<AdminAnalytics>(`/admin/analytics${queryString(params)}`),
+    options: CatalogRequestOptions = {},
+  ): Promise<AdminAnalytics> =>
+    http<AdminAnalytics>(`/admin/analytics${queryString(params)}`, {
+      forceFresh: options.forceFresh ?? true,
+    }),
 };
 
 export type CartApiItem = {
@@ -2208,15 +2641,19 @@ const normalizeCartItem = (item: CartApiItem): CartApiItem => ({
   },
   size: {
     size: String(item.size?.size || item.selectedVariant?.size || "Standard"),
-    price: Number(item.size?.price || item.currentPrice || item.product?.price || 0),
+    price: normalizeMoney(item.size?.price ?? item.currentPrice ?? item.product?.price ?? 0),
   },
   quantity: Number(item.quantity || 1),
-  priceAtAddition: Number(item.priceAtAddition || item.size?.price || item.product?.price || 0),
-  currentPrice: Number(item.currentPrice || item.size?.price || item.product?.price || 0),
-  lineTotal: Number(
-    item.lineTotal ||
-      Number(item.currentPrice || item.size?.price || item.product?.price || 0) *
-        Number(item.quantity || 1),
+  priceAtAddition: normalizeMoney(
+    item.priceAtAddition ?? item.size?.price ?? item.product?.price ?? 0,
+  ),
+  currentPrice: normalizeMoney(item.currentPrice ?? item.size?.price ?? item.product?.price ?? 0),
+  lineTotal: normalizeMoney(
+    item.lineTotal ??
+      multiplyMoney(
+        item.currentPrice ?? item.size?.price ?? item.product?.price ?? 0,
+        item.quantity || 1,
+      ),
   ),
   key: String(
     item.key ||
@@ -2232,14 +2669,21 @@ const normalizeCartResponse = (cart: CartApiResponse): CartApiResponse => {
       : [];
   const items = itemsSource.map(normalizeCartItem);
 
+  const subtotal = normalizeMoney(
+    cart.subtotal ?? addMoney(...items.map((item) => item.lineTotal || 0)),
+  );
+  const discount = normalizeMoney(cart.discount ?? 0);
+
   return {
     ...cart,
     items,
     products: items,
     totalItems: Number(cart.totalItems ?? items.reduce((sum, item) => sum + item.quantity, 0)),
-    subtotal: Number(cart.subtotal ?? items.reduce((sum, item) => sum + (item.lineTotal || 0), 0)),
-    discount: Number(cart.discount ?? 0),
-    finalTotal: Number(cart.finalTotal ?? Number(cart.subtotal ?? 0) - Number(cart.discount ?? 0)),
+    subtotal,
+    discount,
+    finalTotal: normalizeMoney(
+      cart.finalTotal && cart.finalTotal > 0 ? cart.finalTotal : subtractMoney(subtotal, discount),
+    ),
   };
 };
 
@@ -2402,9 +2846,10 @@ export type AdminAnalytics = {
     totalOrders: number;
     totalSpent: number;
     lastLogin?: string;
+    lastOrderAt?: string | null;
     createdAt?: string | null;
-      emailVerified?: boolean;
-      isBanned?: boolean;
+    emailVerified?: boolean;
+    isBanned?: boolean;
   }>;
   recentActivity: Array<{
     id: string;
@@ -2422,8 +2867,42 @@ export const adminApi = {
       range?: AnalyticsRangeKey;
       from?: string;
       to?: string;
+      startDate?: string;
+      endDate?: string;
     } = {},
-  ): Promise<AdminAnalytics> => http<AdminAnalytics>(`/admin/analytics${queryString(params)}`),
+    options: CatalogRequestOptions = {},
+  ): Promise<AdminAnalytics> =>
+    http<AdminAnalytics>(`/admin/analytics${queryString(params)}`, {
+      forceFresh: options.forceFresh ?? true,
+    }),
+  clearAnalytics: async (): Promise<AdminClearResponse> => {
+    const response = await http<AdminClearResponse>("/admin/analytics/clear-test-data", {
+      method: "DELETE",
+    });
+    invalidateProxyCache("/admin", "/orders", "/users", "/cart");
+    invalidateOrdersCache();
+    emitDataEvent("purefumes:orders-changed");
+    return response;
+  },
+  clearActivity: async (): Promise<AdminClearResponse> => {
+    const response = await http<AdminClearResponse>("/admin/analytics/activity", {
+      method: "DELETE",
+    });
+    invalidateProxyCache("/admin/analytics");
+    return response;
+  },
+  clearOrders: async (): Promise<AdminClearResponse> => {
+    const response = await http<AdminClearResponse>("/admin/orders", { method: "DELETE" });
+    invalidateProxyCache("/admin", "/orders", "/users");
+    invalidateOrdersCache();
+    emitDataEvent("purefumes:orders-changed");
+    return response;
+  },
+  clearUsers: async (): Promise<AdminClearResponse> => {
+    const response = await http<AdminClearResponse>("/admin/users", { method: "DELETE" });
+    invalidateProxyCache("/admin", "/users", "/cart");
+    return response;
+  },
   users: async (
     params: {
       page?: number;
@@ -2482,7 +2961,9 @@ export const paymentsApi = {
       updatedAt: data.updatedAt || null,
     };
   },
-  updateSettings: async (paymentMode: "live" | "test"): Promise<PaymentModeSettings & PaymentConfig> => {
+  updateSettings: async (
+    paymentMode: "live" | "test",
+  ): Promise<PaymentModeSettings & PaymentConfig> => {
     const data = await http<PaymentModeSettings & PaymentConfig>("/payments/settings", {
       method: "PUT",
       body: JSON.stringify({ paymentMode }),

@@ -1,11 +1,10 @@
 import { memo } from "react";
 import type { Size } from "@/data/products";
+import { formatINR } from "@/lib/money";
 
 type Props = { sizes: Size[]; selected: Size; onSelect: (s: Size) => void };
 
 export const SizeSelector = memo(function SizeSelector({ sizes, selected, onSelect }: Props) {
-  const formatPrice = (price: number) => `Rs. ${Number(price || 0).toLocaleString("en-IN")}`;
-
   return (
     <div className="grid grid-cols-2 gap-2 min-[420px]:gap-3 lg:grid-cols-3">
       {sizes.map((s) => {
@@ -26,7 +25,7 @@ export const SizeSelector = memo(function SizeSelector({ sizes, selected, onSele
               <div className="min-w-0">
                 <p className="break-words font-display text-lg leading-tight min-[420px]:text-xl sm:text-2xl">{s.size}</p>
                 <p className={`mt-1 text-[0.65rem] uppercase tracking-[0.12em] min-[420px]:text-xs min-[420px]:tracking-[0.2em] ${active ? "text-beige/70" : "text-navy/45"}`}>
-                  {formatPrice(s.price)}
+                  {formatINR(s.price)}
                 </p>
               </div>
               {active ? (

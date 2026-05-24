@@ -34,6 +34,9 @@ import {
   type Order,
 } from "@/services/api";
 import { setRedirectAfterLogin } from "@/lib/auth-redirect";
+import { formatINR } from "@/lib/money";
+import { getOrderDisplayId } from "@/lib/order-id";
+import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-status";
 import { frontendMediator } from "@/lib/performance/mediator";
 
 export const Route = createFileRoute("/profile")({
@@ -148,7 +151,7 @@ const safeNumber = (value: unknown) => {
   return Number.isFinite(numberValue) ? numberValue : 0;
 };
 
-const formatCurrency = (amount: number) => `Rs. ${safeNumber(amount).toLocaleString("en-IN")}`;
+const formatCurrency = formatINR;
 
 const formatOrderDate = (date: string) => {
   const parsedDate = new Date(date);
@@ -164,6 +167,7 @@ const getStatusBadgeClass = (status = "") => {
   const normalizedStatus = status.toLowerCase();
 
   if (normalizedStatus === "delivered") return "bg-green-50 text-green-700";
+  if (normalizedStatus === "confirmed") return "bg-emerald-50 text-emerald-700";
   if (normalizedStatus === "cancelled") return "bg-red-50 text-red-700";
   if (normalizedStatus === "shipped") return "bg-blue-50 text-blue-700";
   if (normalizedStatus === "processing") return "bg-gold/15 text-gold";
@@ -715,7 +719,7 @@ function ProfilePage() {
                             <p className="font-medium text-navy">
                               {item?.productName ||
                                 order.productName ||
-                                `Order ${order.id || order._id}`}
+                                `Order ${getOrderDisplayId(order)}`}
                             </p>
                             <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-navy/60">
                               <span>
@@ -726,7 +730,10 @@ function ProfilePage() {
                               <span
                                 className={`rounded-full px-2.5 py-1 text-[0.65rem] uppercase tracking-[0.16em] ${getStatusBadgeClass(order.status)}`}
                               >
-                                {order.status || "Pending"}
+                                {formatOrderStatusLabel(order.status)}
+                              </span>
+                              <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[0.65rem] uppercase tracking-[0.16em] text-emerald-700">
+                                Payment: {formatPaymentStatusLabel(order.paymentStatus)}
                               </span>
                             </div>
                           </div>

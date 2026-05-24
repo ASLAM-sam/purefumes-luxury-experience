@@ -1,6 +1,14 @@
 import mongoose from "mongoose";
+import { addMoney, multiplyMoney, normalizeMoney } from "../utils/money.js";
 
-export const ORDER_STATUSES = ["Pending", "Processing", "Shipped", "Delivered", "Cancelled"];
+export const ORDER_STATUSES = [
+  "Pending",
+  "Confirmed",
+  "Processing",
+  "Shipped",
+  "Delivered",
+  "Cancelled",
+];
 export const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded"];
 
 const orderItemSchema = new mongoose.Schema(
@@ -55,6 +63,19 @@ const orderSchema = new mongoose.Schema(
       ref: "User",
       index: true,
       default: null,
+    },
+    publicOrderId: {
+      type: String,
+      trim: true,
+      unique: true,
+      sparse: true,
+      index: true,
+      validate: {
+        validator(value) {
+          return !value || /^\d{6}$/.test(value);
+        },
+        message: "Public order id must be exactly 6 digits",
+      },
     },
     email: {
       type: String,
@@ -210,6 +231,11 @@ const orderSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    isTestData: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -229,6 +255,27 @@ orderSchema.index({ status: 1, createdAt: -1 });
 orderSchema.index({ orderStatus: 1, createdAt: -1 });
 orderSchema.index({ paymentStatus: 1, createdAt: -1 });
 orderSchema.index({ isSeen: 1, createdAt: -1 });
+orderSchema.index({ "items.productId": 1, createdAt: -1 });
+orderSchema.index(
+  { paymentGateway: 1, paymentId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      paymentGateway: "Razorpay",
+      paymentId: { $type: "string", $gt: "" },
+    },
+  },
+);
+orderSchema.index(
+  { paymentGateway: 1, paymentOrderId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      paymentGateway: "Razorpay",
+      paymentOrderId: { $type: "string", $gt: "" },
+    },
+  },
+);
 
 orderSchema.virtual("id").get(function getId() {
   return this._id.toString();
@@ -248,17 +295,50 @@ orderSchema.pre("validate", function normalizeOrder(next) {
     this.productName = this.productName || firstItem.productName || "";
     this.brand = this.brand || firstItem.brand || "";
     this.size = this.size || firstItem.size || "";
-    this.price = this.price || firstItem.price || this.totalAmount || 0;
+    this.price = normalizeMoney(
+      this.price ?? firstItem.price ?? this.totalAmount ?? 0,
+    );
   }
 
-  this.email = String(this.email || "").trim().toLowerCase();
+  this.email = String(this.email || "")
+    .trim()
+    .toLowerCase();
   this.mobile = String(this.mobile || this.phone || "").trim();
   this.orderStatus = this.orderStatus || this.status || "Pending";
   this.status = this.status || this.orderStatus || "Pending";
-  this.paymentStatus = this.paymentStatus || (this.paymentId ? "paid" : "pending");
-  this.subtotalAmount = this.subtotalAmount ?? this.totalAmount ?? 0;
-  this.discountAmount = this.discountAmount ?? 0;
-  this.couponCode = String(this.couponCode || "").trim().toUpperCase();
+  this.paymentStatus =
+    this.paymentStatus || (this.paymentId ? "paid" : "pending");
+  if (this.paymentStatus === "paid" && this.status === "Pending") {
+    this.status = "Confirmed";
+    this.orderStatus = "Confirmed";
+  }
+  this.items = Array.isArray(this.items)
+    ? this.items.map((item) => {
+        item.price = normalizeMoney(item.price);
+        item.priceAtPurchase =
+          item.priceAtPurchase === undefined
+            ? undefined
+            : normalizeMoney(item.priceAtPurchase);
+        return item;
+      })
+    : this.items;
+  this.subtotalAmount = normalizeMoney(
+    this.subtotalAmount ??
+      (Array.isArray(this.items)
+        ? addMoney(
+            ...this.items.map((item) =>
+              multiplyMoney(item.price, item.quantity),
+            ),
+          )
+        : (this.totalAmount ?? 0)),
+  );
+  this.discountAmount = normalizeMoney(this.discountAmount ?? 0);
+  this.totalAmount = normalizeMoney(
+    this.totalAmount ?? this.subtotalAmount - this.discountAmount,
+  );
+  this.couponCode = String(this.couponCode || "")
+    .trim()
+    .toUpperCase();
 
   next();
 });

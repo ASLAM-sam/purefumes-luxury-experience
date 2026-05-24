@@ -1,6 +1,14 @@
 import mongoose from "mongoose";
 
 export const USER_ROLES = ["user", "admin"];
+export const LEGACY_ROLE_ALIASES = {
+  "super-admin": "admin",
+};
+
+export const normalizeUserRole = (role) => {
+  const normalized = LEGACY_ROLE_ALIASES[String(role || "").trim()] || String(role || "").trim();
+  return USER_ROLES.includes(normalized) ? normalized : "user";
+};
 
 const addressSchema = new mongoose.Schema(
   {
@@ -103,6 +111,7 @@ const userSchema = new mongoose.Schema(
     accountLockedUntil: { type: Date, default: null, select: false },
     isBanned: { type: Boolean, default: false, index: true },
     bannedAt: { type: Date, default: null },
+    isTestData: { type: Boolean, default: false, index: true },
   },
   {
     timestamps: true,
@@ -122,6 +131,7 @@ userSchema.virtual("id").get(function getId() {
 
 userSchema.pre("validate", function normalizeUser(next) {
   this.email = String(this.email || "").trim().toLowerCase();
+  this.role = normalizeUserRole(this.role);
   const normalizedUsername = String(this.username || "").trim();
   this.username = normalizedUsername || undefined;
   const normalizedMobile = String(this.mobile || "").trim();

@@ -2,7 +2,9 @@ import mongoose from "mongoose";
 import { ApiError, asyncHandler } from "../middlewares/errorMiddleware.js";
 import { storeUploadedImage } from "../middlewares/uploadMiddleware.js";
 import Brand, { normalizeBrandName } from "../models/Brand.js";
+import { createCategorySlug } from "../models/Category.js";
 import Product from "../models/Product.js";
+import { resolveCategoryFromInput } from "../services/categoryService.js";
 import {
   buildLinkedBrandFilter,
   normalizeBrandResponse,
@@ -13,7 +15,7 @@ import { bulkImportBrands } from "../services/bulkBrandImportService.js";
 const buildBrandPayload = (body = {}) => {
   const payload = {};
 
-  ["name", "logo", "category"].forEach((field) => {
+  ["name", "logo", "category", "categoryId", "categoryName", "categorySlug"].forEach((field) => {
     if (body[field] !== undefined) {
       payload[field] =
         typeof body[field] === "string" ? body[field].trim() : body[field];
@@ -21,6 +23,56 @@ const buildBrandPayload = (body = {}) => {
   });
 
   return payload;
+};
+
+const getBrandCategorySlug = (value = "") => {
+  const slug = createCategorySlug(value);
+
+  if (slug === "designer" || slug === "designer-fragrances") {
+    return "designer";
+  }
+
+  if (slug === "middle-eastern" || slug === "middle-eastern-fragrances") {
+    return "middle-eastern";
+  }
+
+  if (slug === "niche" || slug === "niche-fragrances") {
+    return "niche";
+  }
+
+  return slug;
+};
+
+const hasCategoryInput = (payload = {}) =>
+  ["categoryId", "category", "categoryName", "categorySlug"].some((field) =>
+    Object.prototype.hasOwnProperty.call(payload, field),
+  );
+
+const resolveBrandCategoryPayload = async (payload = {}) => {
+  if (!hasCategoryInput(payload)) {
+    return payload;
+  }
+
+  const category = await resolveCategoryFromInput({
+    categoryId: payload.categoryId,
+    categoryName: payload.categoryName || payload.categorySlug || payload.category,
+    allowCreate: false,
+  });
+
+  if (!category) {
+    throw new ApiError(422, "Brand category is required");
+  }
+
+  const categoryName = String(category.name || "").trim();
+  const categorySlug = getBrandCategorySlug(categoryName);
+
+  return {
+    ...payload,
+    categoryId: category._id,
+    categoryName,
+    categorySlug,
+    category: categorySlug,
+  };
 };
 
 const normalizePreviewProduct = (product) => {
@@ -147,10 +199,22 @@ export const getBrands = asyncHandler(async (req, res) => {
   const filter = {};
 
   if (req.query.category) {
-    filter.category = String(req.query.category).trim();
+    const rawCategory = String(req.query.category).trim();
+
+    if (mongoose.Types.ObjectId.isValid(rawCategory)) {
+      filter.categoryId = rawCategory;
+    } else {
+      const categorySlug = getBrandCategorySlug(rawCategory);
+      filter.$or = [
+        { category: categorySlug },
+        { categorySlug },
+        { categoryName: rawCategory },
+      ];
+    }
   }
 
   const brands = await Brand.find(filter)
+    .collation({ locale: "en", strength: 2 })
     .sort({ createdAt: -1 })
     .lean({ virtuals: true });
   const enrichedBrands = await enrichBrands(brands);
@@ -178,8 +242,9 @@ export const getBrandById = asyncHandler(async (req, res) => {
 });
 
 export const createBrand = asyncHandler(async (req, res) => {
-  const payload = buildBrandPayload(req.body);
+  let payload = buildBrandPayload(req.body);
   await addUploadedLogo(payload, req.file);
+  payload = await resolveBrandCategoryPayload(payload);
 
   if (!payload.name) {
     throw new ApiError(422, "Brand name is required");
@@ -232,8 +297,9 @@ export const updateBrand = asyncHandler(async (req, res) => {
     throw new ApiError(404, "Brand not found");
   }
 
-  const payload = buildBrandPayload(req.body);
+  let payload = buildBrandPayload(req.body);
   await addUploadedLogo(payload, req.file);
+  payload = await resolveBrandCategoryPayload(payload);
 
   if (payload.name) {
     await ensureBrandNameAvailable(payload.name, req.params.id);

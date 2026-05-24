@@ -49,14 +49,19 @@ const BrandWordmark = memo(function BrandWordmark({
 }) {
   if (inline) {
     return (
-      <span className="mobile-brand-wordmark whitespace-nowrap font-display uppercase text-[#7d5437]">
-        Purefumes Hyderabad
+      <span className="mobile-brand-wordmark flex min-w-0 flex-col justify-center text-[#7d5437]">
+        <span className="truncate whitespace-nowrap font-display uppercase">
+          Purefumes Hyderabad
+        </span>
+        <span className="brand-tagline truncate whitespace-nowrap font-sans uppercase">
+          Redefine Your Presence
+        </span>
       </span>
     );
   }
 
   return (
-    <span className="block min-w-0 text-left leading-none">
+    <span className="block min-w-0 text-center leading-none">
       <span
         className={`block truncate font-display uppercase tracking-[0.28em] text-[#8b5f3d] ${
           compact
@@ -68,6 +73,9 @@ const BrandWordmark = memo(function BrandWordmark({
       </span>
       <span className="block text-[clamp(0.62rem,0.18vw+0.58rem,0.74rem)] tracking-[0.2em] text-[#8b6b56]">
         Hyderabad
+      </span>
+      <span className="brand-tagline mt-0.5 block truncate font-sans uppercase text-[#8b6b56]">
+        Redefine Your Presence
       </span>
     </span>
   );
@@ -126,9 +134,7 @@ export const Navbar = memo(function Navbar() {
       groups[brand.category]?.push(brand);
     });
 
-    Object.values(groups).forEach((group) =>
-      group.sort((a, b) => a.name.localeCompare(b.name)),
-    );
+    Object.values(groups).forEach((group) => group.sort((a, b) => a.name.localeCompare(b.name)));
 
     return groups;
   }, [brands]);
@@ -226,15 +232,13 @@ export const Navbar = memo(function Navbar() {
   return (
     <>
       <header
-        className={`navbar inset-x-0 text-[#5b3a29] ${
-          scrolled ? "navbar-scrolled" : ""
-        }`}
+        className={`navbar inset-x-0 text-[#5b3a29] ${scrolled ? "navbar-scrolled" : ""}`}
         onMouseLeave={() => setMegaOpen(null)}
       >
         <Container className="hidden h-[5.1rem] items-center gap-5 xl:flex">
           <Link
             to="/"
-            className="flex h-14 w-[13.5rem] flex-none items-center justify-start"
+            className="flex h-14 w-[13.5rem] flex-none items-center justify-center"
             aria-label="Purefumes Hyderabad home"
           >
             <BrandWordmark />
@@ -249,10 +253,7 @@ export const Navbar = memo(function Navbar() {
             >
               Home
             </Link>
-            <div
-              className="relative"
-              onMouseEnter={() => setMegaOpen("brands")}
-            >
+            <div className="relative" onMouseEnter={() => setMegaOpen("brands")}>
               <Link
                 to="/brands"
                 className="nav-link inline-flex items-center gap-1 font-medium uppercase"

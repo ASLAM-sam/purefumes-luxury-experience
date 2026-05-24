@@ -59,10 +59,26 @@ const createOrderValidation = [
     .isLength({ max: 60 })
     .withMessage("Coupon code cannot exceed 60 characters"),
   body("paymentId").optional({ values: "falsy" }).trim().isLength({ max: 200 }),
-  body("paymentMethod").optional({ values: "falsy" }).trim().isLength({ max: 80 }),
-  body("paymentGateway").optional({ values: "falsy" }).trim().isLength({ max: 80 }),
-  body("paymentOrderId").optional({ values: "falsy" }).trim().isLength({ max: 200 }),
-  body("paymentSignature").optional({ values: "falsy" }).trim().isLength({ max: 300 }),
+  body("paymentMethod")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 80 }),
+  body("paymentGateway")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 80 }),
+  body("paymentOrderId")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 200 }),
+  body("paymentSignature")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 300 }),
+  body("paymentStatus")
+    .optional({ values: "falsy" })
+    .isIn(["paid", "failed", "pending", "cod"])
+    .withMessage("Invalid payment status"),
 ];
 
 const listOrdersValidation = [
@@ -78,6 +94,11 @@ const listOrdersValidation = [
     .optional()
     .isIn(ORDER_STATUSES)
     .withMessage("Invalid order status"),
+  query("search")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ max: 160 })
+    .withMessage("Search cannot exceed 160 characters"),
   ...dateRangeQueryValidation,
 ];
 
@@ -99,8 +120,22 @@ const updateStatusValidation = [
     .withMessage(`Status must be one of: ${ORDER_STATUSES.join(", ")}`),
 ];
 
-router.post("/", requireAuth, orderLimiter, createOrderValidation, validateRequest, placeOrder);
-router.post("/create", requireAuth, orderLimiter, createOrderValidation, validateRequest, placeOrder);
+router.post(
+  "/",
+  requireAuth,
+  orderLimiter,
+  createOrderValidation,
+  validateRequest,
+  placeOrder,
+);
+router.post(
+  "/create",
+  requireAuth,
+  orderLimiter,
+  createOrderValidation,
+  validateRequest,
+  placeOrder,
+);
 router.get(
   "/my-orders",
   requireAuth,
@@ -110,8 +145,20 @@ router.get(
 );
 router.get("/unseen", adminAuth, getUnseenOrders);
 router.get("/:id", requireAuth, orderIdParam, validateRequest, getOrderById);
-router.post("/:id/cancel", requireAuth, orderIdParam, validateRequest, cancelOrder);
-router.post("/:id/reorder", requireAuth, orderIdParam, validateRequest, reorder);
+router.post(
+  "/:id/cancel",
+  requireAuth,
+  orderIdParam,
+  validateRequest,
+  cancelOrder,
+);
+router.post(
+  "/:id/reorder",
+  requireAuth,
+  orderIdParam,
+  validateRequest,
+  reorder,
+);
 router.get("/", adminAuth, listOrdersValidation, validateRequest, getOrders);
 router.put(
   "/:id/seen",

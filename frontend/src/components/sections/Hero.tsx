@@ -1,22 +1,93 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
+import {
+  BANNERS_CHANGED_EVENT,
+  bannersApi,
+  DATA_EVENT_STORAGE_KEY,
+  type Banner,
+} from "@/services/api";
+import { frontendEventBus } from "@/lib/performance/event-bus";
 
-import { homeHeroSlides } from "@/lib/static-image-overrides";
+const sortActiveBanners = (items: Banner[]) =>
+  [...items]
+    .filter((banner) => banner.isActive && banner.image)
+    .sort((left, right) => {
+      const orderDelta = left.order - right.order;
+      if (orderDelta !== 0) return orderDelta;
+      return (left.createdAt || "").localeCompare(right.createdAt || "");
+    });
 
-type HeroSlide = {
-  id: string;
-  category: string;
-  heading: string;
-  image: string;
-  link: string;
-};
-
-const slides: HeroSlide[] = homeHeroSlides;
+const isExternalHref = (href: string) => /^https?:\/\//i.test(href);
 
 export const Hero = memo(function Hero() {
   const [index, setIndex] = useState(0);
   const [documentHidden, setDocumentHidden] = useState(false);
+  const [slides, setSlides] = useState<Banner[]>([]);
+  const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(false);
 
-  const slideCount = useMemo(() => slides.length, []);
+  const slideCount = slides.length;
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  const loadBanners = useCallback(async (forceFresh = false) => {
+    try {
+      const nextBanners = await bannersApi.listActive({ forceFresh });
+
+      if (!mountedRef.current) return;
+      setSlides(sortActiveBanners(nextBanners));
+    } catch (_error) {
+      if (!mountedRef.current) return;
+      setSlides([]);
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBanners();
+  }, [loadBanners]);
+
+  useEffect(() => {
+    const refreshBanners = () => {
+      void loadBanners(true);
+    };
+
+    const unsubscribeCatalog = frontendEventBus.subscribe("catalog:changed", ({ scope }) => {
+      if (scope === "banners" || scope === "all") {
+        refreshBanners();
+      }
+    });
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== DATA_EVENT_STORAGE_KEY || !event.newValue) return;
+
+      try {
+        const data = JSON.parse(event.newValue) as { name?: string };
+        if (data.name === BANNERS_CHANGED_EVENT) {
+          refreshBanners();
+        }
+      } catch (_error) {
+        // Ignore malformed cross-tab data events.
+      }
+    };
+
+    window.addEventListener(BANNERS_CHANGED_EVENT, refreshBanners);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      unsubscribeCatalog();
+      window.removeEventListener(BANNERS_CHANGED_EVENT, refreshBanners);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [loadBanners]);
 
   useEffect(() => {
     setIndex(0);
@@ -47,6 +118,16 @@ export const Hero = memo(function Hero() {
     return () => window.clearInterval(timer);
   }, [documentHidden, slideCount]);
 
+  if (loading) {
+    return (
+      <section className="home-hero-slider bg-[#f7f3ed] md:py-6 lg:py-8">
+        <div className="w-full md:px-[var(--page-gutter)]">
+          <div className="home-hero-slider__frame mx-auto w-full animate-pulse bg-[#ece3d7] md:max-w-[var(--container-max)]" />
+        </div>
+      </section>
+    );
+  }
+
   if (slides.length === 0) {
     return null;
   }
@@ -66,13 +147,15 @@ export const Hero = memo(function Hero() {
                 aria-hidden={slideIndex !== index}
               >
                 <a
-                  href={slide.link}
+                  href={slide.link || "/shop"}
+                  target={isExternalHref(slide.link) ? "_blank" : undefined}
+                  rel={isExternalHref(slide.link) ? "noreferrer" : undefined}
                   className="block h-full w-full"
-                  aria-label={`Shop ${slide.category}`}
+                  aria-label={slide.buttonText || slide.title || "Shop fragrances"}
                 >
                   <img
                     src={slide.image}
-                    alt={slide.heading}
+                    alt={slide.title || "Purefumes hero banner"}
                     width={1600}
                     height={900}
                     loading={slideIndex === 0 ? "eager" : "lazy"}

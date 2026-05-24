@@ -64,6 +64,11 @@ const bannerFieldValidation = [
     .trim()
     .custom(isHttpImageUrl)
     .withMessage("Banner image must be a valid URL"),
+  body("imageUrl")
+    .optional({ values: "falsy" })
+    .trim()
+    .custom(isHttpImageUrl)
+    .withMessage("Banner image URL must be a valid URL"),
   body("buttonText")
     .trim()
     .notEmpty()
@@ -84,8 +89,12 @@ const bannerFieldValidation = [
     .optional()
     .isBoolean()
     .withMessage("isActive must be a boolean"),
+  body("status")
+    .optional()
+    .isIn(["active", "disabled", "enabled", "inactive", "true", "false"])
+    .withMessage("Banner status is invalid"),
   body().custom((_, { req }) => {
-    const image = String(req.body.image || "").trim();
+    const image = String(req.body.image || req.body.imageUrl || "").trim();
 
     if (!req.file && !image) {
       throw new Error("Banner image is required");
@@ -113,6 +122,11 @@ const bannerUpdateValidation = [
     .trim()
     .custom(isHttpImageUrl)
     .withMessage("Banner image must be a valid URL"),
+  body("imageUrl")
+    .optional({ values: "falsy" })
+    .trim()
+    .custom(isHttpImageUrl)
+    .withMessage("Banner image URL must be a valid URL"),
   body("buttonText")
     .optional()
     .trim()
@@ -133,6 +147,10 @@ const bannerUpdateValidation = [
     .optional()
     .isBoolean()
     .withMessage("isActive must be a boolean"),
+  body("status")
+    .optional()
+    .isIn(["active", "disabled", "enabled", "inactive", "true", "false"])
+    .withMessage("Banner status is invalid"),
 ];
 
 router.get("/", getBanners);

@@ -6,8 +6,10 @@ import {
   Percent,
   RefreshCw,
   ShoppingBag,
+  Trash2,
   Users,
 } from "lucide-react";
+import { useState } from "react";
 import {
   Area,
   AreaChart,
@@ -24,17 +26,20 @@ import { AnalyticsChart } from "@/components/admin/AnalyticsChart";
 import { DateRangeFilter } from "@/components/admin/DateRangeFilter";
 import { StatCard } from "@/components/admin/StatCard";
 import { Button } from "@/components/common/Button";
+import { ConfirmModal } from "@/components/common/ConfirmModal";
 import { EmptyState } from "@/components/common/EmptyState";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
+import { useNotification } from "@/context/NotificationContext";
 import { useAdminAnalytics } from "@/hooks/useAdminAnalytics";
+import { formatCompactINR, formatINR } from "@/lib/money";
+import { adminApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/analytics")({
   component: AdminAnalyticsPage,
 });
 
-const formatCurrency = (value: number) =>
-  `Rs. ${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+const formatCurrency = formatINR;
 
 const formatPercent = (value: number) =>
   `${Number(value || 0).toLocaleString("en-IN", { maximumFractionDigits: 1 })}%`;
@@ -42,6 +47,7 @@ const formatPercent = (value: number) =>
 const formatNumber = (value: number) => Number(value || 0).toLocaleString("en-IN");
 
 function AdminAnalyticsPage() {
+  const { addNotification } = useNotification();
   const {
     analytics,
     error,
@@ -57,10 +63,39 @@ function AdminAnalyticsPage() {
     setTo,
     to,
   } = useAdminAnalytics({ initialRange: "30d" });
+  const [confirmClear, setConfirmClear] = useState<"analytics" | "activity" | null>(null);
+  const [clearing, setClearing] = useState(false);
 
   const revenueTrend = analytics?.trends?.revenue || [];
   const userGrowth = analytics?.trends?.users || [];
   const summary = analytics?.summary;
+
+  const handleClear = async () => {
+    if (!confirmClear) return;
+
+    setClearing(true);
+    try {
+      const result =
+        confirmClear === "analytics"
+          ? await adminApi.clearAnalytics()
+          : await adminApi.clearActivity();
+
+      await refresh();
+      addNotification(
+        confirmClear === "analytics"
+          ? "Test analytics data cleared successfully"
+          : `Activity cleared. ${result.deletedActivity || 0} entries removed.`,
+      );
+      setConfirmClear(null);
+    } catch (clearError) {
+      addNotification(
+        clearError instanceof Error ? clearError.message : "Data could not be cleared.",
+        "error",
+      );
+    } finally {
+      setClearing(false);
+    }
+  };
 
   return (
     <AdminShell>
@@ -82,7 +117,7 @@ function AdminAnalyticsPage() {
                 {formatCurrency(summary?.revenueInRange || 0)}
               </p>
               <p className="mt-1 text-xs text-navy/55">
-                Month {formatCurrency(summary?.monthlyRevenue || 0)}
+                Range total {formatCurrency(summary?.revenueInRange || 0)}
               </p>
             </div>
             <div className="rounded-[1.25rem] border border-border/70 bg-white/78 p-4">
@@ -108,16 +143,28 @@ function AdminAnalyticsPage() {
           onFromChange={setFrom}
           onToChange={setTo}
           action={
-            <Button
-              variant="soft"
-              size="sm"
-              className="gap-2"
-              disabled={refreshing || Boolean(dateRangeError)}
-              onClick={() => void refresh()}
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="soft"
+                size="sm"
+                className="gap-2"
+                disabled={refreshing || Boolean(dateRangeError)}
+                onClick={() => void refresh()}
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-red-300 text-red-700 hover:bg-red-600 hover:text-white hover:shadow-[0_0_15px_rgba(220,38,38,0.2)]"
+                disabled={clearing}
+                onClick={() => setConfirmClear("analytics")}
+              >
+                <Trash2 className="h-4 w-4" />
+                Clear Analytics Data
+              </Button>
+            </div>
           }
         />
       </div>
@@ -129,7 +176,7 @@ function AdminAnalyticsPage() {
           icon={<IndianRupee className="h-5 w-5" />}
           tone="gold"
           loading={loading && !analytics}
-          meta={`Today ${formatCurrency(summary?.revenueToday || 0)}`}
+          meta={`Selected range ${formatCurrency(summary?.revenueInRange || 0)}`}
         />
         <StatCard
           label="Orders"
@@ -145,7 +192,7 @@ function AdminAnalyticsPage() {
           icon={<Percent className="h-5 w-5" />}
           tone="emerald"
           loading={loading && !analytics}
-          meta={`${formatNumber(summary?.activeUsers || 0)} active users`}
+          meta={`${formatNumber(summary?.activeUsers || 0)} active users in range`}
         />
         <StatCard
           label="Repeat Buyers"
@@ -199,7 +246,7 @@ function AdminAnalyticsPage() {
       <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <AnalyticsChart
           title="Revenue trajectory"
-          description="Daily or monthly revenue buckets with order volume layered in for context."
+          description="Revenue buckets for the selected period with order volume layered in for context."
         >
           {loading && !analytics ? (
             <LoadingSkeleton className="h-[280px] w-full" />
@@ -217,7 +264,7 @@ function AdminAnalyticsPage() {
                   <XAxis dataKey="label" tick={{ fill: "#5f6573", fontSize: 12 }} />
                   <YAxis
                     tick={{ fill: "#5f6573", fontSize: 12 }}
-                    tickFormatter={(value) => `Rs.${Number(value || 0) / 1000}k`}
+                    tickFormatter={(value) => formatCompactINR(value)}
                   />
                   <Tooltip
                     formatter={(value: number, name: string) => [
@@ -369,6 +416,18 @@ function AdminAnalyticsPage() {
         <AnalyticsChart
           title="Recent activity"
           description="A compact pulse of the latest commerce events."
+          action={
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-2"
+              disabled={clearing}
+              onClick={() => setConfirmClear("activity")}
+            >
+              <Trash2 className="h-4 w-4" />
+              Clear Activity
+            </Button>
+          }
         >
           {loading && !analytics ? (
             <div className="space-y-3">
@@ -403,11 +462,25 @@ function AdminAnalyticsPage() {
             <EmptyState
               icon={<ShoppingBag className="h-6 w-6" />}
               title="No recent activity yet"
-              description="Orders, customers, and tracked events will appear here once activity starts."
+              description="Tracked commerce events will appear here once activity starts."
             />
           )}
         </AnalyticsChart>
       </div>
+
+      <ConfirmModal
+        isOpen={confirmClear !== null}
+        title={confirmClear === "activity" ? "Clear Activity" : "Clear Analytics Data"}
+        message={
+          confirmClear === "analytics"
+            ? "Are you sure you want to delete all analytics and test order data? This action cannot be undone."
+            : "Are you sure? This action cannot be undone."
+        }
+        confirmLabel={confirmClear === "activity" ? "Clear Activity" : "Yes, Clear Data"}
+        loading={clearing}
+        onClose={() => setConfirmClear(null)}
+        onConfirm={handleClear}
+      />
     </AdminShell>
   );
 }

@@ -45,6 +45,27 @@ const createRazorpayOrderValidation = [
     .withMessage("Receipt cannot exceed 40 characters"),
 ];
 
+const verifyRazorpayPaymentValidation = [
+  body("razorpay_payment_id")
+    .trim()
+    .notEmpty()
+    .withMessage("Razorpay payment id is required")
+    .isLength({ max: 200 })
+    .withMessage("Razorpay payment id is too long"),
+  body("razorpay_order_id")
+    .trim()
+    .notEmpty()
+    .withMessage("Razorpay order id is required")
+    .isLength({ max: 200 })
+    .withMessage("Razorpay order id is too long"),
+  body("razorpay_signature")
+    .trim()
+    .notEmpty()
+    .withMessage("Razorpay signature is required")
+    .isLength({ max: 300 })
+    .withMessage("Razorpay signature is too long"),
+];
+
 router.get("/razorpay/config", getRazorpayConfig);
 
 checkoutPaymentRoutes.post(
@@ -59,6 +80,8 @@ checkoutPaymentRoutes.post(
   "/verify-payment",
   requireAuth,
   orderLimiter,
+  verifyRazorpayPaymentValidation,
+  validateRequest,
   verifyRazorpayPayment,
 );
 

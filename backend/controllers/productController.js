@@ -10,10 +10,7 @@ import {
   getPagination,
 } from "../utils/apiFeatures.js";
 import { ApiError, asyncHandler } from "../middlewares/errorMiddleware.js";
-import {
-  storeUploadedImage,
-  storeUploadedVideo,
-} from "../middlewares/uploadMiddleware.js";
+import { storeUploadedImage } from "../middlewares/uploadMiddleware.js";
 import {
   attachBrandDetails,
   resolveBrandFromProductInput,
@@ -24,6 +21,7 @@ import {
   attachCategoryDetails,
   syncProductCategoryFields,
 } from "../services/categoryService.js";
+import { normalizeMoney } from "../utils/money.js";
 import env from "../config/env.js";
 import logger from "../config/logger.js";
 
@@ -423,8 +421,7 @@ const buildProductPayload = (body) => {
     "name",
     "brand",
     "description",
-    "longevity",
-    "videoUrl",
+    "type",
     "gender",
     "sillage",
     "usage",
@@ -449,7 +446,7 @@ const buildProductPayload = (body) => {
       payload[field] =
         field === "stock" || field === "bestsellerOrder"
           ? Math.trunc(value)
-          : value;
+          : normalizeMoney(value);
     }
   });
 
@@ -509,16 +506,16 @@ const buildProductPayload = (body) => {
     validateAccordTotal(payload.accords);
   }
 
-  if (payload.videoUrl) {
-    const videoUrl = String(payload.videoUrl).trim();
-    if (videoUrl && !/\.(mp4|webm|mov)(\?.*)?$/i.test(videoUrl)) {
-      throw new ApiError(400, "videoUrl must point to an mp4, webm, or mov file");
-    }
-    payload.videoUrl = videoUrl;
+  if (payload.sizes) {
+    payload.sizes = payload.sizes.map((size) => ({
+      ...size,
+      size: String(size.size || "").trim(),
+      price: normalizeMoney(size.price),
+    }));
   }
 
-  if (!payload.price && payload.sizes?.length && payload.sizes[0]?.price) {
-    payload.price = Number(payload.sizes[0].price);
+  if (payload.price === undefined && payload.sizes?.length && payload.sizes[0]?.price !== undefined) {
+    payload.price = normalizeMoney(payload.sizes[0].price);
   }
 
   if (payload.isBestseller === false && payload.bestsellerOrder === undefined) {
@@ -555,13 +552,6 @@ const addUploadedImages = async (payload, files = []) => {
   );
   payload.images = [...new Set([...(payload.images || []), ...uploadedImages])];
   payload.image = payload.image || payload.images[0] || "";
-  return payload;
-};
-
-const addUploadedVideo = async (payload, file = null) => {
-  if (!file) return payload;
-
-  payload.videoUrl = await storeUploadedVideo(file);
   return payload;
 };
 
@@ -618,8 +608,75 @@ const syncProductBrandFields = async (
   return payload;
 };
 
+const CATEGORY_FILTER_ALIASES = {
+  designer: {
+    slugs: ["designer", "designer-fragrances"],
+    names: ["Designer", "Designer Fragrances"],
+  },
+  "middle-eastern": {
+    slugs: ["middle-eastern", "middle-eastern-fragrances"],
+    names: ["Middle Eastern", "Middle Eastern Fragrances"],
+  },
+  niche: {
+    slugs: ["niche", "niche-fragrances"],
+    names: ["Niche", "Niche Fragrances"],
+  },
+};
+
+const normalizeCategoryFilterValue = (value = "") => {
+  const slug = createCategorySlug(value);
+
+  if (!slug) return "";
+  if (slug.includes("designer")) return "designer";
+  if (slug.includes("middle")) return "middle-eastern";
+  if (slug.includes("niche")) return "niche";
+
+  return slug;
+};
+
+const mergeProductFilter = (filter, matcher) => {
+  if (!matcher || !Object.keys(matcher).length) {
+    return filter;
+  }
+
+  if (!Object.keys(filter).length) {
+    return matcher;
+  }
+
+  return {
+    $and: [filter, matcher],
+  };
+};
+
+const buildCategoryQueryMatcher = (categoryQuery = "") => {
+  const rawCategory = String(categoryQuery || "").trim();
+  const normalizedCategory = normalizeCategoryFilterValue(rawCategory);
+
+  if (!normalizedCategory) {
+    return { _id: null };
+  }
+
+  const aliases = CATEGORY_FILTER_ALIASES[normalizedCategory] || {
+    slugs: [normalizedCategory],
+    names: [rawCategory],
+  };
+  const slugs = [...new Set([normalizedCategory, ...aliases.slugs].filter(Boolean))];
+  const names = [...new Set(aliases.names.filter(Boolean))];
+
+  return {
+    $or: [
+      { categorySlugs: { $in: slugs } },
+      { categorySlug: { $in: slugs } },
+      ...names.flatMap((name) => [
+        { categoryNames: { $regex: `^${escapeRegex(name)}$`, $options: "i" } },
+        { category: { $regex: `^${escapeRegex(name)}$`, $options: "i" } },
+      ]),
+    ],
+  };
+};
+
 const buildProductQueryFilter = async (query = {}) => {
-  const filter = buildProductFilter(query);
+  let filter = buildProductFilter(query);
   const brandId = String(query.brandId || "").trim();
   const categoryId = String(query.categoryId || "").trim();
   const categoryQuery = String(query.category || "").trim();
@@ -630,14 +687,11 @@ const buildProductQueryFilter = async (query = {}) => {
       throw new ApiError(400, "Invalid category id");
     }
 
-    filter.categories = new mongoose.Types.ObjectId(categoryId);
+    filter = mergeProductFilter(filter, {
+      categories: new mongoose.Types.ObjectId(categoryId),
+    });
   } else if (categoryQuery) {
-    const normalizedCategorySlug = createCategorySlug(categoryQuery);
-    if (!normalizedCategorySlug) {
-      filter._id = null;
-    } else {
-      filter.categorySlugs = normalizedCategorySlug;
-    }
+    filter = mergeProductFilter(filter, buildCategoryQueryMatcher(categoryQuery));
   }
 
   if (genderQuery) {
@@ -649,13 +703,7 @@ const buildProductQueryFilter = async (query = {}) => {
       ],
     };
 
-    if (filter.$and) {
-      filter.$and.push(genderMatcher);
-    } else if (Object.keys(filter).length > 0) {
-      filter.$and = [genderMatcher];
-    } else {
-      Object.assign(filter, genderMatcher);
-    }
+    filter = mergeProductFilter(filter, genderMatcher);
   }
 
   if (!brandId) {
@@ -743,7 +791,6 @@ const normalizeProductResponse = (product) => {
     categorySlug: categorySlugs[0] || "",
     image,
     images: [...new Set(images)],
-    videoUrl: String(raw.videoUrl || ""),
     notes:
       Array.isArray(raw.notes) && raw.notes.length
         ? raw.notes
@@ -874,7 +921,6 @@ export const createProduct = asyncHandler(async (req, res) => {
   await syncProductCategoryFields(payload, req.body, { allowCreate: true });
   await syncProductBrandFields(payload, req.body);
   await addUploadedImages(payload, req.productImageFiles || req.files);
-  await addUploadedVideo(payload, req.productVideoFile);
   validateProductPayload(payload, {
     requireImages: true,
     requireCategories: true,
@@ -955,7 +1001,6 @@ export const updateProduct = asyncHandler(async (req, res) => {
   }
 
   await addUploadedImages(payload, uploadedImageFiles);
-  await addUploadedVideo(payload, req.productVideoFile);
 
   validateProductPayload(payload, { requireImages: hasImageUpdate });
 

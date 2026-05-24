@@ -1,8 +1,9 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
-import { ImagePlus, Plus, Upload, X } from "lucide-react";
+import { ImagePlus, Plus, X } from "lucide-react";
 import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
+import { filterBrandsForCategory, normalizeCategory } from "@/data/brandsByCategory";
 import { Button } from "@/components/common/Button";
 import { brandsApi, categoriesApi } from "@/services/api";
 
@@ -26,12 +27,10 @@ type FormState = Omit<
   price: string;
   stock: string;
   sizes: FormSize[];
-  videoUrl: string;
 };
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
-const MAX_VIDEO_SIZE_BYTES = 10 * 1024 * 1024;
 const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
 const IMAGE_TYPES = new Set([
   "",
@@ -42,7 +41,6 @@ const IMAGE_TYPES = new Set([
   "image/webp",
   "application/octet-stream",
 ]);
-const VIDEO_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
 
 const createEmptyForm = (): FormState => ({
   name: "",
@@ -57,14 +55,13 @@ const createEmptyForm = (): FormState => ({
   categorySlug: "",
   categoryDetails: null,
   price: "",
-  videoUrl: "",
   isLatest: false,
   description: "",
+  type: "",
   topNotes: [],
   middleNotes: [],
   baseNotes: [],
   accords: [],
-  longevity: "8 hours",
   sillage: "",
   usage: "Day",
   timeOfDay: "Day",
@@ -100,22 +97,18 @@ const toFormState = (product?: Product): FormState => {
     ...rest,
     brandId: product.brandId || product.brandDetails?.id || "",
     categories: product.categories || [],
-    categoryIds:
-      product.categoryIds?.length
-        ? product.categoryIds
-        : product.categories?.map((category) => category.id).filter(Boolean) || [],
-    categoryNames:
-      product.categoryNames?.length
-        ? product.categoryNames
-        : product.categories?.map((category) => category.name).filter(Boolean) || [],
-    categorySlugs:
-      product.categorySlugs?.length
-        ? product.categorySlugs
-        : product.categories?.map((category) => category.slug).filter(Boolean) || [],
+    categoryIds: product.categoryIds?.length
+      ? product.categoryIds
+      : product.categories?.map((category) => category.id).filter(Boolean) || [],
+    categoryNames: product.categoryNames?.length
+      ? product.categoryNames
+      : product.categories?.map((category) => category.name).filter(Boolean) || [],
+    categorySlugs: product.categorySlugs?.length
+      ? product.categorySlugs
+      : product.categories?.map((category) => category.slug).filter(Boolean) || [],
     primaryCategory: product.primaryCategory || product.categoryId || "",
     category: product.category || product.categoryNames?.join(", ") || "",
     price: Number.isFinite(price) ? String(price) : "",
-    videoUrl: String(product.videoUrl || ""),
     sizes: product.sizes?.length
       ? product.sizes.map((size) => ({
           size: size.size,
@@ -127,6 +120,9 @@ const toFormState = (product?: Product): FormState => {
 };
 
 const getBrandId = (brand: Brand) => brand.id || brand._id || "";
+
+const getCategoryBrandValue = (category?: Category | null) =>
+  category?.slug || normalizeCategory(category?.name || "") || category?.name || "";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -205,7 +201,7 @@ export const ProductForm = memo(function ProductForm({
   const [form, setForm] = useState<FormState>(() => toFormState(initial));
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [brandsLoading, setBrandsLoading] = useState(true);
+  const [brandsLoading, setBrandsLoading] = useState(false);
   const [brandsError, setBrandsError] = useState("");
   const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [categoriesError, setCategoriesError] = useState("");
@@ -213,8 +209,6 @@ export const ProductForm = memo(function ProductForm({
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [filePreviews, setFilePreviews] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPreview, setVideoPreview] = useState("");
   const [saving, setSaving] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState("");
@@ -224,7 +218,6 @@ export const ProductForm = memo(function ProductForm({
     setForm(toFormState(initial));
     setExistingImages(getProductImages(initial));
     setImageFiles([]);
-    setVideoFile(null);
     setUploadProgress(0);
     setError("");
     setSuccess("");
@@ -240,50 +233,14 @@ export const ProductForm = memo(function ProductForm({
   }, [imageFiles]);
 
   useEffect(() => {
-    if (!videoFile) {
-      setVideoPreview("");
-      return undefined;
-    }
-
-    const preview = URL.createObjectURL(videoFile);
-    setVideoPreview(preview);
-
-    return () => {
-      URL.revokeObjectURL(preview);
-    };
-  }, [videoFile]);
-
-  useEffect(() => {
     let isActive = true;
-
-    const loadBrands = async () => {
-      setBrandsLoading(true);
-      setBrandsError("");
-
-      try {
-        const nextBrands = await brandsApi.list();
-
-        if (!isActive) return;
-
-        setBrands(nextBrands);
-      } catch (ex) {
-        if (!isActive) return;
-
-        setBrands([]);
-        setBrandsError(ex instanceof Error ? ex.message : "No brands available.");
-      } finally {
-        if (isActive) {
-          setBrandsLoading(false);
-        }
-      }
-    };
 
     const loadCategories = async () => {
       setCategoriesLoading(true);
       setCategoriesError("");
 
       try {
-        const nextCategories = await categoriesApi.listAdmin();
+        const nextCategories = await categoriesApi.listAdmin({ forceFresh: true });
 
         if (!isActive) return;
 
@@ -300,7 +257,6 @@ export const ProductForm = memo(function ProductForm({
       }
     };
 
-    void loadBrands();
     void loadCategories();
 
     return () => {
@@ -329,7 +285,92 @@ export const ProductForm = memo(function ProductForm({
     set("stock", value);
   };
 
-  const availableBrands = useMemo(() => brands, [brands]);
+  const selectedCategoryValue = useMemo(() => {
+    const selectedCategory =
+      categories.find((category) => form.categoryIds.includes(category.id)) ||
+      form.categoryDetails;
+
+    return (
+      getCategoryBrandValue(selectedCategory) ||
+      form.categorySlug ||
+      form.categorySlugs[0] ||
+      normalizeCategory(form.categoryNames[0] || form.category) ||
+      form.categoryNames[0] ||
+      form.category
+    );
+  }, [
+    categories,
+    form.category,
+    form.categoryDetails,
+    form.categoryIds,
+    form.categoryNames,
+    form.categorySlug,
+    form.categorySlugs,
+  ]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!selectedCategoryValue) {
+      setBrands([]);
+      setBrandsLoading(false);
+      setBrandsError("");
+      setForm((current) =>
+        current.brandId || current.brand ? { ...current, brandId: "", brand: "" } : current,
+      );
+      return () => {
+        isActive = false;
+      };
+    }
+
+    const loadBrands = async () => {
+      setBrandsLoading(true);
+      setBrandsError("");
+
+      try {
+        const nextBrands = await brandsApi.list(
+          { category: selectedCategoryValue },
+          { forceFresh: true },
+        );
+
+        if (!isActive) return;
+
+        setBrands(filterBrandsForCategory(nextBrands, selectedCategoryValue));
+      } catch (ex) {
+        if (!isActive) return;
+
+        setBrands([]);
+        setBrandsError(ex instanceof Error ? ex.message : "No brands available.");
+      } finally {
+        if (isActive) {
+          setBrandsLoading(false);
+        }
+      }
+    };
+
+    void loadBrands();
+
+    return () => {
+      isActive = false;
+    };
+  }, [selectedCategoryValue]);
+
+  const availableBrands = useMemo(() => {
+    const mappedCategory = normalizeCategory(selectedCategoryValue);
+    return mappedCategory ? filterBrandsForCategory(brands, mappedCategory) : brands;
+  }, [brands, selectedCategoryValue]);
+
+  useEffect(() => {
+    if (!form.brandId || brandsLoading || !selectedCategoryValue) return;
+
+    const selectedBrandStillAvailable = availableBrands.some(
+      (brand) => getBrandId(brand) === form.brandId,
+    );
+
+    if (!selectedBrandStillAvailable) {
+      setForm((current) => ({ ...current, brandId: "", brand: "" }));
+    }
+  }, [availableBrands, brandsLoading, form.brandId, selectedCategoryValue]);
   const totalImageCount = existingImages.length + imageFiles.length;
   const imagePreviewItems = [
     ...existingImages.map((src, index) => ({
@@ -430,32 +471,6 @@ export const ProductForm = memo(function ProductForm({
     handleImageInput(event.dataTransfer.files);
   };
 
-  const isValidVideoUrl = (value: string) =>
-    !value.trim() || /\.(mp4|webm|mov)(\?.*)?$/i.test(value.trim());
-
-  const selectVideoFile = (file?: File) => {
-    setError("");
-
-    if (!file) {
-      setVideoFile(null);
-      return;
-    }
-
-    if (!VIDEO_TYPES.has(file.type)) {
-      setVideoFile(null);
-      setError("Video must be an MP4, WebM, or MOV file.");
-      return;
-    }
-
-    if (file.size > MAX_VIDEO_SIZE_BYTES) {
-      setVideoFile(null);
-      setError("Video size must be under 10MB.");
-      return;
-    }
-
-    setVideoFile(file);
-  };
-
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -469,7 +484,7 @@ export const ProductForm = memo(function ProductForm({
         .filter((size) => size.size);
       const price = Number(form.price);
       const stock = Number(form.stock);
-      const selectedBrand = brands.find((brand) => getBrandId(brand) === form.brandId);
+      const selectedBrand = availableBrands.find((brand) => getBrandId(brand) === form.brandId);
       const selectedCategories = categories.filter((category) =>
         form.categoryIds.includes(category.id),
       );
@@ -480,10 +495,6 @@ export const ProductForm = memo(function ProductForm({
 
       if (!initial && imageFiles.length === 0) {
         throw new Error("Select at least one product image.");
-      }
-
-      if (form.videoUrl.trim() && !isValidVideoUrl(form.videoUrl)) {
-        throw new Error("Video URL must end with .mp4, .webm, or .mov.");
       }
 
       if (form.price.trim() === "" || !Number.isFinite(price) || price < 0) {
@@ -509,6 +520,10 @@ export const ProductForm = memo(function ProductForm({
 
       if (categoriesLoading) {
         throw new Error("Categories are still loading.");
+      }
+
+      if (!selectedCategoryValue) {
+        throw new Error("Select a category before selecting a brand.");
       }
 
       if (!form.brandId) {
@@ -538,19 +553,12 @@ export const ProductForm = memo(function ProductForm({
       const payload = new FormData();
       payload.append("name", form.name.trim());
       payload.append("brandId", form.brandId);
-      payload.append(
-        "categoryIds",
-        selectedCategories.map((category) => category.id).join(","),
-      );
-      payload.append(
-        "categories",
-        selectedCategories.map((category) => category.name).join(" | "),
-      );
+      payload.append("categoryIds", selectedCategories.map((category) => category.id).join(","));
+      payload.append("categories", selectedCategories.map((category) => category.name).join(" | "));
       payload.append("price", String(price));
       payload.append("stock", String(stock));
       payload.append("description", form.description.trim());
-      payload.append("longevity", form.longevity.trim());
-      payload.append("videoUrl", form.videoUrl.trim());
+      payload.append("type", form.type.trim());
       payload.append("isLatest", String(Boolean(form.isLatest)));
       appendJson(payload, "topNotes", form.topNotes);
       appendJson(payload, "middleNotes", form.middleNotes);
@@ -564,10 +572,6 @@ export const ProductForm = memo(function ProductForm({
 
       imageFiles.forEach((file) => payload.append("images", file));
 
-      if (videoFile) {
-        payload.append("video", videoFile);
-      }
-
       await onSubmit(payload, {
         onUploadProgress: (progress) => setUploadProgress(progress),
       });
@@ -576,7 +580,6 @@ export const ProductForm = memo(function ProductForm({
         setForm(createEmptyForm());
         setExistingImages([]);
         setImageFiles([]);
-        setVideoFile(null);
       }
 
       setUploadProgress(100);
@@ -606,7 +609,7 @@ export const ProductForm = memo(function ProductForm({
               value={form.brandId ?? ""}
               onChange={(e) => {
                 const brandId = e.target.value;
-                const selectedBrand = brands.find((brand) => getBrandId(brand) === brandId);
+                const selectedBrand = availableBrands.find((brand) => getBrandId(brand) === brandId);
 
                 setForm((current) => ({
                   ...current,
@@ -614,11 +617,13 @@ export const ProductForm = memo(function ProductForm({
                   brand: selectedBrand?.name || "",
                 }));
               }}
-              disabled={brandsLoading || availableBrands.length === 0}
+              disabled={!selectedCategoryValue || brandsLoading || availableBrands.length === 0}
               className={inputCls}
             >
               <option value="">
-                {brandsLoading
+                {!selectedCategoryValue
+                  ? "Select category first"
+                  : brandsLoading
                   ? "Loading brands..."
                   : availableBrands.length > 0
                     ? "Select Brand"
@@ -630,10 +635,8 @@ export const ProductForm = memo(function ProductForm({
                 </option>
               ))}
             </select>
-            {brandsError ? (
-              <p className="mt-2 text-xs text-red-600">{brandsError}</p>
-            ) : null}
-            {!brandsLoading && !brandsError && availableBrands.length === 0 ? (
+            {brandsError ? <p className="mt-2 text-xs text-red-600">{brandsError}</p> : null}
+            {!brandsLoading && selectedCategoryValue && !brandsError && availableBrands.length === 0 ? (
               <p className="mt-2 text-xs text-navy/55">No brands available.</p>
             ) : null}
           </>
@@ -650,13 +653,15 @@ export const ProductForm = memo(function ProductForm({
                     type="button"
                     onClick={() => {
                       setForm((current) => {
-                        const nextIds = selected
-                          ? current.categoryIds.filter((id) => id !== category.id)
-                          : [...current.categoryIds, category.id];
-                        const nextCategories = categories.filter((item) => nextIds.includes(item.id));
+                        const nextIds = selected ? [] : [category.id];
+                        const nextCategories = categories.filter((item) =>
+                          nextIds.includes(item.id),
+                        );
 
                         return {
                           ...current,
+                          brand: "",
+                          brandId: "",
                           categories: nextCategories,
                           categoryIds: nextIds,
                           categoryNames: nextCategories.map((item) => item.name),
@@ -716,9 +721,7 @@ export const ProductForm = memo(function ProductForm({
 
       <label className="flex items-center justify-between gap-4 rounded-lg border border-border bg-beige/30 p-4">
         <div>
-          <span className="text-xs uppercase tracking-[0.2em] text-navy/60">
-            Latest Product
-          </span>
+          <span className="text-xs uppercase tracking-[0.2em] text-navy/60">Latest Product</span>
           <p className="mt-1 text-sm text-navy/55">
             Show this fragrance in the homepage latest products section.
           </p>
@@ -778,7 +781,9 @@ export const ProductForm = memo(function ProductForm({
             </div>
             <div>
               <p className="text-sm font-medium text-navy">
-                {totalImageCount ? `${totalImageCount}/${MAX_IMAGES} images selected` : "Upload product images"}
+                {totalImageCount
+                  ? `${totalImageCount}/${MAX_IMAGES} images selected`
+                  : "Upload product images"}
               </p>
               <p className="mt-1 text-xs text-navy/55">JPG, PNG, or WEBP under 5MB each</p>
             </div>
@@ -833,72 +838,21 @@ export const ProductForm = memo(function ProductForm({
         </div>
       </fieldset>
 
-      <fieldset className="rounded-lg border border-border p-5">
-        <legend className="px-2 text-xs uppercase tracking-[0.25em] text-navy/60">
-          Product Video (Optional)
-        </legend>
-        <div className="grid gap-5 lg:grid-cols-[1fr_18rem]">
-          <div className="space-y-3">
-            <Field label="Video URL">
-              <input
-                type="url"
-                value={form.videoUrl}
-                onChange={(e) => set("videoUrl", e.target.value)}
-                placeholder="Optional https://example.com/video.mp4"
-                className={inputCls}
-              />
-            </Field>
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-dashed border-navy/25 bg-beige/30 px-4 py-4 text-sm text-navy/70 transition hover:border-navy/50">
-              <Upload className="h-4 w-4" />
-              <span>{videoFile ? videoFile.name : "Upload product video"}</span>
-              <input
-                type="file"
-                accept="video/mp4,video/webm,video/quicktime"
-                onChange={(e) => selectVideoFile(e.target.files?.[0])}
-                className="sr-only"
-              />
-            </label>
-            <p className="text-xs text-navy/45">
-              Optional MP4, WebM, or MOV. Video uploads replace the URL on save.
-            </p>
-          </div>
-          <div className="overflow-hidden rounded-lg border border-border bg-beige/60">
-            {videoPreview || form.videoUrl.trim() ? (
-              <div className="space-y-3 p-3">
-                <video
-                  src={videoPreview || form.videoUrl.trim()}
-                  muted
-                  playsInline
-                  preload="metadata"
-                  className="aspect-video w-full rounded-md bg-navy/10 object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVideoFile(null);
-                    set("videoUrl", "");
-                  }}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-xs uppercase tracking-[0.18em] text-navy/70 transition hover:border-red-200 hover:text-red-600"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Remove video
-                </button>
-              </div>
-            ) : (
-              <div className="flex aspect-video w-full items-center justify-center px-4 text-center text-[0.65rem] uppercase tracking-[0.2em] text-navy/40">
-                Video preview
-              </div>
-            )}
-          </div>
-        </div>
-      </fieldset>
-
       <Field label="Description">
         <textarea
           rows={3}
           value={form.description}
           onChange={(e) => set("description", e.target.value)}
           className={`${inputCls} resize-none`}
+        />
+      </Field>
+
+      <Field label="Type">
+        <input
+          value={form.type || ""}
+          onChange={(e) => set("type", e.target.value)}
+          placeholder="Fresh, Woody, Summer"
+          className={inputCls}
         />
       </Field>
 
@@ -928,16 +882,6 @@ export const ProductForm = memo(function ProductForm({
           </Field>
         </div>
       </fieldset>
-
-      <div className="grid gap-6 md:grid-cols-1">
-        <Field label="Longevity">
-          <input
-            value={form.longevity}
-            onChange={(e) => set("longevity", e.target.value)}
-            className={inputCls}
-          />
-        </Field>
-      </div>
 
       <fieldset className="rounded-lg border border-border p-5">
         <legend className="px-2 text-xs uppercase tracking-[0.25em] text-navy/60">

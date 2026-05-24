@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
+import { filterBrandsForCategory, normalizeCategory } from "@/data/brandsByCategory";
 import { filterStorefrontCategories } from "@/lib/categories";
 import { brandsApi, categoriesApi, productsApi } from "@/services/api";
 
@@ -51,7 +52,10 @@ type Filters = {
   sort: string;
 };
 
-const categoryToApi = (category: string) => (category === "all" ? undefined : category);
+const categoryToApi = (category: string): Brand["category"] | undefined => {
+  const normalizedCategory = normalizeCategory(category);
+  return !normalizedCategory || normalizedCategory === "all" ? undefined : normalizedCategory;
+};
 
 const getInitialFilters = (): Filters => {
   if (typeof window === "undefined") {
@@ -62,7 +66,7 @@ const getInitialFilters = (): Filters => {
 
   return {
     q: searchParams.get("q") || "",
-    category: searchParams.get("category") || "all",
+    category: normalizeCategory(searchParams.get("category") || "all") || "all",
     brand: searchParams.get("brand") || "",
     sort: searchParams.get("sort") || "featured",
   };
@@ -133,20 +137,6 @@ function ShopPage() {
   useEffect(() => {
     let active = true;
 
-    brandsApi
-      .list()
-      .then((nextBrands) => {
-        if (active) {
-          setBrands([...nextBrands].sort((a, b) => a.name.localeCompare(b.name)));
-        }
-      })
-      .catch(() => {
-        if (active) setBrands([]);
-      })
-      .finally(() => {
-        if (active) setBrandsLoading(false);
-      });
-
     categoriesApi
       .list()
       .then((nextCategories) => {
@@ -165,6 +155,32 @@ function ShopPage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    const normalizedCategory = normalizeCategory(filters.category) || "all";
+    const brandCategory = categoryToApi(normalizedCategory);
+
+    setBrandsLoading(true);
+
+    brandsApi
+      .list(brandCategory ? { category: brandCategory } : {})
+      .then((nextBrands) => {
+        if (active) {
+          setBrands(filterBrandsForCategory(nextBrands, normalizedCategory));
+        }
+      })
+      .catch(() => {
+        if (active) setBrands([]);
+      })
+      .finally(() => {
+        if (active) setBrandsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [filters.category]);
 
   useEffect(() => {
     const handlePopState = () => setFilters(getInitialFilters());
@@ -221,8 +237,19 @@ function ShopPage() {
     [filters.sort, products],
   );
 
-  const activeBrand = brands.find((brand) => brand.id === filters.brand);
-  const storefrontCategories = useMemo(() => filterStorefrontCategories(categories), [categories]);
+  const availableBrands = useMemo(
+    () => filterBrandsForCategory(brands, filters.category),
+    [brands, filters.category],
+  );
+  const activeBrand = availableBrands.find((brand) => brand.id === filters.brand);
+  const storefrontCategories = useMemo(
+    () =>
+      filterStorefrontCategories(categories).map((category) => ({
+        ...category,
+        slug: normalizeCategory(category.slug || category.name) || category.slug,
+      })),
+    [categories],
+  );
   const activeCategory = storefrontCategories.find((category) => category.slug === filters.category);
   const categoryOptions = useMemo(
     () => [
@@ -242,8 +269,28 @@ function ShopPage() {
     filters.brand ||
     filters.sort !== "featured";
 
+  useEffect(() => {
+    if (!filters.brand || brandsLoading) return;
+
+    const selectedBrandStillAvailable = availableBrands.some((brand) => brand.id === filters.brand);
+
+    if (!selectedBrandStillAvailable) {
+      setFilters((current) => (current.brand ? { ...current, brand: "" } : current));
+    }
+  }, [availableBrands, brandsLoading, filters.brand]);
+
   const setFilter = <K extends keyof Filters>(key: K, value: Filters[K]) => {
-    setFilters((current) => ({ ...current, [key]: value }));
+    setFilters((current) => {
+      if (key === "category") {
+        return {
+          ...current,
+          category: normalizeCategory(value) || "all",
+          brand: "",
+        };
+      }
+
+      return { ...current, [key]: value };
+    });
   };
 
   const clearFilters = () => {
@@ -323,7 +370,9 @@ function ShopPage() {
                 activeSlug={filters.category === "all" ? "" : filters.category}
                 allLabel="All Fragrances"
                 allHref="/shop"
-                hrefBuilder={(category) => `/shop?category=${category.slug}`}
+                hrefBuilder={(category) =>
+                  `/shop?category=${normalizeCategory(category.slug || category.name) || category.slug}`
+                }
               />
             </div>
           </div>
@@ -436,7 +485,7 @@ function ShopPage() {
                           ))}
                         </div>
                       ) : (
-                        brands.map((brand) => (
+                        availableBrands.map((brand) => (
                           <button
                             key={brand.id}
                             type="button"

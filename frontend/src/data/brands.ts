@@ -1,4 +1,4 @@
-export type BrandCategory = "middle-eastern" | "designer" | "niche";
+export type BrandCategory = string;
 
 export type BrandPreviewProduct = {
   _id?: string;
@@ -19,6 +19,9 @@ export type Brand = {
   logo: string;
   fallbackLetter?: string;
   category: BrandCategory;
+  categoryId?: string | null;
+  categoryName?: string;
+  categorySlug?: string;
   productCount?: number;
   previewProducts?: BrandPreviewProduct[];
   createdAt?: string;

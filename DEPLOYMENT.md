@@ -15,29 +15,40 @@ The backend now uses a layered Express architecture:
 
 Set every value in `backend/.env.production` or `backend/.env.example` on Render, Railway, Hostinger Node.js, cPanel Node.js hosting, PM2, AWS EC2, DigitalOcean, or your container runtime. Use long random values for `JWT_SECRET`, `REFRESH_SECRET`, and `COOKIE_SECRET`.
 
-For cross-domain deployments such as Cloudflare Workers frontend plus Render backend:
+Production browser traffic should use the storefront origin as the canonical API origin. Render remains the private upstream, but the browser should call same-origin proxy paths:
 
-- Use HTTPS on both origins.
+- `/api/*` proxies to `https://hydpurefumes.onrender.com/api/*`.
+- `/auth/*` proxies to `https://hydpurefumes.onrender.com/auth/*`.
+- `/uploads/*` proxies to `https://hydpurefumes.onrender.com/uploads/*`.
+
+For same-origin proxy deployments:
+
+- Use HTTPS on the storefront origin.
 - Set `FRONTEND_URL=https://purefumeshyderabad.in`.
-- Set `BACKEND_URL=https://hydpurefumes.onrender.com`.
+- Set `BACKEND_URL=https://purefumeshyderabad.in`.
 - Set `CORS_ORIGIN=https://purefumeshyderabad.in,https://www.purefumeshyderabad.in,https://tanstack-start-app.hydpurefumes.workers.dev`.
-- Set `GOOGLE_CALLBACK_URL=https://hydpurefumes.onrender.com/auth/google/callback`.
-- Set `COOKIE_SAME_SITE=none`.
+- Set `GOOGLE_CALLBACK_URL=https://purefumeshyderabad.in/auth/google/callback`.
+- Leave `COOKIE_DOMAIN` empty for the same-origin proxy mode so cookies are host-only on the storefront domain.
+- Set `COOKIE_SAME_SITE=Lax`.
 - Keep `NODE_ENV=production` so cookies are marked `Secure`.
+- Set `SENTRY_DSN` for backend error reporting and optionally `SENTRY_TRACES_SAMPLE_RATE=0.05`.
 - Set `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` for the admin bootstrap user. `ADMIN_USER` and `ADMIN_PASS` are supported only as temporary migration keys.
 
 Frontend production env:
 
 ```env
-VITE_API_URL=https://hydpurefumes.onrender.com/api
+VITE_API_URL=/api
 VITE_FRONTEND_URL=https://purefumeshyderabad.in
+VITE_SENTRY_DSN=
+VITE_SENTRY_TRACES_SAMPLE_RATE=0.05
 ```
+
+Do not point production browser builds directly at `https://hydpurefumes.onrender.com/api`; that reintroduces third-party cookie behavior and intermittent session restoration failures.
 
 Frontend hosting files included in the repo:
 
-- `frontend/vercel.json` for Vercel SPA rewrites
-- `frontend/netlify.toml` and `frontend/public/_redirects` for Netlify SPA rewrites
-- `frontend/public/.htaccess` for Apache, Hostinger, GoDaddy, and cPanel static hosting
+- `frontend/vercel.json` for Vercel API/auth/uploads proxy rewrites plus SPA fallback
+- `frontend/netlify.toml` for Netlify API/auth/uploads proxy redirects plus SPA fallback
 - `frontend/deploy/nginx.conf` for Nginx reverse-proxy plus SPA fallback
 
 When deploying the frontend from this monorepo, set the site base/root directory to `frontend` on Vercel or Netlify so those config files are picked up directly.
@@ -88,4 +99,4 @@ The short-lived OAuth handshake session currently uses `express-session`. For mu
 - Configure SMTP provider credentials with Brevo, SendGrid SMTP, AWS SES, or Mailtrap.
 - Use MongoDB Atlas IP/network controls.
 - Keep admin credentials separate from customer auth.
-- Monitor `backend/logs/error.log` or ship Winston logs to your platform logging system.
+- Monitor `backend/logs/error.log`, `backend/logs/combined.log`, and Sentry releases during rollout.

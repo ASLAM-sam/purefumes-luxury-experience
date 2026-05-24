@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import { ApiError } from "../middlewares/errorMiddleware.js";
+import { addMoney, multiplyMoney, normalizeMoney } from "../utils/money.js";
 
 export const normalizeOrderItems = (body) => {
   if (Array.isArray(body?.items) && body.items.length > 0) {
@@ -40,18 +41,18 @@ export const resolveProductVariant = (product, value) => {
 
   const fallbackSize = matchedSize || availableSizes[0] || null;
   const selectedSize = String(fallbackSize?.size || requestedSize || "Standard").trim();
-  const price = Number(
+  const rawPrice = Number(
     fallbackSize?.price ?? product?.price ?? product?.originalPrice ?? 0,
   );
 
-  if (!Number.isFinite(price) || price < 0) {
+  if (!Number.isFinite(rawPrice) || rawPrice < 0) {
     throw new ApiError(400, `Invalid price configured for ${product.name}`);
   }
 
   return {
     selectedVariant: { size: selectedSize },
     size: selectedSize,
-    price,
+    price: normalizeMoney(rawPrice),
   };
 };
 
@@ -76,7 +77,9 @@ export const buildPreparedOrderItems = async (
   let subtotalAmount = 0;
 
   for (const item of items) {
-    if (!mongoose.Types.ObjectId.isValid(item.productId)) {
+    const productId = item.productId || item._id || item.id;
+
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
       throw new ApiError(400, "Invalid product id in order item");
     }
 
@@ -89,20 +92,20 @@ export const buildPreparedOrderItems = async (
 
     if (reserveStock) {
       product = await Product.findOneAndUpdate(
-        { _id: item.productId, stock: { $gte: quantity } },
+        { _id: productId, stock: { $gte: quantity } },
         { $inc: { stock: -quantity } },
         { new: true, session },
       );
 
       if (!product) {
-        const existingProduct = await getExistingProduct(item.productId, session);
+        const existingProduct = await getExistingProduct(productId, session);
         const message = existingProduct
           ? `Insufficient stock for ${existingProduct.name}`
           : "Product not found";
         throw new ApiError(400, message);
       }
     } else {
-      const productQuery = Product.findById(item.productId);
+      const productQuery = Product.findById(productId);
       product = session ? await productQuery.session(session) : await productQuery;
 
       if (!product) {
@@ -119,7 +122,7 @@ export const buildPreparedOrderItems = async (
       item.selectedVariant || item.size,
     );
 
-    subtotalAmount += price * quantity;
+    subtotalAmount = addMoney(subtotalAmount, multiplyMoney(price, quantity));
 
     preparedItems.push({
       productId: product._id,

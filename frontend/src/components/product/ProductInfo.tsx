@@ -1,13 +1,12 @@
 import { memo, useMemo } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
-import { BadgeCheck, Clock3, Eye, ShoppingBag, Sparkles, Truck } from "lucide-react";
+import { BadgeCheck, Eye, ShoppingBag, Sparkles, Truck } from "lucide-react";
 import type { Product, Size } from "@/data/products";
 import { Button } from "@/components/common/Button";
 import { SizeSelector } from "@/components/product/SizeSelector";
 import { WishlistButton } from "@/components/product/WishlistButton";
-
-const formatPrice = (value: number) => `Rs. ${Number(value || 0).toLocaleString("en-IN")}`;
+import { formatINR } from "@/lib/money";
 
 function PurchaseButtons({
   disabled,
@@ -45,8 +44,8 @@ function PurchaseButtons({
         disabled={disabled}
         className={
           compact
-            ? "quick-shop-btn min-h-[48px] min-w-0 px-2 py-3 text-[0.68rem] font-semibold tracking-[0.08em] min-[380px]:min-h-[52px] min-[380px]:px-4 min-[380px]:text-[0.78rem] min-[380px]:tracking-[0.14em]"
-            : "quick-shop-btn min-h-[56px] px-6 py-4 text-[15px] font-semibold sm:min-h-[52px] sm:px-8 sm:py-4 sm:text-sm flex sm:block"
+            ? "quick-shop-btn buy-now-jiggle min-h-[48px] min-w-0 px-2 py-3 text-[0.68rem] font-semibold tracking-[0.08em] min-[380px]:min-h-[52px] min-[380px]:px-4 min-[380px]:text-[0.78rem] min-[380px]:tracking-[0.14em]"
+            : "quick-shop-btn buy-now-jiggle min-h-[56px] px-6 py-4 text-[15px] font-semibold sm:min-h-[52px] sm:px-8 sm:py-4 sm:text-sm flex sm:block"
         }
       >
         <Sparkles className="h-4 w-4" /> Buy Now
@@ -68,9 +67,11 @@ export const ProductInfo = memo(function ProductInfo({
   onSelectSize: (size: Size) => void;
   onAddToCart: () => void;
   onBuyNow: () => void;
-  viewers: number;
+  viewers: number | null;
 }) {
   const inStock = product.stock > 0;
+  const viewerCount = viewers ?? 1;
+  const viewersReady = viewers !== null;
   const savings = useMemo(() => {
     if (!product.originalPrice || product.originalPrice <= selectedSize.price) {
       return 0;
@@ -104,12 +105,7 @@ export const ProductInfo = memo(function ProductInfo({
               </span>
             </div>
 
-            <WishlistButton
-              product={product}
-              showLabel
-              variant="inline"
-              className="self-start"
-            />
+            <WishlistButton product={product} showLabel variant="inline" className="self-start" />
           </div>
 
           <h1 className="mt-4 font-display text-3xl leading-[0.95] text-navy sm:text-5xl">
@@ -146,14 +142,14 @@ export const ProductInfo = memo(function ProductInfo({
                 </p>
                 <div className="mt-2 flex flex-wrap items-end gap-3">
                   <span className="font-display text-4xl text-beige sm:text-5xl">
-                    {formatPrice(selectedSize.price)}
+                    {formatINR(selectedSize.price)}
                   </span>
                   <span className="rounded-full bg-beige/10 px-3 py-1 text-[0.65rem] uppercase tracking-[0.24em] text-beige/70">
                     {selectedSize.size}
                   </span>
                   {product.originalPrice && product.originalPrice > selectedSize.price ? (
                     <span className="text-sm text-beige/45 line-through">
-                      {formatPrice(product.originalPrice)}
+                      {formatINR(product.originalPrice)}
                     </span>
                   ) : null}
                 </div>
@@ -164,22 +160,6 @@ export const ProductInfo = memo(function ProductInfo({
                   Save {savings}%
                 </div>
               ) : null}
-            </div>
-
-            <div className="mt-6">
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-beige/10 text-gold">
-                    <Clock3 className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-[0.6rem] uppercase tracking-[0.24em] text-beige/50">
-                      Longevity
-                    </p>
-                    <p className="mt-1 font-display text-xl text-beige">{product.longevity}</p>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
 
@@ -200,14 +180,15 @@ export const ProductInfo = memo(function ProductInfo({
               <Eye className="h-4 w-4 text-gold" />
               <AnimatePresence mode="wait" initial={false}>
                 <motion.span
-                  key={viewers}
+                  key={viewersReady ? viewerCount : "pending-viewers"}
                   initial={{ opacity: 0, y: 4 }}
-                  animate={{ opacity: 1, y: 0 }}
+                  animate={{ opacity: viewersReady ? 1 : 0, y: 0 }}
                   exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.22, ease: "easeOut" }}
-                  className="inline-flex items-center gap-1"
+                  className="inline-flex min-h-6 items-center gap-1"
+                  aria-hidden={!viewersReady}
                 >
-                  <span className="font-semibold text-gold">{viewers}</span>
+                  <span className="font-semibold text-gold">{viewerCount}</span>
                   shoppers are viewing this fragrance
                 </motion.span>
               </AnimatePresence>
@@ -224,7 +205,7 @@ export const ProductInfo = memo(function ProductInfo({
                 {selectedSize.size}
               </p>
               <p className="mt-1 font-display text-xl text-navy min-[380px]:text-2xl">
-                {formatPrice(selectedSize.price)}
+                {formatINR(selectedSize.price)}
               </p>
             </div>
             <span

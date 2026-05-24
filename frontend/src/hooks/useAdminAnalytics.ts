@@ -22,6 +22,7 @@ export const useAdminAnalytics = ({ initialRange = "30d" }: Options = {}) => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const hasLoadedRef = useRef(false);
+  const lastQueryKeyRef = useRef("");
 
   const loadAnalytics = useCallback(
     async (forceRefresh = false) => {
@@ -32,10 +33,12 @@ export const useAdminAnalytics = ({ initialRange = "30d" }: Options = {}) => {
         return;
       }
 
-      const showInitialLoader = !hasLoadedRef.current && !forceRefresh;
+      const rangeChanged = lastQueryKeyRef.current !== dateRange.queryKey;
+      const showInitialLoader = (!hasLoadedRef.current || rangeChanged) && !forceRefresh;
 
       try {
         if (showInitialLoader) {
+          setAnalytics(null);
           setLoading(true);
         } else {
           setRefreshing(true);
@@ -46,10 +49,14 @@ export const useAdminAnalytics = ({ initialRange = "30d" }: Options = {}) => {
             range?: AnalyticsRangeKey;
             from?: string;
             to?: string;
+            startDate?: string;
+            endDate?: string;
           },
+          { forceFresh: true },
         );
 
         hasLoadedRef.current = true;
+        lastQueryKeyRef.current = dateRange.queryKey;
         setAnalytics(response);
         setError("");
       } catch (loadError) {
@@ -61,7 +68,7 @@ export const useAdminAnalytics = ({ initialRange = "30d" }: Options = {}) => {
         setRefreshing(false);
       }
     },
-    [dateRange.isValid, dateRange.queryParams, dateRange.validationError],
+    [dateRange.isValid, dateRange.queryKey, dateRange.queryParams, dateRange.validationError],
   );
 
   useEffect(() => {

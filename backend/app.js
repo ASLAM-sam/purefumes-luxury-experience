@@ -5,6 +5,7 @@ import express from "express";
 import session from "express-session";
 import passport, { configurePassport } from "./config/passport.js";
 import env, { validateEnv } from "./config/env.js";
+import { initSentry, setupSentryErrorHandler } from "./config/sentry.js";
 import { adminLimiter, apiLimiter, catalogLimiter } from "./middlewares/rateLimiter.js";
 import { errorHandler, notFound } from "./middlewares/errorMiddleware.js";
 import {
@@ -29,6 +30,7 @@ import perfumeRequestRoutes from "./routes/perfumeRequestRoutes.js";
 import couponRoutes from "./routes/couponRoutes.js";
 
 validateEnv();
+initSentry();
 configurePassport();
 
 const __filename = fileURLToPath(import.meta.url);
@@ -162,6 +164,7 @@ app.use("/api/perfume-requests", perfumeRequestRoutes);
 app.use("/api/coupons", couponRoutes);
 
 app.use(notFound);
+setupSentryErrorHandler(app);
 app.use(errorHandler);
 
 export default app;

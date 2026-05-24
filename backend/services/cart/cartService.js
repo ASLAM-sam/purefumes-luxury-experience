@@ -4,9 +4,7 @@ import Product from "../../models/Product.js";
 import { ApiError } from "../../middlewares/errorMiddleware.js";
 import { findRawCartByUserId, upsertCart } from "../../repositories/cartRepository.js";
 import { normalizeSelectedVariant, resolveProductVariant } from "../pricingService.js";
-
-const roundCurrency = (value) =>
-  Math.max(0, Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100);
+import { addMoney, multiplyMoney, normalizeMoney, subtractMoney } from "../../utils/money.js";
 
 const getEmptyCart = (userId = "") => ({
   id: "",
@@ -34,7 +32,7 @@ const toPlainItem = (item) => {
     productId: plain?.productId?._id?.toString?.() || plain?.productId?.toString?.() || plain?.productId,
     quantity: Number(plain?.quantity || 1),
     selectedVariant: normalizeSelectedVariant(plain?.selectedVariant || plain?.size),
-    priceAtAddition: Number(plain?.priceAtAddition || 0),
+    priceAtAddition: normalizeMoney(plain?.priceAtAddition ?? 0),
     addedAt: plain?.addedAt ? new Date(plain.addedAt) : new Date(),
     updatedAt: plain?.updatedAt ? new Date(plain.updatedAt) : new Date(),
   };
@@ -52,7 +50,7 @@ export const normalizeCartItemInput = (item) => {
     productId,
     quantity: toPositiveInteger(item?.quantity),
     selectedVariant: normalizeSelectedVariant(item?.selectedVariant || item?.size),
-    priceAtAddition: Number(item?.priceAtAddition || 0),
+    priceAtAddition: normalizeMoney(item?.priceAtAddition ?? 0),
     addedAt: item?.addedAt ? new Date(item.addedAt) : undefined,
     updatedAt: item?.updatedAt ? new Date(item.updatedAt) : undefined,
   };
@@ -128,7 +126,7 @@ const buildCartState = async (items = []) => {
     const quantity = Math.min(toPositiveInteger(item.quantity), availableStock);
 
     totalItems += quantity;
-    subtotal += price * quantity;
+    subtotal = addMoney(subtotal, multiplyMoney(price, quantity));
     preparedItems.push({
       _id: item._id && mongoose.Types.ObjectId.isValid(String(item._id))
         ? new mongoose.Types.ObjectId(String(item._id))
@@ -136,13 +134,13 @@ const buildCartState = async (items = []) => {
       productId: product._id,
       quantity,
       selectedVariant,
-      priceAtAddition: roundCurrency(item.priceAtAddition || price),
+      priceAtAddition: normalizeMoney(item.priceAtAddition || price),
       addedAt: item.addedAt || new Date(),
       updatedAt: new Date(),
     });
   }
 
-  const roundedSubtotal = roundCurrency(subtotal);
+  const roundedSubtotal = normalizeMoney(subtotal);
 
   return {
     items: preparedItems,
@@ -182,9 +180,9 @@ export const serializeCart = (cart) => {
             quantity,
             selectedVariant,
             size: { size, price },
-            priceAtAddition: roundCurrency(item.priceAtAddition || price),
-            currentPrice: roundCurrency(price),
-            lineTotal: roundCurrency(price * quantity),
+            priceAtAddition: normalizeMoney(item.priceAtAddition || price),
+            currentPrice: normalizeMoney(price),
+            lineTotal: multiplyMoney(price, quantity),
             addedAt: item.addedAt || null,
             updatedAt: item.updatedAt || null,
           };
@@ -198,12 +196,12 @@ export const serializeCart = (cart) => {
     items,
     products: items,
     totalItems: Number(raw.totalItems ?? items.reduce((sum, item) => sum + item.quantity, 0)),
-    subtotal: roundCurrency(
-      raw.subtotal ?? items.reduce((sum, item) => sum + item.lineTotal, 0),
+    subtotal: normalizeMoney(
+      raw.subtotal ?? addMoney(...items.map((item) => item.lineTotal)),
     ),
-    discount: roundCurrency(raw.discount ?? 0),
-    finalTotal: roundCurrency(
-      raw.finalTotal ?? Number(raw.subtotal ?? 0) - Number(raw.discount ?? 0),
+    discount: normalizeMoney(raw.discount ?? 0),
+    finalTotal: normalizeMoney(
+      raw.finalTotal ?? subtractMoney(raw.subtotal ?? 0, raw.discount ?? 0),
     ),
     createdAt: raw.createdAt || null,
     updatedAt: raw.updatedAt || null,

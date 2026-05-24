@@ -9,19 +9,27 @@ const serializeBanner = (banner) =>
 const buildBannerPayload = (body = {}) => {
   const payload = {};
 
-  ["title", "subtitle", "image", "buttonText", "link"].forEach((field) => {
+  ["title", "subtitle", "buttonText", "link"].forEach((field) => {
     if (body[field] !== undefined) {
       payload[field] =
         typeof body[field] === "string" ? body[field].trim() : body[field];
     }
   });
 
-  if (body.isActive !== undefined) {
+  const image = body.image ?? body.imageUrl;
+  if (image !== undefined) {
+    payload.image = typeof image === "string" ? image.trim() : image;
+  }
+
+  const activeValue = body.isActive ?? body.status;
+  if (activeValue !== undefined) {
     payload.isActive =
-      body.isActive === true ||
-      body.isActive === "true" ||
-      body.isActive === 1 ||
-      body.isActive === "1";
+      activeValue === true ||
+      activeValue === "true" ||
+      activeValue === "active" ||
+      activeValue === "enabled" ||
+      activeValue === 1 ||
+      activeValue === "1";
   }
 
   if (body.order !== undefined && body.order !== null && body.order !== "") {

@@ -9,12 +9,13 @@ import { AutoCouponSuggestion } from "@/components/common/AutoCouponSuggestion";
 import { useApp } from "@/context/AppContext";
 import { useAuth } from "@/context/AuthContext";
 import { setRedirectAfterLogin } from "@/lib/auth-redirect";
+import { formatINR } from "@/lib/money";
 
 export const Route = createFileRoute("/cart")({
   component: CartPage,
 });
 
-const formatCurrency = (amount: number) => `Rs. ${Number(amount || 0).toLocaleString("en-IN")}`;
+const formatCurrency = formatINR;
 
 function CartPage() {
   const {

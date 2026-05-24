@@ -174,7 +174,7 @@ export const policies = {
         title: "Product Information",
         content: [
           "Purefumes Hyderabad makes reasonable efforts to display product names, sizes, prices, descriptions, images, availability, and fragrance information accurately.",
-          "Fragrance experience, longevity, projection, color, packaging, batch presentation, and bottle appearance may vary due to manufacturer updates, storage conditions, skin chemistry, photography, screen settings, and supplier batches.",
+          "Fragrance experience, projection, color, packaging, batch presentation, and bottle appearance may vary due to manufacturer updates, storage conditions, skin chemistry, photography, screen settings, and supplier batches.",
         ],
       },
       {
@@ -376,18 +376,12 @@ export const policies = {
           "Currently direct exchanges are not available.",
           "If customer wants another product:",
         ],
-        items: [
-          "Request refund if eligible",
-          "Place a new order separately",
-        ],
+        items: ["Request refund if eligible", "Place a new order separately"],
       },
       {
         title: "Damaged or Missing Items",
         content: ["If item is damaged, leaking, or missing:"],
-        items: [
-          "Report within 48 hours",
-          "Share photos/videos for verification",
-        ],
+        items: ["Report within 48 hours", "Share photos/videos for verification"],
       },
       {
         title: "Support",

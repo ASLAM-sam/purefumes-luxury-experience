@@ -214,9 +214,29 @@
     overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     scrollbar-gutter: stable both-edges;
+    color: rgba(7, 31, 63, 0.86);
   }
   .admin-table-shell > table {
     min-width: 44rem;
+  }
+  .admin-table-shell thead {
+    color: rgba(7, 31, 63, 0.72);
+  }
+  .admin-table-shell tbody {
+    color: rgba(7, 31, 63, 0.86);
+  }
+  .admin-table-shell tbody tr {
+    border-bottom: 1px solid rgba(126, 94, 58, 0.18);
+  }
+  .admin-table-shell tbody tr:hover {
+    background: rgba(239, 231, 220, 0.48);
+  }
+  .admin-table-shell td,
+  .admin-table-shell th {
+    border-bottom-color: rgba(126, 94, 58, 0.18);
+  }
+  .admin-table-surface {
+    color: rgba(7, 31, 63, 0.86);
   }
   .touch-target {
     min-height: 44px;
@@ -359,8 +379,7 @@
     justify-content: center;
     overflow: hidden;
     background:
-      linear-gradient(180deg, rgba(255, 250, 244, 0.96), rgba(239, 231, 220, 0.8) 72%),
-      #efe7dc;
+      linear-gradient(180deg, rgba(255, 250, 244, 0.96), rgba(239, 231, 220, 0.8) 72%), #efe7dc;
   }
   .product-fit-image {
     display: block;
@@ -397,6 +416,14 @@
   .quick-shop-btn {
     width: 100%;
     white-space: nowrap;
+  }
+  .buy-now-jiggle:not(:disabled) {
+    transform-origin: center;
+    will-change: transform;
+    animation: buy-now-jiggle 4s ease-in-out infinite;
+  }
+  .buy-now-jiggle:not(:disabled):hover {
+    animation-play-state: paused;
   }
   .navbar {
     position: relative;
@@ -561,6 +588,13 @@
   .promo-bar:hover .promo-bar__track {
     animation-play-state: paused;
   }
+  .brand-tagline {
+    max-width: 100%;
+    font-size: 0.52rem;
+    line-height: 1.05;
+    letter-spacing: 0.24em;
+    opacity: 0.78;
+  }
   .mobile-bottom-nav {
     display: none;
   }
@@ -571,7 +605,7 @@
     gap: 1rem;
   }
   .mobile-brand-wordmark {
-    display: block;
+    display: flex;
     min-width: 0;
     max-width: calc(100vw - 5rem);
     overflow: visible;
@@ -800,7 +834,27 @@
     }
 
     .promo-bar {
-      display: none;
+      display: block;
+      font-size: 0.62rem;
+      letter-spacing: 0.13em;
+    }
+
+    .promo-bar::before,
+    .promo-bar::after {
+      width: 28px;
+    }
+
+    .promo-bar__inner {
+      min-height: 26px;
+      padding-inline: 0.75rem;
+    }
+
+    .promo-bar__track {
+      animation-duration: 18s;
+    }
+
+    .promo-bar__text {
+      padding-right: 3rem;
     }
 
     .navbar {
@@ -817,6 +871,12 @@
     .mobile-header-bar {
       height: 3.5rem;
       padding-inline: 0.95rem;
+    }
+
+    .brand-tagline {
+      margin-top: 0.16rem;
+      font-size: 0.46rem;
+      letter-spacing: 0.18em;
     }
 
     .home-hero-slider {
@@ -988,6 +1048,10 @@
     animation: none;
   }
 
+  .buy-now-jiggle {
+    animation: none !important;
+  }
+
   .home-hero-slider__track {
     transition-duration: 1ms !important;
   }
@@ -1042,5 +1106,25 @@
   }
   to {
     transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes buy-now-jiggle {
+  0%,
+  84%,
+  100% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+  }
+  88% {
+    transform: translate3d(-1px, 0, 0) rotate(-2deg);
+  }
+  92% {
+    transform: translate3d(2px, 0, 0) rotate(2deg);
+  }
+  96% {
+    transform: translate3d(-1px, 0, 0) rotate(-1deg);
+  }
+  98% {
+    transform: translate3d(1px, 0, 0) rotate(1deg);
   }
 }

@@ -146,6 +146,7 @@ function AdminBanners() {
     payload.set("buttonText", form.buttonText.trim());
     payload.set("link", form.link.trim());
     payload.set("order", form.order.trim() || "0");
+    payload.set("isActive", editingBanner ? String(editingBanner.isActive) : "true");
 
     if (imageFile) {
       payload.set("imageFile", imageFile);

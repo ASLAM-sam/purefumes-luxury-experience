@@ -5,7 +5,7 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
 
 const SWIPE_THRESHOLD_PX = 40;
-type GalleryMedia = { type: "image" | "video"; url: string };
+type GalleryMedia = { url: string };
 
 const cleanImages = (images: string[] | string | undefined) => {
   if (!images) return [];
@@ -24,9 +24,7 @@ const cleanImages = (images: string[] | string | undefined) => {
         return [];
       }
 
-      return parsed
-        .map((image: unknown) => String(image || "").trim())
-        .filter(Boolean);
+      return parsed.map((image: unknown) => String(image || "").trim()).filter(Boolean);
     } catch {
       return [];
     }
@@ -38,13 +36,9 @@ const cleanImages = (images: string[] | string | undefined) => {
     .filter(Boolean);
 };
 
-const buildGalleryFrames = (images: string[] = [], videoUrl?: string) => {
+const buildGalleryFrames = (images: string[] = []) => {
   const uniqueImages = Array.from(new Set<string>(cleanImages(images)));
-  const cleanVideoUrl = String(videoUrl || "").trim();
-  const mediaItems: GalleryMedia[] = [
-    ...(cleanVideoUrl ? [{ type: "video" as const, url: cleanVideoUrl }] : []),
-    ...uniqueImages.map((url) => ({ type: "image" as const, url })),
-  ];
+  const mediaItems: GalleryMedia[] = uniqueImages.map((url) => ({ url }));
 
   if (mediaItems.length === 0) {
     return { thumbnails: [], frames: [] };
@@ -71,22 +65,20 @@ const buildGalleryFrames = (images: string[] = [], videoUrl?: string) => {
 };
 
 const findFirstFrameIndex = (frames: GalleryMedia[], media: GalleryMedia) => {
-  const nextIndex = frames.findIndex((frame) => frame.type === media.type && frame.url === media.url);
+  const nextIndex = frames.findIndex((frame) => frame.url === media.url);
   return nextIndex >= 0 ? nextIndex : 0;
 };
 
 export const ProductImageGallery = memo(function ProductImageGallery({
   productName,
   images,
-  videoUrl,
   discountPercentage = 0,
 }: {
   productName: string;
   images: string[];
-  videoUrl?: string;
   discountPercentage?: number;
 }) {
-  const { thumbnails, frames } = useMemo(() => buildGalleryFrames(images, videoUrl), [images, videoUrl]);
+  const { thumbnails, frames } = useMemo(() => buildGalleryFrames(images), [images]);
   const hasMedia = frames.length > 0;
   const [activeIndex, setActiveIndex] = useState(0);
   const [zoomed, setZoomed] = useState(false);
@@ -101,7 +93,7 @@ export const ProductImageGallery = memo(function ProductImageGallery({
     setZoomOrigin("50% 50%");
   }, [frames]);
 
-  const activeMedia = hasMedia ? frames[activeIndex] || frames[0] : { type: "image" as const, url: "" };
+  const activeMedia = hasMedia ? frames[activeIndex] || frames[0] : { url: "" };
   const showControls = thumbnails.length > 1;
 
   const goToIndex = useCallback(
@@ -186,11 +178,11 @@ export const ProductImageGallery = memo(function ProductImageGallery({
           <div className="flex gap-3 overflow-x-auto pb-1 xl:flex-col xl:overflow-visible no-scrollbar">
             {thumbnails.length ? (
               thumbnails.map((media, index) => {
-                const selected = activeMedia.type === media.type && activeMedia.url === media.url;
+                const selected = activeMedia.url === media.url;
 
                 return (
                   <button
-                    key={`${media.type}-${media.url}-${index}`}
+                    key={`${media.url}-${index}`}
                     type="button"
                     onClick={() => selectThumbnail(media)}
                     className={cn(
@@ -199,27 +191,17 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                         ? "border-navy ring-2 ring-navy/10"
                         : "border-border/60 hover:-translate-y-0.5 hover:border-gold/60",
                     )}
-                    aria-label={`View ${media.type} ${index + 1}`}
+                    aria-label={`View image ${index + 1}`}
                     aria-pressed={selected}
                   >
-                    {media.type === "video" ? (
-                      <video
-                        src={media.url}
-                        muted
-                        playsInline
-                        preload="metadata"
-                        className="h-full w-full rounded-[1rem] object-contain object-center"
-                      />
-                    ) : (
-                      <OptimizedImage
-                        src={media.url}
-                        alt={`${productName} thumbnail ${index + 1}`}
-                        width={160}
-                        height={160}
-                        sizes="5rem"
-                        className="h-full w-full rounded-[1rem] object-contain object-center p-1"
-                      />
-                    )}
+                    <OptimizedImage
+                      src={media.url}
+                      alt={`${productName} thumbnail ${index + 1}`}
+                      width={160}
+                      height={160}
+                      sizes="5rem"
+                      className="h-full w-full rounded-[1rem] object-contain object-center p-1"
+                    />
                     <span
                       className={cn(
                         "absolute inset-x-3 bottom-2 h-0.5 rounded-full transition",
@@ -252,30 +234,18 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                 aria-label="Open product image preview"
               >
                 {hasMedia && activeMedia.url ? (
-                  activeMedia.type === "video" ? (
-                    <video
-                      src={activeMedia.url}
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                      className="h-full w-full object-contain object-center"
-                    />
-                  ) : (
-                    <OptimizedImage
-                      src={activeMedia.url}
-                      alt={productName}
-                      width={1100}
-                      height={1100}
-                      sizes="(max-width: 768px) 92vw, 55vw"
-                      className={cn(
-                        "h-full w-full object-contain object-center p-1 transition duration-300 ease-out sm:p-2",
-                        zoomed ? "scale-[1.04]" : "scale-100",
-                      )}
-                      style={zoomed ? { transformOrigin: zoomOrigin } : undefined}
-                    />
-                  )
+                  <OptimizedImage
+                    src={activeMedia.url}
+                    alt={productName}
+                    width={1100}
+                    height={1100}
+                    sizes="(max-width: 768px) 92vw, 55vw"
+                    className={cn(
+                      "h-full w-full object-contain object-center p-1 transition duration-300 ease-out sm:p-2",
+                      zoomed ? "scale-[1.04]" : "scale-100",
+                    )}
+                    style={zoomed ? { transformOrigin: zoomOrigin } : undefined}
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center rounded-[1.5rem] bg-beige/80 text-sm uppercase tracking-[0.3em] text-navy/40">
                     <span className="inline-flex h-3.5 w-3.5 rounded-full bg-navy/20" />
@@ -294,7 +264,6 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                   <Expand className="h-3.5 w-3.5" />
                   Preview
                 </div>
-
               </button>
 
               {showControls ? (
@@ -339,26 +308,14 @@ export const ProductImageGallery = memo(function ProductImageGallery({
             <div className="relative flex min-h-0 flex-1 items-center justify-center">
               <div className="flex h-full w-full items-center justify-center rounded-[2rem] border border-white/10 bg-white/5 p-4 sm:p-8">
                 {hasMedia && activeMedia.url ? (
-                  activeMedia.type === "video" ? (
-                    <video
-                      src={activeMedia.url}
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      preload="metadata"
-                      className="h-full w-full object-contain object-center"
-                    />
-                  ) : (
-                    <OptimizedImage
-                      src={activeMedia.url}
-                      alt={productName}
-                      width={1400}
-                      height={1400}
-                      sizes="92vw"
-                      className="h-full w-full object-contain"
-                    />
-                  )
+                  <OptimizedImage
+                    src={activeMedia.url}
+                    alt={productName}
+                    width={1400}
+                    height={1400}
+                    sizes="92vw"
+                    className="h-full w-full object-contain"
+                  />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center rounded-[1.5rem] bg-white/5 text-[0.8rem] uppercase tracking-[0.24em] text-beige/60">
                     <span className="inline-flex h-3.5 w-3.5 rounded-full bg-beige/40" />
@@ -391,11 +348,11 @@ export const ProductImageGallery = memo(function ProductImageGallery({
             <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
               {thumbnails.length ? (
                 thumbnails.map((media, index) => {
-                  const selected = activeMedia.type === media.type && activeMedia.url === media.url;
+                  const selected = activeMedia.url === media.url;
 
                   return (
                     <button
-                      key={`fullscreen-${media.type}-${media.url}-${index}`}
+                      key={`fullscreen-${media.url}-${index}`}
                       type="button"
                       onClick={() => selectThumbnail(media)}
                       className={cn(
@@ -404,26 +361,16 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                           ? "border-gold bg-white/10"
                           : "border-white/10 bg-white/5 hover:border-white/25",
                       )}
-                      aria-label={`Fullscreen ${media.type} ${index + 1}`}
+                      aria-label={`Fullscreen image ${index + 1}`}
                     >
-                      {media.type === "video" ? (
-                        <video
-                          src={media.url}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          className="h-full w-full rounded-[1rem] object-contain object-center"
-                        />
-                      ) : (
-                        <OptimizedImage
-                          src={media.url}
-                          alt={`${productName} fullscreen thumbnail ${index + 1}`}
-                          width={160}
-                          height={160}
-                          sizes="5rem"
-                          className="h-full w-full rounded-[1rem] object-contain object-center"
-                        />
-                      )}
+                      <OptimizedImage
+                        src={media.url}
+                        alt={`${productName} fullscreen thumbnail ${index + 1}`}
+                        width={160}
+                        height={160}
+                        sizes="5rem"
+                        className="h-full w-full rounded-[1rem] object-contain object-center"
+                      />
                     </button>
                   );
                 })

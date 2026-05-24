@@ -1,6 +1,7 @@
 import Brand, { formatBrandName, normalizeBrandName } from "../models/Brand.js";
 import Product from "../models/Product.js";
 import { escapeRegex } from "../utils/apiFeatures.js";
+import { normalizeMoney } from "../utils/money.js";
 import { resolveCategoriesFromInput } from "./categoryService.js";
 
 const BULK_PRODUCT_BATCH_SIZE = 20;
@@ -44,6 +45,7 @@ const normalizeImportRow = (row = {}, index = 0) => ({
   name: String(row.name || "").trim().replace(/\s+/g, " "),
   brandInput: String(row.brand || "").trim().replace(/\s+/g, " "),
   categoryInput: String(row.category || row.categories || "").trim().replace(/\s+/g, " "),
+  typeInput: String(row.type || row.productType || row.fragranceType || "").trim().replace(/\s+/g, " "),
   priceInput: row.price ?? "",
   stockInput: row.stock ?? "",
   description: String(row.description || "").trim(),
@@ -57,6 +59,7 @@ const createRowResult = (row, status, reason = "", overrides = {}) => ({
   name: row.name,
   brand: row.brandInput,
   category: overrides.category || row.categoryInput || "",
+  type: row.typeInput,
   price: row.priceInput,
   stock: row.stockInput,
   description: row.description,
@@ -77,7 +80,7 @@ const parsePrice = (value) => {
     return { ok: false, reason: "Price must be a valid non-negative number" };
   }
 
-  return { ok: true, value: price };
+  return { ok: true, value: normalizeMoney(price) };
 };
 
 const parseStock = (value) => {
@@ -125,7 +128,7 @@ const parseSizes = (rawSizes, fallbackPrice) => {
           return null;
         }
 
-        return { size, price };
+        return { size, price: normalizeMoney(price) };
       })
       .filter(Boolean);
 
@@ -155,7 +158,7 @@ const parseSizes = (rawSizes, fallbackPrice) => {
         const [sizePart, pricePart] = part.split(":");
         return {
           size: String(sizePart || "").trim(),
-          price: Number(pricePart || fallbackPrice),
+          price: normalizeMoney(pricePart || fallbackPrice),
         };
       });
   }
@@ -417,6 +420,7 @@ export const bulkImportProducts = async (rows = []) => {
           price: row.price,
           stock: row.stock,
           description: row.description,
+          type: row.typeInput,
           image: row.images[0] || "",
           images: row.images,
           notes: [],
