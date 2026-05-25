@@ -1,12 +1,32 @@
 import request from "supertest";
+import bcrypt from "bcryptjs";
 import Category from "../models/Category.js";
 import Product from "../models/Product.js";
+import User from "../models/User.js";
 import app from "../app.js";
 
-const signupAndGetCsrf = async (agent, payload) => {
-  await agent.post("/api/auth/signup").send(payload).expect(201);
+const loginAdminAndGetCsrf = async (agent, suffix) => {
+  const password = "Admin@123";
   const csrfResponse = await agent.get("/api/auth/csrf-token").expect(200);
-  return csrfResponse.body.data.csrfToken;
+  const csrfToken = csrfResponse.body.data.csrfToken;
+
+  await User.create({
+    name: `Admin ${suffix}`,
+    email: `admin-${suffix}@example.com`,
+    username: `a${String(suffix).slice(0, 5)}`,
+    mobile: `+9191000${String(suffix).padStart(5, "0")}`,
+    role: "admin",
+    emailVerified: true,
+    passwordHash: await bcrypt.hash(password, 12),
+  });
+
+  await agent
+    .post("/api/auth/login")
+    .set("X-CSRF-Token", csrfToken)
+    .send({ identifier: `admin-${suffix}@example.com`, password })
+    .expect(200);
+
+  return csrfToken;
 };
 
 const createCategoryBackedProduct = async ({
@@ -25,7 +45,7 @@ const createCategoryBackedProduct = async ({
 };
 
 describe("Cart API", () => {
-  it("keeps carts isolated per authenticated user and recalculates totals from products", async () => {
+  it("keeps carts isolated per authenticated session and recalculates totals from products", async () => {
     const product = await createCategoryBackedProduct({
       name: "Oud Reserve",
       brand: "Purefumes",
@@ -39,23 +59,8 @@ describe("Cart API", () => {
     const firstUser = request.agent(app);
     const secondUser = request.agent(app);
 
-    const firstCsrf = await signupAndGetCsrf(firstUser, {
-      name: "Sana Ali",
-      email: "sana@example.com",
-      username: "sana",
-      mobile: "+919100000001",
-      password: "Luxury@123",
-      confirmPassword: "Luxury@123",
-    });
-
-    const secondCsrf = await signupAndGetCsrf(secondUser, {
-      name: "Rehan Ahmed",
-      email: "rehan@example.com",
-      username: "rehan",
-      mobile: "+919100000002",
-      password: "Luxury@123",
-      confirmPassword: "Luxury@123",
-    });
+    const firstCsrf = await loginAdminAndGetCsrf(firstUser, 1);
+    const secondCsrf = await loginAdminAndGetCsrf(secondUser, 2);
 
     await firstUser
       .post("/api/cart/add")
@@ -103,14 +108,7 @@ describe("Cart API", () => {
     });
 
     const agent = request.agent(app);
-    const csrfToken = await signupAndGetCsrf(agent, {
-      name: "Zoya Khan",
-      email: "zoya@example.com",
-      username: "zoya",
-      mobile: "+919100000003",
-      password: "Luxury@123",
-      confirmPassword: "Luxury@123",
-    });
+    const csrfToken = await loginAdminAndGetCsrf(agent, 3);
 
     await agent
       .post("/api/cart/add")

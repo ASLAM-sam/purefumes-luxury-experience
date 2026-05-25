@@ -1,102 +1,129 @@
-# Purefumes Hyderabad Production Notes
+# Purefumes Hyderabad Enterprise Deployment
 
-## Architecture
+## Final topology
 
-The backend now uses a layered Express architecture:
+- Storefront: `https://purefumeshyderabad.in`
+- Admin UI: `https://purefumeshyderabad.in/admin`
+- API: `https://api.purefumeshyderabad.in`
+- MongoDB: MongoDB Atlas replica set
+- Redis: shared Redis for locks, queues, rate limiting, replay absorption, and hot cache
+- Process manager: PM2 cluster for API, single worker process for BullMQ workers
 
-- `routes` expose versionable HTTP boundaries under `/api`.
-- `controllers` keep request/response logic small.
-- `services` hold business rules for auth, cart merge, orders, analytics, and email.
-- `repositories` isolate database access.
-- `middlewares` centralize auth, RBAC, validation, rate limiting, CSRF, logging, and security headers.
-- `queues` and `jobs` process email work through BullMQ when `REDIS_URL` is set, with an inline fallback for development.
+## Backend runtime
 
-## Required Production Environment
+- `backend/server.js`: stateless API entrypoint
+- `backend/worker.js`: BullMQ worker entrypoint
+- `backend/ecosystem.config.cjs`: PM2 cluster for API plus dedicated worker
+- `backend/src/`: new production runtime for auth, cookies, locks, metrics, monitoring, queues, and middleware ordering
 
-Set every value in `backend/.env.production` or `backend/.env.example` on Render, Railway, Hostinger Node.js, cPanel Node.js hosting, PM2, AWS EC2, DigitalOcean, or your container runtime. Use long random values for `JWT_SECRET`, `REFRESH_SECRET`, and `COOKIE_SECRET`.
+## Authentication model
 
-Production browser traffic should use the storefront origin as the canonical API origin. Render remains the private upstream, but the browser should call same-origin proxy paths:
+- Access token: JWT in `HttpOnly` cookie, `15m`
+- Refresh token: rotating JWT in `HttpOnly` cookie, `7d`
+- Refresh tokens are hashed in MongoDB
+- Refresh rotation is replay-aware
+- Device id is sent from frontend in `X-Device-Id`
+- Duplicate refresh calls are absorbed through a short-lived replay cache
+- No `express-session`
+- No `csurf`
+- No browser token storage for auth secrets
 
-- `/api/*` proxies to `https://hydpurefumes.onrender.com/api/*`.
-- `/auth/*` proxies to `https://hydpurefumes.onrender.com/auth/*`.
-- `/uploads/*` proxies to `https://hydpurefumes.onrender.com/uploads/*`.
+## Required production environment
 
-For same-origin proxy deployments:
-
-- Use HTTPS on the storefront origin.
-- Set `FRONTEND_URL=https://purefumeshyderabad.in`.
-- Set `BACKEND_URL=https://purefumeshyderabad.in`.
-- Set `CORS_ORIGIN=https://purefumeshyderabad.in,https://www.purefumeshyderabad.in,https://tanstack-start-app.hydpurefumes.workers.dev`.
-- Set `GOOGLE_CALLBACK_URL=https://purefumeshyderabad.in/auth/google/callback`.
-- Leave `COOKIE_DOMAIN` empty for the same-origin proxy mode so cookies are host-only on the storefront domain.
-- Set `COOKIE_SAME_SITE=Lax`.
-- Keep `NODE_ENV=production` so cookies are marked `Secure`.
-- Set `SENTRY_DSN` for backend error reporting and optionally `SENTRY_TRACES_SAMPLE_RATE=0.05`.
-- Set `ADMIN_EMAIL` and `ADMIN_PASSWORD_HASH` for the admin bootstrap user. `ADMIN_USER` and `ADMIN_PASS` are supported only as temporary migration keys.
-
-Frontend production env:
+Backend:
 
 ```env
-VITE_API_URL=/api
+NODE_ENV=production
+PORT=5000
+FRONTEND_URL=https://purefumeshyderabad.in
+BACKEND_URL=https://api.purefumeshyderabad.in
+CORS_ORIGIN=https://purefumeshyderabad.in,https://www.purefumeshyderabad.in
+COOKIE_DOMAIN=.purefumeshyderabad.in
+JWT_SECRET=replace-with-strong-random-secret
+REFRESH_SECRET=replace-with-strong-random-secret
+COOKIE_SECRET=replace-with-strong-random-secret
+MONGO_URI=mongodb+srv://...
+REDIS_URL=rediss://...
+ADMIN_EMAIL=admin@purefumeshyderabad.in
+ADMIN_PASSWORD_HASH=$2b$...
+ENFORCE_HTTPS=true
+SENTRY_DSN=
+SENTRY_TRACES_SAMPLE_RATE=0.05
+```
+
+Frontend:
+
+```env
 VITE_FRONTEND_URL=https://purefumeshyderabad.in
+VITE_API_URL=https://api.purefumeshyderabad.in/api
 VITE_SENTRY_DSN=
 VITE_SENTRY_TRACES_SAMPLE_RATE=0.05
 ```
 
-Do not point production browser builds directly at `https://hydpurefumes.onrender.com/api`; that reintroduces third-party cookie behavior and intermittent session restoration failures.
+## Cloudflare
 
-Frontend hosting files included in the repo:
+- SSL mode: `Full (strict)`
+- Cache storefront static assets aggressively
+- Bypass cache for `https://api.purefumeshyderabad.in/api/*`
+- Enable bot protection / DDoS protection
+- Proxy both storefront and API through Cloudflare
+- Forward original visitor IP headers to Nginx and Node
 
-- `frontend/vercel.json` for Vercel API/auth/uploads proxy rewrites plus SPA fallback
-- `frontend/netlify.toml` for Netlify API/auth/uploads proxy redirects plus SPA fallback
-- `frontend/deploy/nginx.conf` for Nginx reverse-proxy plus SPA fallback
+## Nginx
 
-When deploying the frontend from this monorepo, set the site base/root directory to `frontend` on Vercel or Netlify so those config files are picked up directly.
-Publish the static browser bundle from `frontend/dist/client`.
+- Use the updated config in `frontend/deploy/nginx.conf`
+- Terminate TLS at Nginx
+- Proxy API traffic to local PM2-managed Node instances
+- Enable gzip, keepalive, buffering, and request throttling
 
-Backend hosting files included in the repo:
+## PM2
 
-- `backend/ecosystem.config.cjs` for PM2 process management
+- Start API with cluster mode: `pm2 start ecosystem.config.cjs --env production`
+- API process count: `max`
+- Worker process count: `1`
+- Use rolling reloads: `pm2 reload purefumes-api`
 
-## Local Development Notes
+## MongoDB
 
-- Keep `NODE_ENV=development` in `backend/.env.development`.
-- Set `BYPASS_PAYMENT=true` only for local development when you need to complete checkout without Razorpay signature verification.
-- Do not enable `BYPASS_PAYMENT` in production.
-- Keep `FRONTEND_URL`, `BACKEND_URL`, and `GOOGLE_CALLBACK_URL` aligned with the current environment so OAuth, reset links, cookies, and Brevo emails resolve correctly.
+- Use Atlas replica set or sharded cluster as traffic grows
+- Keep indexes enabled for:
+  - `email`
+  - `username`
+  - `mobile`
+  - `role`
+  - `refreshTokens.tokenHash`
+  - `refreshTokens.sessionId`
+  - `refreshTokens.deviceId`
+- Use connection pooling and pool caps already configured in `backend/config/db.js`
 
-## Nginx Reverse Proxy
+## Redis
 
-For EC2/DigitalOcean, terminate HTTPS at Nginx and proxy to Node:
+- Shared Redis is strongly recommended in production
+- Used for:
+  - refresh locking
+  - replay absorption
+  - rate limiting
+  - request deduplication primitives
+  - BullMQ
+  - auth user cache
 
-```nginx
-server {
-  listen 443 ssl http2;
-  server_name api.purefumes.example;
+## Operational checks
 
-  location / {
-    proxy_pass http://127.0.0.1:5000;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto https;
-  }
-}
-```
+- `GET /api/health`: readiness snapshot, returns `503` when MongoDB/Redis are degraded
+- `GET /api/metrics`: Prometheus-style text metrics
+- API logs: `backend/logs/combined.log`, `backend/logs/error.log`
+- Queue/process health: PM2 dashboard plus Redis monitoring
 
-## Scaling
+## Rollout order
 
-Run multiple API instances behind a load balancer. MongoDB stores user sessions as hashed refresh tokens, so instances remain stateless for access tokens. Redis is only required for durable queue processing and can be shared by all instances.
+1. Provision Redis and MongoDB Atlas.
+2. Deploy backend and worker with PM2.
+3. Put Nginx in front of Node and validate `api.purefumeshyderabad.in`.
+4. Update frontend env to point at the API subdomain.
+5. Enable Cloudflare Full Strict SSL and cache rules.
+6. Run smoke tests for login, refresh rotation, admin auth, uploads, and order placement.
 
-The short-lived OAuth handshake session currently uses `express-session`. For multi-instance production, move that store to Redis or another shared session backend so Google login remains consistent during horizontal scaling.
+## Notes
 
-## Security Checklist
-
-- Never commit `.env`.
-- Enforce HTTPS.
-- Rotate secrets before launch.
-- Configure SMTP provider credentials with Brevo, SendGrid SMTP, AWS SES, or Mailtrap.
-- Use MongoDB Atlas IP/network controls.
-- Keep admin credentials separate from customer auth.
-- Monitor `backend/logs/error.log`, `backend/logs/combined.log`, and Sentry releases during rollout.
+- `npm run build` in `frontend` currently fails in this sandbox because Vite/esbuild cannot resolve the sandboxed config path, but TypeScript validation passes.
+- `GET /api/health` returns `503` until MongoDB and Redis are actually connected, which is the intended readiness behavior.

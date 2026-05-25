@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
   Edit,
@@ -40,7 +40,10 @@ import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-st
 import { frontendMediator } from "@/lib/performance/mediator";
 
 export const Route = createFileRoute("/profile")({
-  component: ProfilePage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 type ProfileForm = {

@@ -1,7 +1,10 @@
+import { Suspense } from "react";
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { AppProvider } from "@/context/AppContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { NotificationProvider } from "@/context/NotificationContext";
+import { queryClient } from "@/lib/query/client";
 import { Sentry } from "@/lib/sentry";
 import brandIconUrl from "@/assets/purefumes-hyderabad-logo-circle.png?url";
 import appCss from "../styles.css?url";
@@ -112,13 +115,25 @@ function RootComponent() {
         </div>
       )}
     >
-      <NotificationProvider>
-        <AuthProvider>
-          <AppProvider>
-            <Outlet />
-          </AppProvider>
-        </AuthProvider>
-      </NotificationProvider>
+      <QueryClientProvider client={queryClient}>
+        <NotificationProvider>
+          <AuthProvider>
+            <AppProvider>
+              <Suspense
+                fallback={
+                  <div className="flex min-h-screen items-center justify-center bg-background px-4">
+                    <div className="text-center">
+                      <p className="font-display text-2xl text-navy">Loading...</p>
+                    </div>
+                  </div>
+                }
+              >
+                <Outlet />
+              </Suspense>
+            </AppProvider>
+          </AuthProvider>
+        </NotificationProvider>
+      </QueryClientProvider>
     </Sentry.ErrorBoundary>
   );
 }

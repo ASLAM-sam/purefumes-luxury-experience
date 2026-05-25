@@ -125,7 +125,11 @@ if (isFrontendSentryEnabled) {
     ),
     tracePropagationTargets: [/^\/api/, /^\/auth/, runtimeConfig.frontendUrl],
     integrations: [Sentry.browserTracingIntegration()],
-    beforeSend: scrubEvent,
+    beforeSend: scrubEvent as typeof Sentry.init extends (options: infer T) => void
+      ? T extends { beforeSend?: infer U }
+        ? U
+        : never
+      : never,
   });
 }
 

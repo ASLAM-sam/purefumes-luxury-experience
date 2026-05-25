@@ -11,8 +11,6 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import {
-  Area,
-  AreaChart,
   CartesianGrid,
   Line,
   LineChart,
@@ -32,7 +30,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { useNotification } from "@/context/NotificationContext";
 import { useAdminAnalytics } from "@/hooks/useAdminAnalytics";
-import { formatCompactINR, formatINR } from "@/lib/money";
+import { formatINR } from "@/lib/money";
 import { adminApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/analytics")({
@@ -66,7 +64,6 @@ function AdminAnalyticsPage() {
   const [confirmClear, setConfirmClear] = useState<"analytics" | "activity" | null>(null);
   const [clearing, setClearing] = useState(false);
 
-  const revenueTrend = analytics?.trends?.revenue || [];
   const userGrowth = analytics?.trends?.users || [];
   const summary = analytics?.summary;
 
@@ -243,56 +240,7 @@ function AdminAnalyticsPage() {
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <AnalyticsChart
-          title="Revenue trajectory"
-          description="Revenue buckets for the selected period with order volume layered in for context."
-        >
-          {loading && !analytics ? (
-            <LoadingSkeleton className="h-[280px] w-full" />
-          ) : revenueTrend.length ? (
-            <div className="h-[280px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueTrend} margin={{ left: 0, right: 10, top: 10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="compactRevenueGradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor="#c9a14a" stopOpacity={0.34} />
-                      <stop offset="95%" stopColor="#c9a14a" stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(7,31,63,0.08)" strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fill: "#5f6573", fontSize: 12 }} />
-                  <YAxis
-                    tick={{ fill: "#5f6573", fontSize: 12 }}
-                    tickFormatter={(value) => formatCompactINR(value)}
-                  />
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      name === "revenue" ? formatCurrency(value) : formatNumber(value),
-                      name === "revenue" ? "Revenue" : "Orders",
-                    ]}
-                    contentStyle={{ borderRadius: "18px", borderColor: "rgba(7,31,63,0.08)" }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#c9a14a"
-                    strokeWidth={3}
-                    fill="url(#compactRevenueGradient)"
-                  />
-                  <Line type="monotone" dataKey="orders" stroke="#1e1b18" strokeWidth={2} dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <EmptyState
-              icon={<IndianRupee className="h-6 w-6" />}
-              title="No revenue trend available"
-              description="Revenue will chart here once paid orders fall inside the selected range."
-            />
-          )}
-        </AnalyticsChart>
-
+      <div className="mt-6 grid gap-6 xl:grid-cols-1">
         <AnalyticsChart
           title="User growth"
           description="Customer acquisition across the selected period."
@@ -343,20 +291,36 @@ function AdminAnalyticsPage() {
             </div>
           ) : analytics?.topProducts?.length ? (
             <div className="space-y-3">
-              {analytics.topProducts.slice(0, 5).map((product, index) => (
+              {analytics.topProducts.slice(0, 8).map((product, index) => (
                 <div
                   key={`${product.productId}-${index}`}
                   className="rounded-[1.2rem] bg-[#f8f4ec] px-4 py-3"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="truncate font-semibold text-navy">{product.productName}</p>
-                      <p className="mt-1 text-sm text-navy/55">{product.brand || "Brand unavailable"}</p>
+                    <div className="flex min-w-0 items-start gap-3">
+                      {product.image ? (
+                        <img
+                          src={product.image}
+                          alt={product.productName || "Product"}
+                          className="h-14 w-14 rounded-2xl object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/80 text-[0.62rem] uppercase tracking-[0.18em] text-navy/45">
+                          No image
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-navy">{product.productName}</p>
+                        <p className="mt-1 truncate text-sm text-navy/55">{product.brand || "Brand unavailable"}</p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.16em] text-navy/40">
+                          {formatNumber(product.totalOrders)} orders • {formatNumber(product.totalQuantitySold)} sold
+                        </p>
+                      </div>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="font-semibold text-navy">{formatCurrency(product.revenue)}</p>
+                      <p className="font-semibold text-navy">{formatCurrency(product.totalRevenueGenerated)}</p>
                       <p className="mt-1 text-xs uppercase tracking-[0.16em] text-gold">
-                        {formatNumber(product.quantity)} sold
+                        Top purchased
                       </p>
                     </div>
                   </div>
@@ -384,7 +348,7 @@ function AdminAnalyticsPage() {
             </div>
           ) : analytics?.topCustomers?.length ? (
             <div className="space-y-3">
-              {analytics.topCustomers.slice(0, 5).map((customer) => (
+              {analytics.topCustomers.slice(0, 10).map((customer) => (
                 <div
                   key={customer.id}
                   className="rounded-[1.2rem] bg-[#f4f7fb] px-4 py-3"
@@ -393,6 +357,9 @@ function AdminAnalyticsPage() {
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-navy">{customer.name}</p>
                       <p className="mt-1 truncate text-sm text-navy/55">{customer.email || "No email available"}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-navy/40">
+                        {customer.mobile || "No mobile available"}
+                      </p>
                     </div>
                     <div className="shrink-0 text-right">
                       <p className="font-semibold text-navy">{formatCurrency(customer.totalSpent)}</p>

@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { PackageSearch, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/common/Button";
@@ -15,7 +15,10 @@ import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-st
 import { ordersApi, type Order } from "@/services/api";
 
 export const Route = createFileRoute("/my-orders")({
-  component: MyOrdersPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 function MyOrdersPage() {

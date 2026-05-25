@@ -76,7 +76,7 @@ function AdminOrders() {
       setError("");
 
       try {
-        const response = await ordersApi.listPaginated({
+        const response = await adminApi.orders({
           page,
           limit: PAGE_SIZE,
           status: statusFilter,
@@ -232,7 +232,7 @@ function AdminOrders() {
               type="search"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Order ID, customer, phone"
+              placeholder="Order ID, customer, mobile, email"
               className="h-12 rounded-2xl border border-border bg-white/90 px-4 text-sm text-navy outline-none transition placeholder:text-navy/35 focus:border-gold/70"
             />
           </label>
@@ -284,8 +284,11 @@ function AdminOrders() {
                         </p>
                         <p className="font-medium text-navy">{order.customerName || "Customer"}</p>
                         <p className="mt-1 text-xs text-navy/60">
-                          {order.phone || "Phone unavailable"}
+                          {order.mobileNumber || order.phone || "Phone unavailable"}
                         </p>
+                        {order.email ? (
+                          <p className="mt-1 text-xs text-navy/50">{order.email}</p>
+                        ) : null}
                       </div>
                       <select
                         value={order.status}
@@ -375,7 +378,12 @@ function AdminOrders() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-medium text-navy">{order.customerName}</p>
-                        <p className="text-xs text-navy/60">{order.phone}</p>
+                        <p className="text-xs text-navy/60">
+                          {order.mobileNumber || order.phone}
+                        </p>
+                        {order.email ? (
+                          <p className="mt-1 text-xs text-navy/50">{order.email}</p>
+                        ) : null}
                         <p className="text-xs text-navy/50 mt-1 max-w-xs truncate">
                           {order.address}
                         </p>

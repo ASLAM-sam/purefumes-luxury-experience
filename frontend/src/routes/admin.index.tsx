@@ -10,15 +10,6 @@ import {
   Users,
 } from "lucide-react";
 import { useState } from "react";
-import {
-  Area,
-  AreaChart,
-  CartesianGrid,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { AnalyticsChart } from "@/components/admin/AnalyticsChart";
 import { StatCard } from "@/components/admin/StatCard";
@@ -29,7 +20,7 @@ import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { useNotification } from "@/context/NotificationContext";
 import { useAdminAnalytics } from "@/hooks/useAdminAnalytics";
-import { formatCompactINR, formatINR } from "@/lib/money";
+import { formatINR } from "@/lib/money";
 import { adminApi } from "@/services/api";
 
 export const Route = createFileRoute("/admin/")({
@@ -48,7 +39,6 @@ function AdminDashboard() {
   const [clearAnalyticsOpen, setClearAnalyticsOpen] = useState(false);
   const [clearingAnalytics, setClearingAnalytics] = useState(false);
   const summary = analytics?.summary;
-  const revenueTrend = analytics?.trends?.revenue || [];
 
   const handleClearAnalytics = async () => {
     setClearingAnalytics(true);
@@ -158,57 +148,7 @@ function AdminDashboard() {
         </div>
       ) : null}
 
-      <div className="mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1.2fr)_minmax(20rem,0.8fr)]">
-        <AnalyticsChart
-          title="Revenue pulse"
-          description="A clean read on how revenue and order volume are moving across the last 30 days."
-        >
-          {loading && !analytics ? (
-            <LoadingSkeleton className="h-[320px] w-full" />
-          ) : revenueTrend.length ? (
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueTrend} margin={{ left: 0, right: 12, top: 12, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="overviewRevenueGradient" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="5%" stopColor="#c9a14a" stopOpacity={0.34} />
-                      <stop offset="95%" stopColor="#c9a14a" stopOpacity={0.04} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid stroke="rgba(7,31,63,0.08)" strokeDasharray="3 3" />
-                  <XAxis dataKey="label" tick={{ fill: "#5f6573", fontSize: 12 }} />
-                  <YAxis
-                    tick={{ fill: "#5f6573", fontSize: 12 }}
-                    tickFormatter={(value) => formatCompactINR(value)}
-                  />
-                  <Tooltip
-                    formatter={(value: number, name: string) => [
-                      name === "revenue" ? formatCurrency(value) : formatNumber(value),
-                      name === "revenue" ? "Revenue" : "Orders",
-                    ]}
-                    contentStyle={{
-                      borderRadius: "18px",
-                      borderColor: "rgba(7,31,63,0.08)",
-                    }}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#c9a14a"
-                    strokeWidth={3}
-                    fill="url(#overviewRevenueGradient)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <EmptyState
-              title="Revenue data is still warming up"
-              description="Once orders are flowing, this chart will show live growth instead of placeholder analytics."
-            />
-          )}
-        </AnalyticsChart>
-
+      <div className="mt-6">
         <AnalyticsChart
           title="Operational watchlist"
           description="The quickest issues to act on today."
@@ -268,14 +208,30 @@ function AdminDashboard() {
                   key={`${product.productId}-${index}`}
                   className="flex items-center justify-between gap-4 rounded-[1.35rem] bg-[#f8f4ec] px-4 py-4"
                 >
-                  <div>
-                    <p className="font-semibold text-navy">{product.productName || "Product"}</p>
-                    <p className="mt-1 text-sm text-navy/56">{product.brand || "Brand unavailable"}</p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.productName || "Product"}
+                        className="h-14 w-14 rounded-2xl object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/80 text-xs uppercase tracking-[0.18em] text-navy/45">
+                        No image
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-navy">{product.productName || "Product"}</p>
+                      <p className="mt-1 truncate text-sm text-navy/56">{product.brand || "Brand unavailable"}</p>
+                      <p className="mt-1 text-xs uppercase tracking-[0.16em] text-navy/40">
+                        {formatNumber(product.totalOrders)} orders • {formatNumber(product.totalQuantitySold)} sold
+                      </p>
+                    </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-navy">{formatCurrency(product.revenue)}</p>
+                    <p className="font-semibold text-navy">{formatCurrency(product.totalRevenueGenerated)}</p>
                     <p className="mt-1 text-xs uppercase tracking-[0.18em] text-gold">
-                      {formatNumber(product.quantity)} sold
+                      Top purchased
                     </p>
                   </div>
                 </div>
@@ -306,9 +262,12 @@ function AdminDashboard() {
                   key={customer.id}
                   className="flex items-center justify-between gap-4 rounded-[1.35rem] bg-[#f4f7fb] px-4 py-4"
                 >
-                  <div>
-                    <p className="font-semibold text-navy">{customer.name || "Unnamed customer"}</p>
-                    <p className="mt-1 text-sm text-navy/56">{customer.email || "No email available"}</p>
+                  <div className="min-w-0">
+                    <p className="truncate font-semibold text-navy">{customer.name || "Unnamed customer"}</p>
+                    <p className="mt-1 truncate text-sm text-navy/56">{customer.email || "No email available"}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-navy/40">
+                      {customer.mobile || "No mobile available"}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="font-semibold text-navy">{formatCurrency(customer.totalSpent)}</p>

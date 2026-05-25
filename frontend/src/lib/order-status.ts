@@ -1,4 +1,10 @@
-export type PaymentStatusValue = "pending" | "paid" | "failed" | "refunded";
+export type PaymentStatusValue =
+  | "pending"
+  | "paid"
+  | "failed"
+  | "refunded"
+  | "success"
+  | "completed";
 export type OrderStatusValue =
   | "Pending"
   | "Confirmed"
@@ -13,6 +19,8 @@ export const normalizePaymentStatus = (status?: string | null): PaymentStatusVal
     .toLowerCase();
 
   if (normalized === "paid") return "paid";
+  if (normalized === "success") return "paid";
+  if (normalized === "completed") return "paid";
   if (normalized === "failed") return "failed";
   if (normalized === "refunded") return "refunded";
   return "pending";

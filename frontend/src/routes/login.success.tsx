@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Container } from "@/components/common/Container";
@@ -8,7 +8,10 @@ import { useNotification } from "@/context/NotificationContext";
 import { clearRedirectAfterLogin, getRedirectAfterLogin } from "@/lib/auth-redirect";
 
 export const Route = createFileRoute("/login/success")({
-  component: GoogleLoginSuccessPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 const getSafeRedirect = () => {

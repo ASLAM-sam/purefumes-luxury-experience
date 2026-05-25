@@ -40,12 +40,18 @@ const refreshTokenSchema = new mongoose.Schema(
   {
     tokenHash: { type: String, required: true, index: true },
     family: { type: String, trim: true, default: "" },
+    sessionId: { type: String, trim: true, default: "", index: true },
+    deviceId: { type: String, trim: true, default: "", index: true },
+    deviceName: { type: String, trim: true, maxlength: 160, default: "" },
     ip: { type: String, trim: true, default: "" },
+    lastIP: { type: String, trim: true, default: "" },
     userAgent: { type: String, trim: true, maxlength: 400, default: "" },
     expiresAt: { type: Date, required: true, index: true },
     createdAt: { type: Date, default: Date.now },
     lastUsedAt: { type: Date, default: Date.now },
     revokedAt: { type: Date, default: null },
+    revokedReason: { type: String, trim: true, default: "" },
+    replacedByTokenHash: { type: String, trim: true, default: "" },
   },
   { _id: false },
 );
@@ -90,16 +96,37 @@ const userSchema = new mongoose.Schema(
       index: true,
       maxlength: [25, "Mobile number cannot exceed 25 characters"],
     },
+    customerName: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: [120, "Customer name cannot exceed 120 characters"],
+    },
+    mobileNumber: {
+      type: String,
+      trim: true,
+      default: "",
+      index: true,
+      maxlength: [25, "Mobile number cannot exceed 25 characters"],
+    },
+    address: {
+      type: String,
+      trim: true,
+      default: "",
+      maxlength: [1000, "Address cannot exceed 1000 characters"],
+    },
     passwordHash: { type: String, select: false, default: "" },
-    googleId: { type: String, trim: true, unique: true, sparse: true, index: true },
     role: { type: String, enum: USER_ROLES, default: "user", index: true },
     profileImage: { type: String, trim: true, default: "" },
     addresses: { type: [addressSchema], default: [] },
     orderHistory: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],
     totalOrders: { type: Number, min: 0, default: 0 },
     totalSpent: { type: Number, min: 0, default: 0 },
+    lastOrderDate: { type: Date, default: null, index: true },
     loginHistory: { type: [loginHistorySchema], default: [] },
+    loginAudit: { type: [loginHistorySchema], default: [] },
     lastLogin: { type: Date, default: null },
+    lastIP: { type: String, trim: true, default: "" },
     refreshTokens: { type: [refreshTokenSchema], default: [], select: false },
     wishlist: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
     emailVerified: { type: Boolean, default: false, index: true },
@@ -109,6 +136,8 @@ const userSchema = new mongoose.Schema(
     emailVerificationExpiry: { type: Date, select: false, default: null },
     failedLoginAttempts: { type: Number, default: 0, select: false },
     accountLockedUntil: { type: Date, default: null, select: false },
+    failedAttempts: { type: Number, default: 0, select: false },
+    lockUntil: { type: Date, default: null, select: false },
     isBanned: { type: Boolean, default: false, index: true },
     bannedAt: { type: Date, default: null },
     isTestData: { type: Boolean, default: false, index: true },
@@ -124,6 +153,9 @@ userSchema.index({ createdAt: -1 });
 userSchema.index({ role: 1, createdAt: -1 });
 userSchema.index({ lastLogin: -1 });
 userSchema.index({ totalSpent: -1 });
+userSchema.index({ email: 1, role: 1 });
+userSchema.index({ mobile: 1, role: 1 });
+userSchema.index({ mobileNumber: 1, role: 1 });
 
 userSchema.virtual("id").get(function getId() {
   return this._id.toString();
@@ -134,9 +166,30 @@ userSchema.pre("validate", function normalizeUser(next) {
   this.role = normalizeUserRole(this.role);
   const normalizedUsername = String(this.username || "").trim();
   this.username = normalizedUsername || undefined;
-  const normalizedMobile = String(this.mobile || "").trim();
+  const normalizedMobile = String(this.mobile || this.mobileNumber || "").trim();
   this.mobile = normalizedMobile || undefined;
+  this.mobileNumber = normalizedMobile;
   this.name = String(this.name || "").trim();
+  this.customerName = String(this.customerName || this.name || "").trim();
+  if (!this.name) {
+    this.name = this.customerName;
+  }
+  this.lastIP = String(this.lastIP || "").trim();
+  const primaryAddress = this.addresses?.find?.((address) => address?.isDefault) || this.addresses?.[0];
+  const normalizedAddress = String(
+    this.address ||
+      [
+        primaryAddress?.line1,
+        primaryAddress?.line2,
+        primaryAddress?.city,
+        primaryAddress?.state,
+        primaryAddress?.postalCode,
+        primaryAddress?.country,
+      ]
+        .filter(Boolean)
+        .join(", "),
+  ).trim();
+  this.address = normalizedAddress;
   next();
 });
 

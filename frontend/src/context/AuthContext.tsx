@@ -5,11 +5,13 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useState,
+  useRef,
   type ReactNode,
 } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { accountApi, type AuthUser } from "@/services/api";
 import { uiStateObserver } from "@/lib/performance/state-observers";
+import { authQueryKey, authSessionQueryOptions } from "@/lib/query/auth";
 
 type AuthState = {
   user: AuthUser | null;
@@ -28,24 +30,50 @@ type AuthState = {
   reloadUser: () => Promise<AuthUser | null>;
 };
 
+const AUTH_SNAPSHOT_KEY = "purefumes:auth-snapshot";
+
 const AuthCtx = createContext<AuthState | null>(null);
 
+const readAuthSnapshot = (): AuthUser | null => {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const raw = window.sessionStorage.getItem(AUTH_SNAPSHOT_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch (_error) {
+    return null;
+  }
+};
+
+const writeAuthSnapshot = (user: AuthUser | null) => {
+  if (typeof window === "undefined") return;
+
+  try {
+    if (user) {
+      window.sessionStorage.setItem(AUTH_SNAPSHOT_KEY, JSON.stringify(user));
+    } else {
+      window.sessionStorage.removeItem(AUTH_SNAPSHOT_KEY);
+    }
+  } catch (_error) {
+    // Session hydration is best effort and should never block auth flow.
+  }
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [authReady, setAuthReady] = useState(false);
+  const queryClient = useQueryClient();
+  const authActionRef = useRef<Promise<AuthUser> | null>(null);
 
-  const reloadUser = useCallback(async () => {
-    const nextUser = await accountApi.me();
-    setUser(nextUser);
-    setAuthReady(true);
-    return nextUser;
-  }, []);
+  const sessionQuery = useQuery({
+    ...authSessionQueryOptions(),
+    initialData: readAuthSnapshot,
+    initialDataUpdatedAt: 0,
+  });
 
-  useEffect(() => {
-    void reloadUser();
-  }, [reloadUser]);
+  const user = sessionQuery.data ?? null;
+  const authReady = sessionQuery.isFetched;
 
   useEffect(() => {
+    writeAuthSnapshot(user);
     uiStateObserver.updateAuth({
       userId: user?.id || null,
       authReady,
@@ -53,25 +81,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, [authReady, user]);
 
-  const login = useCallback(async (identifier: string, password: string) => {
-    const nextUser = await accountApi.login(identifier, password);
-    setUser(nextUser);
+  const reloadUser = useCallback(async () => {
+    const nextUser = await queryClient.fetchQuery(authSessionQueryOptions());
+    queryClient.setQueryData(authQueryKey, nextUser);
     return nextUser;
-  }, []);
+  }, [queryClient]);
 
-  const signup = useCallback(async (payload: Parameters<typeof accountApi.signup>[0]) => {
-    const nextUser = await accountApi.signup(payload);
-    setUser(nextUser);
-    return nextUser;
-  }, []);
+  const runLockedAuthAction = useCallback(
+    async (action: () => Promise<AuthUser>) => {
+      if (authActionRef.current) {
+        return authActionRef.current;
+      }
+
+      authActionRef.current = action().finally(() => {
+        authActionRef.current = null;
+      });
+      return authActionRef.current;
+    },
+    [],
+  );
+
+  const login = useCallback(
+    async (identifier: string, password: string) => {
+      const nextUser = await runLockedAuthAction(() => accountApi.login(identifier, password));
+      queryClient.setQueryData(authQueryKey, nextUser);
+      return nextUser;
+    },
+    [queryClient, runLockedAuthAction],
+  );
+
+  const signup = useCallback(
+    async (payload: Parameters<typeof accountApi.signup>[0]) => {
+      const nextUser = await runLockedAuthAction(() => accountApi.signup(payload));
+      queryClient.setQueryData(authQueryKey, nextUser);
+      return nextUser;
+    },
+    [queryClient, runLockedAuthAction],
+  );
 
   const logout = useCallback(async () => {
     try {
       await accountApi.logout();
     } finally {
-      setUser(null);
+      queryClient.setQueryData(authQueryKey, null);
     }
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo(
     () => ({

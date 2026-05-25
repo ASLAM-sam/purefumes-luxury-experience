@@ -3,6 +3,7 @@ import type { AuthUser } from "@/services/api";
 
 export type DeliveryFormValues = {
   name: string;
+  email: string;
   phone: string;
   alternatePhone: string;
   houseNumber: string;
@@ -40,6 +41,7 @@ const SectionLabel = ({ children }: { children: string }) => (
 
 export const createEmptyDeliveryForm = (): DeliveryFormValues => ({
   name: "",
+  email: "",
   phone: "",
   alternatePhone: "",
   houseNumber: "",
@@ -61,6 +63,7 @@ export const createDeliveryFormFromUser = (user?: AuthUser | null): DeliveryForm
   return {
     ...createEmptyDeliveryForm(),
     name: user?.name || "",
+    email: user?.email || "",
     phone: user?.mobile || "",
     houseNumber: defaultAddress?.line1 || defaultAddress?.street || "",
     building: defaultAddress?.line2 || defaultAddress?.landmark || "",
@@ -86,6 +89,7 @@ const clean = (value: string) => value.trim();
 export const isDeliveryFormComplete = (form: DeliveryFormValues) =>
   Boolean(
     clean(form.name) &&
+      clean(form.email) &&
       clean(form.phone) &&
       clean(form.houseNumber) &&
       clean(form.area) &&
@@ -153,12 +157,21 @@ export const DeliveryDetailsFields = memo(function DeliveryDetailsFields({
           />
           <input
             required
+            type="email"
+            value={form.email}
+            onChange={onChange("email")}
+            placeholder="Email address"
+            autoComplete="email"
+            className={inputClass}
+          />
+          <input
+            required
             type="tel"
             value={form.phone}
             onChange={onChange("phone")}
-            placeholder="Phone number"
+            placeholder="Mobile number"
             autoComplete="tel"
-            className={inputClass}
+            className="w-full rounded-lg border border-border bg-beige/30 px-4 py-3 text-sm text-navy outline-none transition duration-300 ease-in-out placeholder:text-navy/38 focus:border-gold sm:col-span-2"
           />
           <input
             type="tel"

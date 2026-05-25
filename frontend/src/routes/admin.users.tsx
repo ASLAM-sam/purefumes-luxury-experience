@@ -82,13 +82,16 @@ const normalizeUser = (user: AdminUserLike | null | undefined, index: number): A
   return {
     _key: `${id}-${index}`,
     id,
-    name: safeString(user?.name) || "Unnamed customer",
+    name: safeString(user?.customerName || user?.name) || "Unnamed customer",
+    customerName: safeString(user?.customerName || user?.name),
     username: safeString(user?.username),
     email: safeString(user?.email),
-    mobile: safeString(user?.mobile || user?.phone),
-    phone: safeString(user?.phone || user?.mobile),
+    mobile: safeString(user?.mobileNumber || user?.mobile || user?.phone),
+    mobileNumber: safeString(user?.mobileNumber || user?.mobile || user?.phone),
+    phone: safeString(user?.mobileNumber || user?.phone || user?.mobile),
     role: user?.role === "admin" ? "admin" : "user",
     profileImage: safeString(user?.profileImage),
+    address: safeString(user?.address),
     totalOrders: safeNumber(user?.totalOrders),
     totalSpent: safeNumber(user?.totalSpent),
     emailVerified: Boolean(user?.emailVerified),
@@ -96,6 +99,7 @@ const normalizeUser = (user: AdminUserLike | null | undefined, index: number): A
     createdAt: safeString(user?.createdAt),
     updatedAt: safeString(user?.updatedAt),
     lastLogin: safeString(user?.lastLogin || ""),
+    lastOrderDate: safeString(user?.lastOrderDate || ""),
     addresses: Array.isArray(user?.addresses) ? user.addresses : [],
   };
 };
@@ -119,6 +123,26 @@ const formatDateTime = (value: unknown, fallback = "Not available") => {
 };
 
 const formatCurrency = formatINR;
+
+const formatActivityDate = (user: Pick<AdminUser, "lastLogin" | "lastOrderDate">) => {
+  if (safeDate(user.lastLogin)) {
+    return `Seen ${formatDateTime(user.lastLogin)}`;
+  }
+
+  if (safeDate(user.lastOrderDate)) {
+    return `Last order ${formatDateTime(user.lastOrderDate)}`;
+  }
+
+  return "No recent order";
+};
+
+const getActivityCaption = (user: Pick<AdminUser, "lastLogin" | "lastOrderDate">) =>
+  safeDate(user.lastLogin)
+    ? `Last login ${formatDate(user.lastLogin, "Never")}`
+    : `Last order ${formatDate(user.lastOrderDate, "Never")}`;
+
+const getPrimaryAddress = (user: Pick<AdminUser, "addresses" | "address" | "name">) =>
+  user.addresses?.find((address) => address.isDefault) || user.addresses?.[0] || null;
 
 const getInitials = (value: string) =>
   value
@@ -263,9 +287,11 @@ function AdminUsersPage() {
     return normalizedUsers?.filter((user) =>
       [
         user?.name,
+        user?.customerName,
         user?.username,
         user?.email,
         user?.mobile,
+        user?.address,
       ].some((value) => safeIncludes(value, query)),
     );
   }, [deferredSearch, normalizedUsers]);
@@ -471,7 +497,7 @@ function AdminUsersPage() {
             <p className="font-semibold text-navy">{formatCurrency(user.totalSpent)}</p>
             <p className="text-sm text-navy/58">{safeNumber(user.totalOrders)} orders</p>
             <p className="text-xs uppercase tracking-[0.2em] text-navy/35">
-              Last login {formatDate(user.lastLogin, "Never")}
+              {getActivityCaption(user)}
             </p>
           </div>
         ),
@@ -490,7 +516,7 @@ function AdminUsersPage() {
               {user.isBanned ? "Blocked" : "Active"}
             </span>
             <p className="text-sm text-navy/58">
-              {safeDate(user.lastLogin) ? `Seen ${formatDateTime(user.lastLogin)}` : "No recent login"}
+              {formatActivityDate(user)}
             </p>
           </div>
         ),
@@ -904,23 +930,24 @@ function AdminUsersPage() {
                         <div className="mt-3 space-y-2">
                           <p><span className="font-medium text-navy">Phone:</span> {selectedUser.user.mobile || "Not provided"}</p>
                           <p><span className="font-medium text-navy">Joined:</span> {formatDateTime(selectedUser.user.createdAt)}</p>
+                          <p><span className="font-medium text-navy">Last order:</span> {formatDateTime(selectedUser.user.lastOrderDate, "Not available")}</p>
                         </div>
                       </div>
                       <div className="rounded-2xl bg-[#f2f5fa] p-4 text-sm text-navy/65">
                         <p className="text-[0.65rem] uppercase tracking-[0.2em] text-navy/42">Primary address</p>
                         <div className="mt-3 space-y-2">
-                          {selectedUser.user.addresses?.length ? (
+                          {getPrimaryAddress(selectedUser.user) ? (
                             <>
-                              <p className="font-medium text-navy">{selectedUser.user.addresses[0]?.fullName || selectedUser.user.name}</p>
-                              <p>{selectedUser.user.addresses[0]?.line1 || "Address line unavailable"}</p>
+                              <p className="font-medium text-navy">{getPrimaryAddress(selectedUser.user)?.fullName || selectedUser.user.name}</p>
+                              <p>{getPrimaryAddress(selectedUser.user)?.line1 || selectedUser.user.address || "Address line unavailable"}</p>
                               <p>
-                                {[selectedUser.user.addresses[0]?.city, selectedUser.user.addresses[0]?.state, selectedUser.user.addresses[0]?.postalCode]
+                                {[getPrimaryAddress(selectedUser.user)?.city, getPrimaryAddress(selectedUser.user)?.state, getPrimaryAddress(selectedUser.user)?.postalCode]
                                   .filter(Boolean)
-                                  .join(", ") || "City details unavailable"}
+                                  .join(", ") || selectedUser.user.address || "City details unavailable"}
                               </p>
                             </>
                           ) : (
-                            <p>No saved addresses yet.</p>
+                            <p>{selectedUser.user.address || "No saved addresses yet."}</p>
                           )}
                         </div>
                       </div>

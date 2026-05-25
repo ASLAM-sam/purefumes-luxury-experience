@@ -1,0 +1,12 @@
+export const ACCESS_COOKIE_NAME = "accessToken";
+export const REFRESH_COOKIE_NAME = "refreshToken";
+export const ACCESS_TOKEN_TTL = "15m";
+export const REFRESH_TOKEN_TTL = "7d";
+export const AUTH_LOCK_TTL_MS = 10_000;
+export const AUTH_LOCK_WAIT_MS = 2_500;
+export const AUTH_LOCK_RETRY_MS = 100;
+export const REFRESH_REPLAY_GRACE_MS = 15_000;
+export const MAX_REFRESH_SESSIONS = 20;
+export const MAX_LOGIN_AUDIT_ENTRIES = 20;
+export const MAX_FAILED_LOGINS = 5;
+export const ACCOUNT_LOCK_MINUTES = 15;

@@ -5,11 +5,11 @@ import dotenv from "dotenv";
 
 const DEFAULT_PORT = 5000;
 const DEFAULT_JWT_EXPIRE = "15m";
-const DEFAULT_REFRESH_EXPIRE = "30d";
+const DEFAULT_REFRESH_EXPIRE = "7d";
 const DEFAULT_SMTP_PORT = 587;
 const DEFAULT_DEV_FRONTEND_URL = "http://localhost:8080";
 const DEFAULT_PRODUCTION_FRONTEND_URL = "https://purefumeshyderabad.in";
-const DEFAULT_PRODUCTION_BACKEND_URL = "https://hydpurefumes.onrender.com";
+const DEFAULT_PRODUCTION_BACKEND_URL = "https://api.purefumeshyderabad.in";
 const MIN_SECRET_LENGTH = 32;
 
 const __filename = fileURLToPath(import.meta.url);
@@ -132,7 +132,6 @@ export const env = {
   JWT_EXPIRE: firstNonEmpty(read("JWT_EXPIRE"), read("JWT_EXPIRES_IN"), DEFAULT_JWT_EXPIRE),
   REFRESH_EXPIRE: firstNonEmpty(read("REFRESH_EXPIRE"), DEFAULT_REFRESH_EXPIRE),
   COOKIE_SECRET: read("COOKIE_SECRET"),
-  SESSION_SECRET: firstNonEmpty(read("SESSION_SECRET"), read("COOKIE_SECRET")),
   COOKIE_DOMAIN: read("COOKIE_DOMAIN") || undefined,
   COOKIE_SAME_SITE: firstNonEmpty(read("COOKIE_SAME_SITE"), "Lax"),
   CLIENT_URL: frontendUrl,
@@ -239,12 +238,7 @@ export const validateEnv = () => {
     throw new Error("Missing required environment variable: FRONTEND_URL or CLIENT_URL");
   }
 
-  if (!env.SESSION_SECRET) {
-    throw new Error("Missing required environment variable: SESSION_SECRET or COOKIE_SECRET");
-  }
-
   requiredCoreKeys.forEach(assertStrongSecret);
-  assertStrongSecret("SESSION_SECRET");
 
   if (isProduction) {
     assertHttpsUrl(env.FRONTEND_URL, "FRONTEND_URL");

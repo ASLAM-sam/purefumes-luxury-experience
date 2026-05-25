@@ -30,11 +30,25 @@ const createOrderValidation = [
     .withMessage("Customer name is required")
     .isLength({ max: 120 }),
   body("phone")
+    .optional({ values: "falsy" })
     .trim()
-    .notEmpty()
-    .withMessage("Phone number is required")
     .matches(/^[0-9+\-\s()]{7,25}$/)
     .withMessage("Phone number is invalid"),
+  body("mobileNumber")
+    .optional({ values: "falsy" })
+    .trim()
+    .matches(/^[0-9+\-\s()]{7,25}$/)
+    .withMessage("Mobile number is invalid"),
+  body().custom((_, { req }) => {
+    if (String(req.body.phone || req.body.mobileNumber || "").trim()) return true;
+    throw new Error("Mobile number is required");
+  }),
+  body("email")
+    .optional({ values: "falsy" })
+    .trim()
+    .isEmail()
+    .withMessage("Valid email is required")
+    .normalizeEmail(),
   body("address")
     .trim()
     .notEmpty()
@@ -122,7 +136,6 @@ const updateStatusValidation = [
 
 router.post(
   "/",
-  requireAuth,
   orderLimiter,
   createOrderValidation,
   validateRequest,
@@ -130,7 +143,6 @@ router.post(
 );
 router.post(
   "/create",
-  requireAuth,
   orderLimiter,
   createOrderValidation,
   validateRequest,

@@ -7,12 +7,30 @@ let redisConnection = null;
 if (env.REDIS_URL) {
   redisConnection = new IORedis(env.REDIS_URL, {
     maxRetriesPerRequest: null,
-    enableReadyCheck: false,
     lazyConnect: true,
+    enableReadyCheck: true,
+    retryStrategy(attempt) {
+      return Math.min(attempt * 250, 5000);
+    },
+    reconnectOnError() {
+      return true;
+    },
+  });
+
+  redisConnection.on("connect", () => {
+    logger.info("Redis connection established");
+  });
+
+  redisConnection.on("ready", () => {
+    logger.info("Redis connection ready");
   });
 
   redisConnection.on("error", (error) => {
     logger.error("Redis connection error", { error: error.message });
+  });
+
+  redisConnection.on("close", () => {
+    logger.warn("Redis connection closed");
   });
 }
 

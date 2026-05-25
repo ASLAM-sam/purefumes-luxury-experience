@@ -9,7 +9,14 @@ export const ORDER_STATUSES = [
   "Delivered",
   "Cancelled",
 ];
-export const PAYMENT_STATUSES = ["pending", "paid", "failed", "refunded"];
+export const PAYMENT_STATUSES = [
+  "pending",
+  "paid",
+  "failed",
+  "refunded",
+  "success",
+  "completed",
+];
 
 const orderItemSchema = new mongoose.Schema(
   {
@@ -81,6 +88,12 @@ const orderSchema = new mongoose.Schema(
       type: String,
       trim: true,
       lowercase: true,
+      default: "",
+      index: true,
+    },
+    mobileNumber: {
+      type: String,
+      trim: true,
       default: "",
       index: true,
     },
@@ -248,6 +261,7 @@ orderSchema.index({ createdAt: -1 });
 orderSchema.index({ phone: 1 });
 orderSchema.index({ userId: 1, createdAt: -1 });
 orderSchema.index({ email: 1, createdAt: -1 });
+orderSchema.index({ mobileNumber: 1, createdAt: -1 });
 orderSchema.index({ mobile: 1, createdAt: -1 });
 orderSchema.index({ phone: 1, createdAt: -1 });
 orderSchema.index({ userId: 1, status: 1, paymentStatus: 1, createdAt: -1 });
@@ -303,7 +317,11 @@ orderSchema.pre("validate", function normalizeOrder(next) {
   this.email = String(this.email || "")
     .trim()
     .toLowerCase();
-  this.mobile = String(this.mobile || this.phone || "").trim();
+  this.mobileNumber = String(
+    this.mobileNumber || this.mobile || this.phone || "",
+  ).trim();
+  this.mobile = String(this.mobile || this.mobileNumber || this.phone || "").trim();
+  this.phone = String(this.phone || this.mobileNumber || this.mobile || "").trim();
   this.orderStatus = this.orderStatus || this.status || "Pending";
   this.status = this.status || this.orderStatus || "Pending";
   this.paymentStatus =

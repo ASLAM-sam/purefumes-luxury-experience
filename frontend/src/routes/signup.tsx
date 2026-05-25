@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { UserPlus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Button } from "@/components/common/Button";
@@ -9,7 +9,10 @@ import { useNotification } from "@/context/NotificationContext";
 import { clearRedirectAfterLogin, getRedirectAfterLogin } from "@/lib/auth-redirect";
 
 export const Route = createFileRoute("/signup")({
-  component: SignupPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 function SignupPage() {

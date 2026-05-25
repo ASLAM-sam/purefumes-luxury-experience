@@ -18,7 +18,10 @@ import {
 } from "../services/orders/orderService.js";
 import { ensureOrdersPublicIds } from "../services/orders/publicOrderIdService.js";
 import { mergeGuestCart } from "../services/cart/cartService.js";
-import { buildOrderStatusFilter } from "../utils/orderStatusFilter.js";
+import {
+  buildOrderStatusFilter,
+  buildSuccessfulOrderFilter,
+} from "../utils/orderStatusFilter.js";
 
 const buildOrderSearchFilter = (search = "") => {
   const normalized = String(search || "").trim();
@@ -32,6 +35,8 @@ const buildOrderSearchFilter = (search = "") => {
     $or: [
       { publicOrderId: { $regex: safePublicOrderId, $options: "i" } },
       { customerName: { $regex: safeSearch, $options: "i" } },
+      { email: { $regex: safeSearch, $options: "i" } },
+      { mobileNumber: { $regex: safeSearch, $options: "i" } },
       { phone: { $regex: safeSearch, $options: "i" } },
       { mobile: { $regex: safeSearch, $options: "i" } },
       { "shippingAddress.mobile": { $regex: safeSearch, $options: "i" } },
@@ -121,7 +126,7 @@ export const getOrders = asyncHandler(async (req, res) => {
     filterParts.push(searchFilter);
   }
 
-  const filter = filterParts.length ? { $and: filterParts } : {};
+  const filter = buildSuccessfulOrderFilter(...filterParts);
 
   const shouldPaginate =
     req.query.page !== undefined || req.query.limit !== undefined;
@@ -166,7 +171,9 @@ export const getOrders = asyncHandler(async (req, res) => {
 });
 
 export const getUnseenOrders = asyncHandler(async (_req, res) => {
-  const orders = await Order.find({ isSeen: false })
+  const orders = await Order.find(
+    buildSuccessfulOrderFilter({ isSeen: false }),
+  )
     .sort({ createdAt: -1 })
     .populate("product", "name brand category image images stock")
     .populate("items.productId", "name brand category image images stock")

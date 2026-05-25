@@ -18,7 +18,6 @@ import { OptimizedImage } from "@/components/common/OptimizedImage";
 import { PaymentOptions } from "@/components/checkout/PaymentOptions";
 import { SiteShell } from "@/components/layout/SiteShell";
 import { useApp } from "@/context/AppContext";
-import { useAuth } from "@/context/AuthContext";
 import { useNotification } from "@/context/NotificationContext";
 import {
   clearBuyNowCheckoutState,
@@ -26,7 +25,6 @@ import {
   getBuyNowCheckoutState,
   saveBuyNowSuccessState,
 } from "@/lib/buy-now";
-import { setRedirectAfterLogin } from "@/lib/auth-redirect";
 import { formatINR, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
 import { couponsApi, ordersApi, paymentsApi, type Order, type PaymentConfig } from "@/services/api";
 
@@ -71,6 +69,7 @@ type RazorpayOptions = {
   };
   prefill?: {
     name?: string;
+    email?: string;
     contact?: string;
   };
   notes?: Record<string, string>;
@@ -320,13 +319,12 @@ function DevelopmentPaymentPanel({
 function CheckoutPage() {
   const nav = useNavigate();
   const { addNotification } = useNotification();
-  const { user, authReady } = useAuth();
   const { cart } = useApp();
   const [buyNowState] = useState(() => getBuyNowCheckoutState());
   const product = buyNowState.buyNowProduct;
   const size = buyNowState.buyNowSize ?? product?.sizes[0];
   const [quantity, setQuantity] = useState(1);
-  const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(user));
+  const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(null));
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -338,20 +336,6 @@ function CheckoutPage() {
   const [couponMessage, setCouponMessage] = useState("");
   const [couponTone, setCouponTone] = useState<CouponFeedbackTone | null>(null);
   const [couponLoading, setCouponLoading] = useState(false);
-
-  useEffect(() => {
-    if (!authReady || user) return;
-    setRedirectAfterLogin("/checkout");
-    nav({ to: "/login" });
-  }, [authReady, nav, user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    setForm((current) =>
-      current.name.trim() || current.phone.trim() ? current : createDeliveryFormFromUser(user),
-    );
-  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -543,6 +527,7 @@ function CheckoutPage() {
       const customer: BuyNowCustomer = {
         ...form,
         name: form.name.trim(),
+        email: form.email.trim(),
         phone: form.phone.trim(),
         address: deliveryAddress,
       };
@@ -552,6 +537,8 @@ function CheckoutPage() {
           () =>
             ordersApi.create({
               customerName: customer.name,
+              email: customer.email,
+              mobileNumber: customer.phone,
               phone: customer.phone,
               address: customer.address,
               shippingAddress,
@@ -756,6 +743,7 @@ function CheckoutPage() {
         },
         prefill: {
           name: form.name.trim(),
+          email: form.email.trim(),
           contact: form.phone.trim(),
         },
         notes: {
@@ -804,22 +792,6 @@ function CheckoutPage() {
   );
 
   const isBypassMode = Boolean(paymentConfig?.bypassEnabled);
-
-  if (!authReady) {
-    return (
-      <SiteShell>
-        <section className="py-20 md:py-24">
-          <Container>
-            <div className="mx-auto h-40 max-w-2xl animate-pulse rounded-lg bg-beige/60" />
-          </Container>
-        </section>
-      </SiteShell>
-    );
-  }
-
-  if (!user) {
-    return null;
-  }
 
   if (!product || !size) {
     if (cart.length) {
@@ -1067,9 +1039,8 @@ function CheckoutPage() {
 function CartCheckout() {
   const nav = useNavigate();
   const { addNotification } = useNotification();
-  const { user } = useAuth();
   const { cart, cartTotal, cartDiscount, cartFinalTotal, cartCouponCode, clearCart } = useApp();
-  const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(user));
+  const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(null));
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -1153,6 +1124,8 @@ function CartCheckout() {
           () =>
             ordersApi.create({
               customerName: form.name.trim(),
+              email: form.email.trim(),
+              mobileNumber: form.phone.trim(),
               phone: form.phone.trim(),
               address,
               shippingAddress: buildShippingAddress(form),
@@ -1179,6 +1152,7 @@ function CartCheckout() {
           buyNowCustomer: {
             ...form,
             name: form.name.trim(),
+            email: form.email.trim(),
             phone: form.phone.trim(),
             address,
           },
@@ -1346,6 +1320,7 @@ function CartCheckout() {
         },
         prefill: {
           name: form.name.trim(),
+          email: form.email.trim(),
           contact: form.phone.trim(),
         },
         notes: {

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { CheckCircle2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Container } from "@/components/common/Container";
@@ -6,7 +6,10 @@ import { SiteShell } from "@/components/layout/SiteShell";
 import { accountApi } from "@/services/api";
 
 export const Route = createFileRoute("/verify-email")({
-  component: VerifyEmailPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 function VerifyEmailPage() {

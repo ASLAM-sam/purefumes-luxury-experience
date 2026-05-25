@@ -2,6 +2,7 @@ import type { Product, Size } from "@/data/products";
 
 export type BuyNowCustomer = {
   name: string;
+  email?: string;
   phone: string;
   alternatePhone?: string;
   houseNumber?: string;

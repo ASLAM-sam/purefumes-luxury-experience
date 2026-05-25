@@ -9,7 +9,7 @@ export const toPaise = (value: unknown) =>
 export const fromPaise = (value: unknown) => toFiniteNumber(value) / 100;
 
 export const addMoney = (...values: unknown[]) =>
-  values.reduce((sum, value) => sum + toPaise(value), 0) / 100;
+  values.reduce<number>((sum, value) => sum + toPaise(value), 0) / 100;
 
 export const subtractMoney = (left: unknown, right: unknown) =>
   (toPaise(left) - toPaise(right)) / 100;

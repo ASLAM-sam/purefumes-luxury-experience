@@ -207,6 +207,7 @@ function SuccessPage() {
                       </p>
                       <div className="mt-3 space-y-2 text-sm text-navy/75">
                         <p>{customer?.name || "Customer"}</p>
+                        {customer?.email ? <p>{customer.email}</p> : null}
                         <p>{customer?.phone || "-"}</p>
                         <p>{customer?.address || "-"}</p>
                       </div>
@@ -216,8 +217,8 @@ function SuccessPage() {
               </div>
             ) : (
               <p className="mt-8 text-center text-sm text-muted-foreground">
-                Your order summary is unavailable. Check My Orders for the latest confirmed order
-                details.
+                Your order summary is unavailable. Please keep your order ID handy and contact
+                support if you need help.
               </p>
             )}
 

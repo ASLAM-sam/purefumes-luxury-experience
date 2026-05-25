@@ -180,6 +180,7 @@ const readStoredWishlist = (): Product[] => {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { user, authReady } = useAuth();
+  const customerUser = user?.role === "user" ? user : null;
   const guestCartRef = useRef<CartItem[]>(readGuestCart());
   const [cart, setCart] = useState<CartItem[]>(guestCartRef.current);
   const [cartSummary, setCartSummary] = useState<CartSummary>({
@@ -255,7 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!authReady) return;
 
-    if (!user) {
+    if (!customerUser) {
       mergedUserIdRef.current = null;
       const nextGuestCart = readGuestCart();
       guestCartRef.current = nextGuestCart;
@@ -263,11 +264,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    if (mergedUserIdRef.current === user.id) {
+    if (mergedUserIdRef.current === customerUser.id) {
       return;
     }
 
-    mergedUserIdRef.current = user.id;
+    mergedUserIdRef.current = customerUser.id;
 
     const synchronizeCart = async () => {
       const guestItems = guestCartRef.current;
@@ -283,27 +284,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void synchronizeCart().catch(() => {
       mergedUserIdRef.current = null;
     });
-  }, [applyGuestCart, applyServerCart, authReady, cartToApiItems, user]);
+  }, [applyGuestCart, applyServerCart, authReady, cartToApiItems, customerUser]);
 
   useEffect(() => {
     if (!authReady) return;
 
-    if (user) {
+    if (customerUser) {
       syncedWishlistUserIdRef.current = null;
       return;
     }
 
     setWishlist(readStoredWishlist());
-  }, [authReady, user]);
+  }, [authReady, customerUser]);
 
   useEffect(() => {
-    if (!authReady || !user) return;
+    if (!authReady || !customerUser) return;
 
-    if (syncedWishlistUserIdRef.current === user.id) {
+    if (syncedWishlistUserIdRef.current === customerUser.id) {
       return;
     }
 
-    syncedWishlistUserIdRef.current = user.id;
+    syncedWishlistUserIdRef.current = customerUser.id;
 
     const synchronizeWishlist = async () => {
       const guestWishlist = readStoredWishlist();
@@ -335,17 +336,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Keep the current optimistic view if the network is temporarily unavailable.
       }
     });
-  }, [authReady, user]);
+  }, [authReady, customerUser]);
 
   useEffect(() => {
-    if (!authReady || user) return;
+    if (!authReady || customerUser) return;
 
     try {
       window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlist));
     } catch (_error) {
       // Wishlist persistence should never break shopping actions.
     }
-  }, [authReady, user, wishlist]);
+  }, [authReady, customerUser, wishlist]);
 
   const wishlistIdSet = useMemo(
     () => new Set(wishlist.map((product) => getProductKey(product)).filter(Boolean)),
@@ -398,7 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return [{ ...product, id: productId }, ...current];
       });
 
-      if (user) {
+      if (customerUser) {
         setWishlistPending(productId, true);
         const mutation = added
           ? productsApi.addToWishlist(productId)
@@ -420,7 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       return added;
     },
-    [isWishlisted, setWishlistPending, user, wishlist],
+    [customerUser, isWishlisted, setWishlistPending, wishlist],
   );
 
   const removeFromWishlist = useCallback(
@@ -432,7 +433,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const previousWishlist = wishlist;
       setWishlist((current) => current.filter((item) => getProductKey(item) !== productId));
 
-      if (user) {
+      if (customerUser) {
         setWishlistPending(productId, true);
 
         try {
@@ -456,20 +457,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       return undefined;
     },
-    [setWishlistPending, user, wishlist],
+    [customerUser, setWishlistPending, wishlist],
   );
 
   const clearWishlist = useCallback(() => {
     const previousWishlist = wishlist;
     setWishlist([]);
 
-    if (user) {
+    if (customerUser) {
       void productsApi
         .clearWishlist()
         .then((nextWishlist) => setWishlist(dedupeProducts(nextWishlist)))
         .catch(() => setWishlist(previousWishlist));
     }
-  }, [user, wishlist]);
+  }, [customerUser, wishlist]);
 
   const clearCartCoupon = useCallback(() => {
     setCartCoupon(null);
@@ -573,20 +574,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           applyServerCart(serverCart);
         }
       } catch (_error) {
-        if (user && sequence === cartMutationSeqRef.current) {
+        if (customerUser && sequence === cartMutationSeqRef.current) {
           const refreshed = await cartApi.get();
           applyServerCart(refreshed);
         }
       }
     },
-    [applyServerCart, user],
+    [applyServerCart, customerUser],
   );
 
   const addToCart = useCallback(
     (product: Product, size: Size, quantity = 1) => {
       invalidateCartCoupon();
 
-      if (user) {
+      if (customerUser) {
         void syncAuthenticatedMutation(() =>
           cartApi.add({
             productId: product.id || product._id || "",
@@ -623,14 +624,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       applyGuestCart(nextGuestCart);
     },
-    [applyGuestCart, invalidateCartCoupon, syncAuthenticatedMutation, user],
+    [applyGuestCart, customerUser, invalidateCartCoupon, syncAuthenticatedMutation],
   );
 
   const updateCartQuantity = useCallback(
     (key: string, quantity: number) => {
       invalidateCartCoupon();
 
-      if (user) {
+      if (customerUser) {
         const item = cart.find((candidate) => candidate.key === key);
         if (!item) return;
 
@@ -653,14 +654,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       applyGuestCart(nextGuestCart);
     },
-    [applyGuestCart, cart, invalidateCartCoupon, syncAuthenticatedMutation, user],
+    [applyGuestCart, cart, customerUser, invalidateCartCoupon, syncAuthenticatedMutation],
   );
 
   const removeFromCart = useCallback(
     (key: string) => {
       invalidateCartCoupon();
 
-      if (user) {
+      if (customerUser) {
         const item = cart.find((candidate) => candidate.key === key);
         if (!item) return;
 
@@ -676,13 +677,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       applyGuestCart(guestCartRef.current.filter((item) => item.key !== key));
     },
-    [applyGuestCart, cart, invalidateCartCoupon, syncAuthenticatedMutation, user],
+    [applyGuestCart, cart, customerUser, invalidateCartCoupon, syncAuthenticatedMutation],
   );
 
   const clearCart = useCallback(() => {
     clearCartCoupon();
 
-    if (user) {
+    if (customerUser) {
       void syncAuthenticatedMutation(() => cartApi.clear());
       return;
     }
@@ -690,10 +691,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     guestCartRef.current = [];
     clearGuestCart();
     applyGuestCart([]);
-  }, [applyGuestCart, clearCartCoupon, syncAuthenticatedMutation, user]);
+  }, [applyGuestCart, clearCartCoupon, customerUser, syncAuthenticatedMutation]);
 
   const reloadCart = useCallback(async () => {
-    if (user) {
+    if (customerUser) {
       applyServerCart(await cartApi.get());
       return;
     }
@@ -701,7 +702,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const nextGuestCart = readGuestCart();
     guestCartRef.current = nextGuestCart;
     applyGuestCart(nextGuestCart);
-  }, [applyGuestCart, applyServerCart, user]);
+  }, [applyGuestCart, applyServerCart, customerUser]);
 
   const openCheckout = useCallback(() => {
     setCheckoutOpen(true);
@@ -716,10 +717,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => addMoney(...cart.map((item) => multiplyMoney(item.size.price, item.quantity))),
     [cart, cartSummary.subtotal],
   );
-  const cartCount = user ? cartSummary.totalItems : guestCartCount;
-  const cartTotal = user ? cartSummary.subtotal : guestSubtotal;
+  const cartCount = customerUser ? cartSummary.totalItems : guestCartCount;
+  const cartTotal = customerUser ? cartSummary.subtotal : guestSubtotal;
   const cartDiscount = cartCoupon?.discount ?? 0;
-  const cartFinalTotal = cartCoupon?.finalTotal ?? (user ? cartSummary.finalTotal : guestSubtotal);
+  const cartFinalTotal =
+    cartCoupon?.finalTotal ?? (customerUser ? cartSummary.finalTotal : guestSubtotal);
   const cartCouponCode = cartCoupon?.code ?? "";
   const wishlistCount = wishlist.length;
 

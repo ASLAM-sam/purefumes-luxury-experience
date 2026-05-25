@@ -5,13 +5,10 @@ import {
   ChevronDown,
   House,
   Heart,
-  LogIn,
-  LogOut,
   Menu,
   Search,
   ShoppingBag,
   Store,
-  UserRound,
   X,
 } from "lucide-react";
 import { Container } from "@/components/common/Container";
@@ -20,10 +17,8 @@ import { SearchBar } from "@/components/search/SearchBar";
 import type { Brand, BrandCategory } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import { brandsApi, categoriesApi } from "@/services/api";
-import { useAuth } from "@/context/AuthContext";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
 import { filterStorefrontCategories } from "@/lib/categories";
-import { rememberCurrentPageForLogin } from "@/lib/auth-redirect";
 import { throttle } from "@/lib/performance/scheduler";
 import { useNavbarCounters } from "@/lib/performance/state-observers";
 
@@ -84,7 +79,6 @@ const BrandWordmark = memo(function BrandWordmark({
 export const Navbar = memo(function Navbar() {
   useRenderInstrumentation("Navbar");
   const { cartCount, wishlistCount } = useNavbarCounters();
-  const { user, logout } = useAuth();
   const [megaOpen, setMegaOpen] = useState<"brands" | null>(null);
   const [mobile, setMobile] = useState(false);
   const [search, setSearch] = useState(false);
@@ -97,11 +91,6 @@ export const Navbar = memo(function Navbar() {
     setMobile(false);
     setMobileBrandQuery("");
   }, []);
-  const rememberLoginRedirect = useCallback(() => {
-    if (!user) {
-      rememberCurrentPageForLogin();
-    }
-  }, [user]);
 
   const handleSectionNavigation = useCallback(
     (sectionId: "bestsellers" | "latest-arrivals") => {
@@ -287,14 +276,6 @@ export const Navbar = memo(function Navbar() {
           </nav>
 
           <div className="ml-auto flex items-center gap-2.5">
-            <Link
-              to={user ? "/profile" : "/login"}
-              onClick={rememberLoginRedirect}
-              className="inline-flex min-h-11 items-center gap-2 rounded-full border border-[#5b3a29]/12 bg-[#fffaf4]/70 px-4 text-[0.64rem] font-medium uppercase tracking-[0.2em] text-[#5b3a29] transition hover:border-[#c89b63] hover:text-[#c89b63]"
-            >
-              {user ? <UserRound className="h-4.5 w-4.5" /> : <LogIn className="h-4.5 w-4.5" />}
-              {user ? "Account" : "Login"}
-            </Link>
             <button
               onClick={() => setSearch(true)}
               aria-label="Search"
@@ -457,6 +438,7 @@ export const Navbar = memo(function Navbar() {
                       { label: "Home", href: "/" },
                       { label: "Shop", href: "/shop" },
                       { label: "Brands", href: "/brands" },
+                      { label: "Wishlist", href: "/wishlist" },
                       { label: "Best Sellers", href: "/shop?sort=bestseller" },
                       { label: "Latest Arrivals", href: "/shop?sort=latest" },
                       { label: "About", href: "/about" },
@@ -492,38 +474,6 @@ export const Navbar = memo(function Navbar() {
                       </div>
                     ) : null}
 
-                    {user ? (
-                      <>
-                        <Link
-                          to="/profile"
-                          onClick={closeMobileMenu}
-                          className="block rounded-[1.15rem] border border-[#5b3a29]/10 bg-[#fffaf4] px-4 py-3.5 text-[0.74rem] tracking-[0.22em] text-[#5b3a29]/82 shadow-[0_10px_28px_-24px_rgba(91,58,41,0.55)] transition hover:border-[#c89b63] hover:text-[#c89b63]"
-                        >
-                          My Account
-                        </Link>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            closeMobileMenu();
-                            void logout();
-                          }}
-                          className="flex min-h-11 w-full items-center gap-3 rounded-[1.15rem] border border-[#c89b63]/35 bg-[#1e1b18] px-4 py-3.5 text-left text-[0.74rem] tracking-[0.22em] text-[#fffaf4] shadow-[0_20px_42px_-30px_rgba(30,27,24,0.8)] transition hover:border-[#c89b63] hover:text-[#e3c69e]"
-                        >
-                          <LogOut className="h-4.5 w-4.5" /> Logout
-                        </button>
-                      </>
-                    ) : (
-                      <Link
-                        to="/login"
-                        onClick={() => {
-                          closeMobileMenu();
-                          rememberLoginRedirect();
-                        }}
-                        className="block rounded-[1.15rem] border border-[#c89b63]/35 bg-[#1e1b18] px-4 py-3.5 text-[0.74rem] tracking-[0.22em] text-[#fffaf4] shadow-[0_20px_42px_-30px_rgba(30,27,24,0.8)] transition hover:border-[#c89b63] hover:text-[#e3c69e]"
-                      >
-                        Login
-                      </Link>
-                    )}
                   </div>
                 </div>
               </motion.aside>
@@ -575,17 +525,14 @@ export const Navbar = memo(function Navbar() {
           <span>Search</span>
         </button>
         <Link
-          to={user ? "/profile" : "/login"}
-          aria-label="Account"
-          onClick={() => {
-            closeMobileMenu();
-            rememberLoginRedirect();
-          }}
+          to="/wishlist"
+          aria-label="Wishlist"
+          onClick={closeMobileMenu}
           className="mobile-bottom-nav__item"
           activeProps={{ className: "mobile-bottom-nav__item mobile-bottom-nav__item--active" }}
         >
-          {user ? <UserRound /> : <LogIn />}
-          <span>Account</span>
+          <Heart />
+          <span>Wishlist</span>
         </Link>
         <Link
           to="/cart"

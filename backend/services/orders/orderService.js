@@ -29,6 +29,7 @@ import {
   findOrdersByUserIdentity,
 } from "../../repositories/orderRepository.js";
 import { normalizeMoney } from "../../utils/money.js";
+import { upsertGuestCustomer } from "../user/customerUpsertService.js";
 
 const shippingToString = (shippingAddress = {}) =>
   [
@@ -42,8 +43,36 @@ const shippingToString = (shippingAddress = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const normalizeEmail = (value = "") =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const normalizePhone = (value = "") => String(value || "").trim();
+
 const isTestPaymentMode = (paymentMode = "live") => paymentMode === "test";
 const PAID_CONFIRMED_STATUS = "Confirmed";
+
+const buildOrderAddressEntry = (shippingAddress = {}) => {
+  const line1 = String(shippingAddress.line1 || "").trim();
+
+  if (!line1) {
+    return null;
+  }
+
+  return {
+    label: "Latest Order",
+    fullName: String(shippingAddress.fullName || "").trim(),
+    mobile: String(shippingAddress.mobile || "").trim(),
+    line1,
+    line2: String(shippingAddress.line2 || "").trim(),
+    city: String(shippingAddress.city || "Hyderabad").trim(),
+    state: String(shippingAddress.state || "Telangana").trim(),
+    postalCode: String(shippingAddress.postalCode || "").trim(),
+    country: String(shippingAddress.country || "India").trim(),
+    isDefault: true,
+  };
+};
 
 const normalizePaymentGateway = (gateway = "") => {
   const normalized = String(gateway || "").trim();
@@ -72,6 +101,9 @@ const normalizePaymentStatus = (status = "") => {
   const normalized = String(status || "")
     .trim()
     .toLowerCase();
+  if (normalized === "success" || normalized === "completed") {
+    return "paid";
+  }
   return PAYMENT_STATUSES.includes(normalized) ? normalized : "";
 };
 
@@ -113,13 +145,18 @@ const applyDevelopmentPaymentBypass = (
   };
 };
 
-const normalizeShippingAddress = ({ body, user }) => {
+const normalizeShippingAddress = ({ body, user = null }) => {
   const source = body.shippingAddress || {};
   const fullName = String(
-    source.fullName || body.customerName || user.name || "",
+    source.fullName || body.customerName || user?.name || "",
   ).trim();
   const mobile = String(
-    source.mobile || body.phone || user.mobile || "",
+    source.mobile ||
+      body.mobileNumber ||
+      body.mobile ||
+      body.phone ||
+      user?.mobile ||
+      "",
   ).trim();
   const line1 = String(source.line1 || body.address || "").trim();
   const line2 = String(source.line2 || "").trim();
@@ -202,7 +239,7 @@ const normalizeDisplayStatus = (raw = {}) => {
     : status;
 };
 
-const findExistingRazorpayOrder = async (orderInput, user) => {
+const findExistingRazorpayOrder = async (orderInput) => {
   const paymentId = String(orderInput.paymentId || "").trim();
   const paymentOrderId = String(orderInput.paymentOrderId || "").trim();
 
@@ -214,7 +251,6 @@ const findExistingRazorpayOrder = async (orderInput, user) => {
   }
 
   return Order.findOne({
-    userId: user._id,
     paymentGateway: "Razorpay",
     $or: [
       ...(paymentId ? [{ paymentId }] : []),
@@ -303,6 +339,12 @@ export const serializeOrder = (order) => {
       raw.userId?.toString?.() ||
       raw.userId ||
       "",
+    customerName: raw.customerName || raw.shippingAddress?.fullName || "",
+    email: normalizeEmail(raw.email),
+    mobileNumber: normalizePhone(raw.mobileNumber || raw.mobile || raw.phone),
+    mobile: normalizePhone(raw.mobile || raw.mobileNumber || raw.phone),
+    phone: normalizePhone(raw.phone || raw.mobileNumber || raw.mobile),
+    address: raw.address || shippingToString(raw.shippingAddress),
     product: raw.product || productId,
     productId,
     productName:
@@ -354,10 +396,7 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
     throw new ApiError(400, "Order items are required");
   }
 
-  const existingRazorpayOrder = await findExistingRazorpayOrder(
-    orderInput,
-    user,
-  );
+  const existingRazorpayOrder = await findExistingRazorpayOrder(orderInput);
 
   if (existingRazorpayOrder) {
     const confirmedExistingOrder =
@@ -373,7 +412,7 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
       paymentId: orderInput.paymentId,
       paymentOrderId: orderInput.paymentOrderId,
     });
-    if (orderInput.clearCart !== false) {
+    if (user?._id && orderInput.clearCart !== false) {
       await clearCart(user._id);
     }
     const orderWithPublicId = await ensureOrderPublicId(confirmedExistingOrder);
@@ -381,6 +420,15 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
   }
 
   const shippingAddress = normalizeShippingAddress({ body: orderInput, user });
+  const customerEmail = normalizeEmail(orderInput.email || user?.email || "");
+  const customerMobileNumber = normalizePhone(
+    orderInput.mobileNumber ||
+      orderInput.mobile ||
+      shippingAddress.mobile ||
+      user?.mobile ||
+      "",
+  );
+  const customerPhone = normalizePhone(orderInput.phone || customerMobileNumber);
   const session = await mongoose.startSession();
   let createdOrder;
   let reusedExistingOrder = false;
@@ -428,16 +476,39 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
       const orderStatus = resolveOrderStatus(paymentStatus);
       const paymentGateway = normalizePaymentGateway(orderInput.paymentGateway);
       const isTestData = isTestOrderInput(orderInput, { paymentMode });
+      const orderPlacedAt = new Date();
+      const shippingAddressText = shippingToString(shippingAddress);
+      const orderAddressEntry = buildOrderAddressEntry(shippingAddress);
+      let ownerUserId = user?._id || null;
+      let guestCustomer = null;
+
+      if (!ownerUserId) {
+        guestCustomer = await upsertGuestCustomer(
+          {
+            email: customerEmail,
+            mobileNumber: customerMobileNumber,
+            customerName: shippingAddress.fullName,
+            address: shippingAddressText,
+            shippingAddress,
+            isTestData,
+          },
+          totalAmount,
+          { session, orderDate: orderPlacedAt },
+        );
+
+        ownerUserId = guestCustomer?._id || null;
+      }
 
       const [order] = await Order.create(
         [
           {
-            userId: user._id,
-            email: user.email,
-            mobile: user.mobile || shippingAddress.mobile,
+            userId: ownerUserId,
+            email: customerEmail,
+            mobileNumber: customerMobileNumber,
+            mobile: customerMobileNumber,
             customerName: shippingAddress.fullName,
-            phone: shippingAddress.mobile,
-            address: shippingToString(shippingAddress),
+            phone: customerPhone || shippingAddress.mobile,
+            address: shippingAddressText,
             shippingAddress,
             product: preparedItems[0]?.productId,
             productName: preparedItems[0]?.productName || "",
@@ -465,20 +536,44 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
 
       createdOrder = order;
 
-      await User.findByIdAndUpdate(
-        user._id,
-        {
+      if (user?._id) {
+        const userUpdate = {
           $inc: { totalOrders: 1, totalSpent: totalAmount },
-          $push: { orderHistory: order._id },
-        },
-        { session },
-      );
+          $addToSet: { orderHistory: order._id },
+          $set: {
+            lastOrderDate: orderPlacedAt,
+            customerName: shippingAddress.fullName,
+            mobileNumber: customerMobileNumber,
+            address: shippingAddressText,
+          },
+        };
+
+        if (!user.mobile && customerMobileNumber) {
+          userUpdate.$set.mobile = customerMobileNumber;
+        }
+
+        if (orderAddressEntry && (!Array.isArray(user.addresses) || user.addresses.length === 0)) {
+          userUpdate.$set.addresses = [orderAddressEntry];
+        }
+
+        await User.findByIdAndUpdate(
+          user._id,
+          userUpdate,
+          { session },
+        );
+      } else if (guestCustomer?._id) {
+        await User.findByIdAndUpdate(
+          guestCustomer._id,
+          { $addToSet: { orderHistory: order._id } },
+          { session },
+        );
+      }
 
       await AnalyticsEvent.create(
         [
           {
             type: "purchase",
-            userId: user._id,
+            userId: ownerUserId,
             orderId: order._id,
             revenue: totalAmount,
             metadata: {
@@ -488,6 +583,8 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
               ),
               couponCode,
               paymentGateway,
+              customerEmail,
+              customerMobileNumber,
               isTestData,
             },
             isTestData,
@@ -501,7 +598,7 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
       throw error;
     }
 
-    const existingOrder = await findExistingRazorpayOrder(orderInput, user);
+    const existingOrder = await findExistingRazorpayOrder(orderInput);
     if (!existingOrder) {
       throw error;
     }
@@ -517,22 +614,30 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
     await session.endSession();
   }
 
-  if (orderInput.clearCart !== false) {
+  if (user?._id && orderInput.clearCart !== false) {
     await clearCart(user._id);
   }
 
   createdOrder = await ensureOrderPublicId(createdOrder);
 
-  if (!reusedExistingOrder) {
+  if (!reusedExistingOrder && customerEmail) {
     await addEmailJob({
-      to: user.email,
+      to: customerEmail,
       template: "orderConfirmation",
-      data: { name: user.name, order: serializeOrder(createdOrder) },
+      data: {
+        name: createdOrder.customerName || user?.name || "Customer",
+        order: serializeOrder(createdOrder),
+      },
     });
   }
   logger.info("Order created", {
     orderId: createdOrder.id || createdOrder._id?.toString?.(),
-    userId: user.id,
+    userId:
+      createdOrder.userId?._id?.toString?.() ||
+      createdOrder.userId?.toString?.() ||
+      user?.id ||
+      "",
+    customerEmail,
     totalAmount: createdOrder.totalAmount,
   });
 
@@ -639,12 +744,18 @@ export const updateOrderStatusAndNotify = async ({
 
   const orderWithPublicId = await ensureOrderPublicId(order);
 
-  if (orderWithPublicId.userId?.email) {
+  const notificationEmail = normalizeEmail(
+    orderWithPublicId.userId?.email || orderWithPublicId.email || "",
+  );
+  if (notificationEmail) {
     await addEmailJob({
-      to: orderWithPublicId.userId.email,
+      to: notificationEmail,
       template: "orderStatus",
       data: {
-        name: orderWithPublicId.userId.name,
+        name:
+          orderWithPublicId.userId?.name ||
+          orderWithPublicId.customerName ||
+          "Customer",
         order: serializeOrder(orderWithPublicId),
       },
     });

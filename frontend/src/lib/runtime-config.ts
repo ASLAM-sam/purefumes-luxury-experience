@@ -50,9 +50,10 @@ const productionSafeConfiguredApiUrl =
     ? ""
     : normalizedConfiguredApiUrl;
 const sameOriginApiUrl = sameOriginBaseUrl ? resolveUrl("/api", sameOriginBaseUrl) : "/api";
+const productionDefaultApiUrl = "https://api.purefumeshyderabad.in/api";
 const apiUrl =
   import.meta.env.PROD
-    ? productionSafeConfiguredApiUrl || sameOriginApiUrl
+    ? productionSafeConfiguredApiUrl || productionDefaultApiUrl
     : productionSafeConfiguredApiUrl ||
       (frontendUrl ? resolveUrl("/api", frontendUrl) : "");
 const apiOrigin = resolveOrigin(apiUrl, frontendUrl || browserOrigin) || frontendUrl;

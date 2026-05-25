@@ -5,11 +5,15 @@ import Product from "../../models/Product.js";
 import User from "../../models/User.js";
 import { getDateRange } from "../../utils/dateRange.js";
 import { formatINR, normalizeMoney } from "../../utils/money.js";
-import { buildOrderStatusFilter } from "../../utils/orderStatusFilter.js";
+import {
+  buildOrderStatusFilter,
+  buildSuccessfulOrderFilter,
+} from "../../utils/orderStatusFilter.js";
 
 const LOW_STOCK_THRESHOLD = 10;
 const PREMIUM_SPENT_THRESHOLD = 15000;
 const PREMIUM_ORDER_THRESHOLD = 3;
+const INTERNAL_GUEST_EMAIL_PATTERN = /@guest\.purefumes\.local$/i;
 
 const toSafeNumber = (value) => {
   const normalized = Number(value);
@@ -20,6 +24,7 @@ const getOrderCustomerExpression = () => ({
   $let: {
     vars: {
       email: { $ifNull: ["$email", ""] },
+      mobileNumber: { $ifNull: ["$mobileNumber", ""] },
       mobile: { $ifNull: ["$mobile", ""] },
       phone: { $ifNull: ["$phone", ""] },
     },
@@ -38,13 +43,19 @@ const getOrderCustomerExpression = () => ({
             { $concat: ["email:", "$$email"] },
             {
               $cond: [
-                { $ne: ["$$mobile", ""] },
-                { $concat: ["mobile:", "$$mobile"] },
+                { $ne: ["$$mobileNumber", ""] },
+                { $concat: ["mobile:", "$$mobileNumber"] },
                 {
                   $cond: [
-                    { $ne: ["$$phone", ""] },
-                    { $concat: ["phone:", "$$phone"] },
-                    { $concat: ["guest:", { $toString: "$_id" }] },
+                    { $ne: ["$$mobile", ""] },
+                    { $concat: ["mobile:", "$$mobile"] },
+                    {
+                      $cond: [
+                        { $ne: ["$$phone", ""] },
+                        { $concat: ["phone:", "$$phone"] },
+                        { $concat: ["guest:", { $toString: "$_id" }] },
+                      ],
+                    },
                   ],
                 },
               ],
@@ -98,10 +109,9 @@ const getTrendPipeline = ({ startDate, endDate, rangeKey }) => {
 
   return [
     {
-      $match: {
-        status: { $ne: "Cancelled" },
+      $match: buildSuccessfulOrderFilter({
         createdAt: { $gte: startDate, $lte: endDate },
-      },
+      }),
     },
     {
       $group: {
@@ -123,18 +133,29 @@ const buildRecentActivity = ({ analyticsEvents }) =>
     )
     .slice(0, 12);
 
-export const getDashboardAnalytics = async ({ range, from, to, startDate: rawStartDate, endDate: rawEndDate } = {}) => {
+export const getDashboardAnalytics = async ({
+  range,
+  from,
+  to,
+  startDate: rawStartDate,
+  endDate: rawEndDate,
+} = {}) => {
   const {
     key: rangeKey,
     startDate,
     endDate,
-  } = getDateRange({ range, from, to, startDate: rawStartDate, endDate: rawEndDate });
+  } = getDateRange({
+    range,
+    from,
+    to,
+    startDate: rawStartDate,
+    endDate: rawEndDate,
+  });
   const timeBucket = buildTimeBucket({ rangeKey, startDate, endDate });
   const dateFilter = { $gte: startDate, $lte: endDate };
-  const rangeOrderMatch = {
-    status: { $ne: "Cancelled" },
+  const successfulRangeOrderMatch = buildSuccessfulOrderFilter({
     createdAt: dateFilter,
-  };
+  });
 
   const [
     activeUsers,
@@ -164,27 +185,27 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
       createdAt: dateFilter,
     }),
     User.countDocuments({ role: "user", createdAt: dateFilter }),
-    Order.countDocuments(rangeOrderMatch),
+    Order.countDocuments(successfulRangeOrderMatch),
     Order.countDocuments({
       $and: [buildOrderStatusFilter("Pending"), { createdAt: dateFilter }],
     }),
     Product.countDocuments({ stock: { $lte: LOW_STOCK_THRESHOLD } }),
-    sumRevenue(rangeOrderMatch),
+    sumRevenue(successfulRangeOrderMatch),
     Order.aggregate([
-      { $match: rangeOrderMatch },
+      { $match: successfulRangeOrderMatch },
       { $addFields: { customerKey: getOrderCustomerExpression() } },
       { $group: { _id: "$customerKey", orderCount: { $sum: 1 } } },
       { $match: { orderCount: { $gte: 2 } } },
       { $count: "total" },
     ]),
     Order.aggregate([
-      { $match: rangeOrderMatch },
+      { $match: successfulRangeOrderMatch },
       { $addFields: { customerKey: getOrderCustomerExpression() } },
       { $group: { _id: "$customerKey", orderCount: { $sum: 1 } } },
       { $count: "total" },
     ]),
     Order.aggregate([
-      { $match: rangeOrderMatch },
+      { $match: successfulRangeOrderMatch },
       { $addFields: { customerKey: getOrderCustomerExpression() } },
       {
         $group: {
@@ -216,16 +237,15 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
           let: { userId: "$userId", cartUpdatedAt: "$updatedAt" },
           pipeline: [
             {
-              $match: {
+              $match: buildSuccessfulOrderFilter({
                 $expr: {
                   $and: [
                     { $eq: ["$userId", "$$userId"] },
                     { $gte: ["$createdAt", "$$cartUpdatedAt"] },
                     { $lte: ["$createdAt", endDate] },
-                    { $ne: ["$status", "Cancelled"] },
                   ],
                 },
-              },
+              }),
             },
             { $limit: 1 },
           ],
@@ -249,30 +269,67 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
       { $sort: { _id: 1 } },
     ]),
     Order.aggregate([
-      { $match: rangeOrderMatch },
+      { $match: successfulRangeOrderMatch },
       { $unwind: "$items" },
+      { $match: { "items.productId": { $ne: null } } },
       {
         $group: {
           _id: "$items.productId",
           productName: { $first: "$items.productName" },
-          quantity: { $sum: "$items.quantity" },
-          revenue: { $sum: { $multiply: ["$items.quantity", "$items.price"] } },
+          productImage: { $first: "$items.productImage" },
+          totalQuantitySold: { $sum: "$items.quantity" },
+          totalRevenueGenerated: {
+            $sum: {
+              $multiply: [
+                "$items.quantity",
+                { $ifNull: ["$items.priceAtPurchase", "$items.price"] },
+              ],
+            },
+          },
+          orderIds: { $addToSet: "$_id" },
         },
       },
-      { $sort: { revenue: -1, quantity: -1 } },
+      {
+        $addFields: {
+          totalOrders: { $size: "$orderIds" },
+        },
+      },
+      {
+        $sort: {
+          totalQuantitySold: -1,
+          totalOrders: -1,
+          totalRevenueGenerated: -1,
+          productName: 1,
+        },
+      },
       { $limit: 8 },
       {
         $lookup: {
           from: "products",
-          localField: "_id",
-          foreignField: "_id",
+          let: { productId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$productId"] },
+              },
+            },
+            {
+              $project: {
+                name: 1,
+                brand: 1,
+                image: 1,
+                images: 1,
+              },
+            },
+          ],
           as: "product",
         },
       },
       { $unwind: { path: "$product", preserveNullAndEmptyArrays: true } },
     ]),
     Order.aggregate([
-      { $match: rangeOrderMatch },
+      { $match: successfulRangeOrderMatch },
+      { $sort: { createdAt: -1 } },
       { $addFields: { customerKey: getOrderCustomerExpression() } },
       {
         $group: {
@@ -280,6 +337,7 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
           userId: { $first: "$userId" },
           name: { $first: "$customerName" },
           email: { $first: "$email" },
+          mobileNumber: { $first: "$mobileNumber" },
           mobile: { $first: "$mobile" },
           phone: { $first: "$phone" },
           totalOrders: { $sum: 1 },
@@ -289,12 +347,31 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
         },
       },
       { $sort: { totalSpent: -1, totalOrders: -1, lastOrderAt: -1 } },
-      { $limit: 8 },
+      { $limit: 10 },
       {
         $lookup: {
           from: "users",
-          localField: "userId",
-          foreignField: "_id",
+          let: { userId: "$userId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$userId"] },
+              },
+            },
+            {
+              $project: {
+                name: 1,
+                customerName: 1,
+                email: 1,
+                mobile: 1,
+                mobileNumber: 1,
+                lastLogin: 1,
+                lastOrderDate: 1,
+                emailVerified: 1,
+                isBanned: 1,
+              },
+            },
+          ],
           as: "user",
         },
       },
@@ -323,9 +400,16 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
     productId: product._id?.toString?.() || String(product._id || ""),
     productName: product.productName || product.product?.name || "Product",
     brand: product.product?.brand || "",
-    image: product.product?.image || product.product?.images?.[0] || "",
-    quantity: toSafeNumber(product.quantity),
-    revenue: normalizeMoney(product.revenue),
+    image:
+      product.productImage ||
+      product.product?.image ||
+      product.product?.images?.[0] ||
+      "",
+    totalOrders: toSafeNumber(product.totalOrders),
+    totalQuantitySold: toSafeNumber(product.totalQuantitySold),
+    totalRevenueGenerated: normalizeMoney(product.totalRevenueGenerated),
+    quantity: toSafeNumber(product.totalQuantitySold),
+    revenue: normalizeMoney(product.totalRevenueGenerated),
   }));
 
   const analyticsEvents = analyticsEventsRaw.map((event) => ({
@@ -382,13 +466,21 @@ export const getDashboardAnalytics = async ({ range, from, to, startDate: rawSta
         customer.userId?.toString?.() ||
         customer._id?.toString?.() ||
         String(customer._id || ""),
-      name: customer.name || customer.user?.name || "Customer",
-      email: customer.email || customer.user?.email || "",
-      mobile: customer.mobile || customer.phone || customer.user?.mobile || "",
+      name: customer.name || customer.user?.customerName || customer.user?.name || "Customer",
+      email: INTERNAL_GUEST_EMAIL_PATTERN.test(customer.email || customer.user?.email || "")
+        ? ""
+        : customer.email || customer.user?.email || "",
+      mobile:
+        customer.mobileNumber ||
+        customer.mobile ||
+        customer.phone ||
+        customer.user?.mobileNumber ||
+        customer.user?.mobile ||
+        "",
       totalOrders: toSafeNumber(customer.totalOrders),
       totalSpent: normalizeMoney(customer.totalSpent),
       lastLogin: customer.user?.lastLogin || null,
-      lastOrderAt: customer.lastOrderAt || null,
+      lastOrderAt: customer.lastOrderAt || customer.user?.lastOrderDate || null,
       createdAt: customer.createdAt || null,
       emailVerified: Boolean(customer.user?.emailVerified),
       isBanned: Boolean(customer.user?.isBanned),

@@ -7,8 +7,6 @@ import { Button } from "@/components/common/Button";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
 import { AutoCouponSuggestion } from "@/components/common/AutoCouponSuggestion";
 import { useApp } from "@/context/AppContext";
-import { useAuth } from "@/context/AuthContext";
-import { setRedirectAfterLogin } from "@/lib/auth-redirect";
 import { formatINR } from "@/lib/money";
 
 export const Route = createFileRoute("/cart")({
@@ -33,7 +31,6 @@ function CartPage() {
     applyCartCoupon,
     removeCartCoupon,
   } = useApp();
-  const { user } = useAuth();
   const nav = useNavigate();
   const [couponCode, setCouponCode] = useState(cartCouponCode);
 
@@ -56,12 +53,6 @@ function CartPage() {
   };
 
   const proceedToCheckout = () => {
-    if (!user) {
-      setRedirectAfterLogin("/checkout");
-      nav({ to: "/login" });
-      return;
-    }
-
     nav({ to: "/checkout" });
   };
 

@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import { Button } from "@/components/common/Button";
 import { Container } from "@/components/common/Container";
@@ -6,7 +6,10 @@ import { SiteShell } from "@/components/layout/SiteShell";
 import { accountApi } from "@/services/api";
 
 export const Route = createFileRoute("/forgot-password")({
-  component: ForgotPasswordPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 function ForgotPasswordPage() {

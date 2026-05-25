@@ -7,10 +7,14 @@ import { ApiError, asyncHandler } from "../middlewares/errorMiddleware.js";
 import { createPaginationMeta, escapeRegex, getPagination } from "../utils/apiFeatures.js";
 import { getCreatedAtRangeFilter } from "../utils/dateRange.js";
 import { normalizeMoney } from "../utils/money.js";
-import { buildOrderStatusFilter } from "../utils/orderStatusFilter.js";
+import {
+  buildOrderStatusFilter,
+  buildSuccessfulOrderFilter,
+} from "../utils/orderStatusFilter.js";
 import { getDashboardAnalytics } from "../services/analytics/analyticsService.js";
 import { updateOrderStatusAndNotify, serializeOrder } from "../services/orders/orderService.js";
 import { ensureOrdersPublicIds } from "../services/orders/publicOrderIdService.js";
+import { buildUserOrderIdentityFilter } from "../repositories/orderRepository.js";
 
 const ADMIN_USER_STAT_PREMIUM_SPENT = 15000;
 const ADMIN_USER_STAT_PREMIUM_ORDERS = 3;
@@ -40,6 +44,7 @@ const toSafeString = (value) => String(value || "").trim();
 
 const TEST_FIELD_PATTERN = /^TEST_/i;
 const TEST_GATEWAY_PATTERN = /^test-mode$/i;
+const INTERNAL_GUEST_EMAIL_PATTERN = /@guest\.purefumes\.local$/i;
 
 const TEST_ORDER_FILTER = {
   $or: [
@@ -74,6 +79,8 @@ const buildOrderSearchFilter = (search = "") => {
     $or: [
       { publicOrderId: { $regex: safePublicOrderId, $options: "i" } },
       { customerName: { $regex: safeSearch, $options: "i" } },
+      { email: { $regex: safeSearch, $options: "i" } },
+      { mobileNumber: { $regex: safeSearch, $options: "i" } },
       { phone: { $regex: safeSearch, $options: "i" } },
       { mobile: { $regex: safeSearch, $options: "i" } },
       { "shippingAddress.mobile": { $regex: safeSearch, $options: "i" } },
@@ -103,7 +110,7 @@ const getUserSort = ({ sortBy, sortOrder }) => {
 };
 
 const buildUserFilter = (query = {}) => {
-  const filter = {};
+  const filter = { role: "user" };
   const search = String(query.search || "").trim();
   const statusFilter = getUserStatusFilter(query.status);
 
@@ -113,9 +120,12 @@ const buildUserFilter = (query = {}) => {
     const safeSearch = escapeRegex(search);
     filter.$or = [
       { name: { $regex: safeSearch, $options: "i" } },
+      { customerName: { $regex: safeSearch, $options: "i" } },
       { username: { $regex: safeSearch, $options: "i" } },
       { email: { $regex: safeSearch, $options: "i" } },
       { mobile: { $regex: safeSearch, $options: "i" } },
+      { mobileNumber: { $regex: safeSearch, $options: "i" } },
+      { address: { $regex: safeSearch, $options: "i" } },
     ];
   }
 
@@ -232,15 +242,20 @@ const serializeAdminUser = (user) => {
     return null;
   }
 
+  const email = toSafeString(raw.email);
+
   return {
     id: raw.id || raw._id?.toString?.() || String(raw._id || ""),
-    name: toSafeString(raw.name) || "Unnamed user",
+    name: toSafeString(raw.customerName || raw.name) || "Unnamed user",
+    customerName: toSafeString(raw.customerName || raw.name),
     username: toSafeString(raw.username),
-    email: toSafeString(raw.email),
-    mobile: toSafeString(raw.mobile),
-    phone: toSafeString(raw.mobile),
+    email: INTERNAL_GUEST_EMAIL_PATTERN.test(email) ? "" : email,
+    mobile: toSafeString(raw.mobileNumber || raw.mobile),
+    mobileNumber: toSafeString(raw.mobileNumber || raw.mobile),
+    phone: toSafeString(raw.mobileNumber || raw.mobile),
     role: toSafeString(raw.role) || "user",
     profileImage: toSafeString(raw.profileImage),
+    address: toSafeString(raw.address),
     totalOrders: toSafeNumber(raw.totalOrders),
     totalSpent: normalizeMoney(raw.totalSpent),
     isBanned: Boolean(raw.isBanned),
@@ -248,6 +263,7 @@ const serializeAdminUser = (user) => {
     createdAt: raw.createdAt || null,
     updatedAt: raw.updatedAt || null,
     lastLogin: raw.lastLogin || null,
+    lastOrderDate: raw.lastOrderDate || null,
     addresses: Array.isArray(raw.addresses) ? raw.addresses : [],
   };
 };
@@ -255,7 +271,7 @@ const serializeAdminUser = (user) => {
 const getAdminUserStats = async () => {
   const today = startOfToday();
   const revenueResult = await Order.aggregate([
-    { $match: { status: { $ne: "Cancelled" } } },
+    { $match: buildSuccessfulOrderFilter() },
     { $group: { _id: null, totalRevenue: { $sum: "$totalAmount" } } },
   ]);
 
@@ -322,7 +338,7 @@ export const getAdminOrders = asyncHandler(async (req, res) => {
   if (createdAt) filterParts.push({ createdAt });
   const searchFilter = buildOrderSearchFilter(req.query.search);
   if (Object.keys(searchFilter).length) filterParts.push(searchFilter);
-  const filter = filterParts.length ? { $and: filterParts } : {};
+  const filter = buildSuccessfulOrderFilter(...filterParts);
 
   const [orders, total] = await Promise.all([
     Order.find(filter)
@@ -493,18 +509,23 @@ export const getAdminUserDetails = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Invalid user id");
   }
 
-  const [user, recentOrders] = await Promise.all([
-    User.findById(req.params.id).lean({ virtuals: true }),
-    Order.find({ userId: req.params.id })
-      .sort({ createdAt: -1 })
-      .limit(8)
-      .populate("items.productId", "name brand image images")
-      .lean({ virtuals: true }),
-  ]);
+  const user = await User.findById(req.params.id).lean({ virtuals: true });
 
   if (!user) {
     throw new ApiError(404, "User not found");
   }
+
+  const recentOrders = await Order.find(
+    buildUserOrderIdentityFilter({
+      userId: user._id,
+      email: user.email,
+      mobile: user.mobileNumber || user.mobile,
+    }),
+  )
+    .sort({ createdAt: -1 })
+    .limit(8)
+    .populate("items.productId", "name brand image images")
+    .lean({ virtuals: true });
 
   const serializedUser = serializeAdminUser(user);
   const ordersWithPublicIds = await ensureOrdersPublicIds(recentOrders);
@@ -544,15 +565,26 @@ export const getAdminUserOrders = asyncHandler(async (req, res) => {
   }
 
   const { page, limit, skip } = getPagination(req.query);
+  const user = await User.findById(req.params.id).lean({ virtuals: true });
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const orderFilter = buildUserOrderIdentityFilter({
+    userId: user._id,
+    email: user.email,
+    mobile: user.mobileNumber || user.mobile,
+  });
 
   const [orders, total] = await Promise.all([
-    Order.find({ userId: req.params.id })
+    Order.find(orderFilter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .populate("items.productId", "name brand image images")
       .lean({ virtuals: true }),
-    Order.countDocuments({ userId: req.params.id }),
+    Order.countDocuments(orderFilter),
   ]);
   const ordersWithPublicIds = await ensureOrdersPublicIds(orders);
 
@@ -604,7 +636,13 @@ export const deleteUser = asyncHandler(async (req, res) => {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(404, "User not found");
 
-  const existingOrders = await Order.countDocuments({ userId });
+  const existingOrders = await Order.countDocuments(
+    buildUserOrderIdentityFilter({
+      userId: user._id,
+      email: user.email,
+      mobile: user.mobileNumber || user.mobile,
+    }),
+  );
   if (existingOrders > 0) {
     throw new ApiError(409, "This user has order history. Block the account instead of deleting it.");
   }

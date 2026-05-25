@@ -7,6 +7,11 @@ import type { Brand, BrandPreviewProduct } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Accord, BestTime, Product, Size } from "@/data/products";
 import { apiTrafficProxy } from "@/lib/performance/api-proxy";
+import {
+  clearHttpClientState,
+  requestJson,
+  uploadMultipart,
+} from "@/lib/http/client";
 import { perfInstrumentation } from "@/lib/performance/instrumentation";
 import { frontendMediator } from "@/lib/performance/mediator";
 import runtimeConfig from "@/lib/runtime-config";
@@ -261,8 +266,11 @@ export type Order = {
   id?: string;
   publicOrderId?: string;
   customerName: string;
+  email?: string;
+  mobileNumber?: string;
   phone: string;
   address: string;
+  shippingAddress?: Partial<Address>;
   items: OrderItem[];
   totalAmount: number;
   subtotalAmount?: number;
@@ -283,7 +291,7 @@ export type Order = {
   paymentGateway?: string;
   paymentOrderId?: string;
   paymentSignature?: string;
-  paymentStatus?: "pending" | "paid" | "failed" | "refunded";
+  paymentStatus?: "pending" | "paid" | "failed" | "refunded" | "success" | "completed";
   isTestData?: boolean;
 };
 
@@ -442,9 +450,13 @@ export type AuthUser = {
 };
 
 export type AdminUser = AuthUser & {
+  customerName?: string;
+  mobileNumber?: string;
+  address?: string;
   username?: string;
   phone?: string;
   lastLogin?: string | null;
+  lastOrderDate?: string | null;
 };
 
 export type AdminUserStats = {
@@ -576,6 +588,8 @@ export type RazorpayVerifyResponse = {
 
 export type CreateOrderInput = {
   customerName: string;
+  email?: string;
+  mobileNumber?: string;
   phone: string;
   address: string;
   shippingAddress?: Partial<Address>;
@@ -1021,6 +1035,7 @@ const setStoredAccessToken = (_token: string) => {
 const clearStoredAccessToken = () => {
   if (typeof window === "undefined") return;
   clearLegacyStoredAccessTokens();
+  clearHttpClientState();
   forgetCsrfToken();
   bumpAuthCacheVersion();
 };
@@ -1454,6 +1469,11 @@ const normalizeOrder = (order: Order): Order => {
 
   return {
     ...order,
+    customerName: String(order.customerName || order.shippingAddress?.fullName || "").trim(),
+    email: String(order.email || "").trim().toLowerCase(),
+    mobileNumber: String(order.mobileNumber || order.phone || "").trim(),
+    phone: String(order.phone || order.mobileNumber || "").trim(),
+    address: String(order.address || "").trim(),
     items,
     productName: order.productName ?? firstItem?.productName ?? "",
     brand: order.brand ?? firstItem?.brand ?? "",
@@ -1660,73 +1680,46 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  if (isMutationMethod(method)) {
-    headers.set("X-CSRF-Token", await getRequiredCsrfToken(`${method} ${path}`));
-  }
-
   if (import.meta.env.DEV) {
     console.debug(`[API] ${method} ${BASE}${path}`);
   }
 
   const executeRequest = async () => {
-    let res: Response;
+    const rawBody = requestInit.body;
+    let requestBody: unknown = rawBody;
 
     try {
-      res = await fetch(`${BASE}${path}`, {
-        ...requestInit,
-        cache: requestInit.cache ?? (cacheableCatalogRequest && !forceFresh ? "default" : "no-store"),
-        credentials: requestInit.credentials ?? "include",
-        headers,
+      if (typeof rawBody === "string" && headers.get("Content-Type")?.includes("application/json")) {
+        try {
+          requestBody = JSON.parse(rawBody);
+        } catch (_error) {
+          requestBody = rawBody;
+        }
+      }
+
+      const data = await requestJson<T>({
+        url: path,
+        method,
+        headers: Object.fromEntries(headers.entries()),
+        data: requestBody,
+        signal: requestInit.signal ?? undefined,
+        skipAuthRefresh,
       });
+
+      if (cacheableCatalogRequest) {
+        setCatalogCacheEntry(catalogCacheKey, data);
+      }
+
+      return data as T;
     } catch (error) {
       reportApiFailure(error, {
         method,
         path,
-        phase: "network",
+        phase: "response",
+        status: Number((error as { status?: number } | undefined)?.status || 0),
       });
       throw error;
     }
-
-    rememberCsrfToken(res.headers.get("X-CSRF-Token") || "");
-
-    const payload = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
-
-    if (res.status === 401 && !skipAuthRefresh && shouldAttemptRefresh(path)) {
-      const refreshed = await refreshAuthSession();
-
-      if (refreshed) {
-        return http<T>(path, {
-          ...init,
-          skipAuthRefresh: true,
-          forceFresh: true,
-        });
-      }
-    }
-
-    if (!res.ok || payload?.success === false) {
-      const firstError =
-        Array.isArray((payload as { errors?: Array<{ message?: string }> } | null)?.errors) &&
-        (payload as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
-
-      const apiError = new Error(firstError || payload?.message || `${res.status} ${res.statusText}`);
-      reportApiFailure(apiError, {
-        method,
-        path,
-        phase: "response",
-        status: res.status,
-        requestId: res.headers.get("X-Request-Id"),
-      });
-      throw apiError;
-    }
-
-    const data =
-      payload && typeof payload === "object" && "data" in payload ? payload.data : (payload as T);
-
-    if (cacheableCatalogRequest) {
-      setCatalogCacheEntry(catalogCacheKey, data);
-    }
-
-    return data as T;
   };
 
   const request = proxyRequest
@@ -1775,92 +1768,23 @@ async function uploadFormData<T>(
   options: UploadRequestOptions = {},
 ): Promise<T> {
   requireBackend();
-
-  const csrfToken = await getRequiredCsrfToken(`${method} ${path}`);
-
-  return new Promise<T>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-
-    xhr.open(method, `${BASE}${path}`, true);
-    xhr.withCredentials = true;
-    xhr.setRequestHeader("Accept", "application/json");
-
-    if (csrfToken) {
-      xhr.setRequestHeader("X-CSRF-Token", csrfToken);
-    }
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable && event.total > 0) {
-        options.onUploadProgress?.(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-
-    xhr.onload = async () => {
-      rememberCsrfToken(xhr.getResponseHeader("X-CSRF-Token") || "");
-
-      const payload = parseUploadPayload<T>(xhr.responseText);
-
-      if (xhr.status === 401 && !options.skipAuthRefresh && shouldAttemptRefresh(path)) {
-        let refreshed = false;
-
-        try {
-          refreshed = await refreshAuthSession();
-        } catch (error) {
-          reject(error);
-          return;
-        }
-
-        if (refreshed) {
-          try {
-            const retryResult = await uploadFormData<T>(path, method, formData, {
-              ...options,
-              skipAuthRefresh: true,
-            });
-            resolve(retryResult);
-          } catch (error) {
-            reject(error);
-          }
-          return;
-        }
-      }
-
-      if (xhr.status < 200 || xhr.status >= 300 || payload?.success === false) {
-        const firstError =
-          Array.isArray((payload as { errors?: Array<{ message?: string }> } | null)?.errors) &&
-          (payload as { errors?: Array<{ message?: string }> }).errors?.[0]?.message;
-
-        const uploadError = new Error(
-          firstError || payload?.message || `${xhr.status} ${xhr.statusText}`,
-        );
-        reportApiFailure(uploadError, {
-          method,
-          path,
-          phase: "upload_response",
-          status: xhr.status,
-          requestId: xhr.getResponseHeader("X-Request-Id"),
-        });
-        reject(uploadError);
-        return;
-      }
-
-      options.onUploadProgress?.(100);
-      const data =
-        payload && typeof payload === "object" && "data" in payload ? payload.data : (payload as T);
-      resolve(data as T);
-    };
-
-    xhr.onerror = () => {
-      const uploadError = new Error("Upload failed. Check your connection and try again.");
-      reportApiFailure(uploadError, {
-        method,
-        path,
-        phase: "upload_network",
-      });
-      reject(uploadError);
-    };
-    xhr.onabort = () => reject(new Error("Upload was cancelled."));
-    xhr.send(formData);
-  });
+  try {
+    const data = await uploadMultipart<T>(path, formData, {
+      method,
+      skipAuthRefresh: options.skipAuthRefresh,
+      onUploadProgress: options.onUploadProgress,
+    });
+    options.onUploadProgress?.(100);
+    return data;
+  } catch (error) {
+    reportApiFailure(error, {
+      method,
+      path,
+      phase: "upload_response",
+      status: Number((error as { status?: number } | undefined)?.status || 0),
+    });
+    throw error;
+  }
 }
 
 export const productsApi = {
@@ -2517,12 +2441,10 @@ export const accountApi = {
     password: string;
     confirmPassword: string;
   }): Promise<AuthUser> => {
-    const response = await http<AuthUserResponse>("/auth/signup", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    bumpAuthCacheVersion();
-    return normalizeAuthUser(response.user);
+    void payload;
+    throw new Error(
+      "Customer accounts are no longer required. Customers can place orders directly at checkout.",
+    );
   },
   login: async (identifier: string, password: string): Promise<AuthUser> => {
     const response = await http<AuthUserResponse>("/auth/login", {
@@ -2540,30 +2462,27 @@ export const accountApi = {
     }
   },
   forgotPassword: async (email: string): Promise<void> => {
-    await http<{ message: string }>("/auth/forgot-password", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
+    void email;
+    throw new Error(
+      "Customer accounts are no longer required. Customers can place orders directly at checkout.",
+    );
   },
   resetPassword: async (token: string, password: string): Promise<void> => {
-    await http<{ message: string }>("/auth/reset-password", {
-      method: "POST",
-      body: JSON.stringify({ token, password }),
-    });
+    void token;
+    void password;
+    throw new Error(
+      "Customer accounts are no longer required. Customers can place orders directly at checkout.",
+    );
   },
   verifyEmail: async (token: string): Promise<AuthUser> => {
-    const response = await http<AuthUserResponse>("/auth/verify-email", {
-      method: "POST",
-      body: JSON.stringify({ token }),
-    });
-    bumpAuthCacheVersion();
-    return normalizeAuthUser(response.user);
+    void token;
+    throw new Error(
+      "Customer accounts are no longer required. Customers can place orders directly at checkout.",
+    );
   },
   googleUrl: (redirect = "/") => {
-    requireBackend();
-    return `${AUTH_URL.replace(/\/$/, "")}/google${queryString({
-      redirect: redirect.startsWith("/") ? redirect : "/",
-    })}`;
+    void redirect;
+    throw new Error("Google sign-in is no longer available.");
   },
   adminUsers: async (
     params: {
@@ -2857,6 +2776,9 @@ export type AdminAnalytics = {
     productName: string;
     brand: string;
     image: string;
+    totalOrders: number;
+    totalQuantitySold: number;
+    totalRevenueGenerated: number;
     quantity: number;
     revenue: number;
   }>;
@@ -2924,6 +2846,13 @@ export const adminApi = {
     const response = await http<AdminClearResponse>("/admin/users", { method: "DELETE" });
     invalidateProxyCache("/admin", "/users", "/cart");
     return response;
+  },
+  orders: async (params: OrderListParams = {}): Promise<PaginatedOrders> => {
+    const data = await http<PaginatedOrders>(`/admin/orders${queryString(params)}`);
+    return {
+      ...data,
+      orders: data.orders.map(normalizeOrder),
+    };
   },
   users: async (
     params: {

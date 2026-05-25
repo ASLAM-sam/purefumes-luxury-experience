@@ -36,6 +36,7 @@ import { Route as ProductIdRouteImport } from './routes/product.$id'
 import { Route as LoginSuccessRouteImport } from './routes/login.success'
 import { Route as CategorySlugRouteImport } from './routes/category.$slug'
 import { Route as BrandBrandIdRouteImport } from './routes/brand.$brandId'
+import { Route as AuthGoogleRouteImport } from './routes/auth.google'
 import { Route as AdminUsersRouteImport } from './routes/admin.users'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminRequestsRouteImport } from './routes/admin.requests'
@@ -186,6 +187,11 @@ const BrandBrandIdRoute = BrandBrandIdRouteImport.update({
   path: '/brand/$brandId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthGoogleRoute = AuthGoogleRouteImport.update({
+  id: '/auth/google',
+  path: '/auth/google',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminUsersRoute = AdminUsersRouteImport.update({
   id: '/users',
   path: '/users',
@@ -292,6 +298,7 @@ export interface FileRoutesByFullPath {
   '/admin/requests': typeof AdminRequestsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/auth/google': typeof AuthGoogleRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/login/success': typeof LoginSuccessRoute
@@ -334,6 +341,7 @@ export interface FileRoutesByTo {
   '/admin/requests': typeof AdminRequestsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/auth/google': typeof AuthGoogleRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/login/success': typeof LoginSuccessRoute
@@ -378,6 +386,7 @@ export interface FileRoutesById {
   '/admin/requests': typeof AdminRequestsRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/users': typeof AdminUsersRoute
+  '/auth/google': typeof AuthGoogleRoute
   '/brand/$brandId': typeof BrandBrandIdRoute
   '/category/$slug': typeof CategorySlugRoute
   '/login/success': typeof LoginSuccessRoute
@@ -423,6 +432,7 @@ export interface FileRouteTypes {
     | '/admin/requests'
     | '/admin/settings'
     | '/admin/users'
+    | '/auth/google'
     | '/brand/$brandId'
     | '/category/$slug'
     | '/login/success'
@@ -465,6 +475,7 @@ export interface FileRouteTypes {
     | '/admin/requests'
     | '/admin/settings'
     | '/admin/users'
+    | '/auth/google'
     | '/brand/$brandId'
     | '/category/$slug'
     | '/login/success'
@@ -508,6 +519,7 @@ export interface FileRouteTypes {
     | '/admin/requests'
     | '/admin/settings'
     | '/admin/users'
+    | '/auth/google'
     | '/brand/$brandId'
     | '/category/$slug'
     | '/login/success'
@@ -540,6 +552,7 @@ export interface RootRouteChildren {
   TermsAndConditionsRoute: typeof TermsAndConditionsRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
   WishlistRoute: typeof WishlistRoute
+  AuthGoogleRoute: typeof AuthGoogleRoute
   BrandBrandIdRoute: typeof BrandBrandIdRoute
   CategorySlugRoute: typeof CategorySlugRoute
   ProductIdRoute: typeof ProductIdRoute
@@ -736,6 +749,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BrandBrandIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/auth/google': {
+      id: '/auth/google'
+      path: '/auth/google'
+      fullPath: '/auth/google'
+      preLoaderRoute: typeof AuthGoogleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/users': {
       id: '/admin/users'
       path: '/users'
@@ -918,6 +938,7 @@ const rootRouteChildren: RootRouteChildren = {
   TermsAndConditionsRoute: TermsAndConditionsRoute,
   VerifyEmailRoute: VerifyEmailRoute,
   WishlistRoute: WishlistRoute,
+  AuthGoogleRoute: AuthGoogleRoute,
   BrandBrandIdRoute: BrandBrandIdRoute,
   CategorySlugRoute: CategorySlugRoute,
   ProductIdRoute: ProductIdRoute,

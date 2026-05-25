@@ -1,6 +1,6 @@
 import express from "express";
 import { body } from "express-validator";
-import { adminAuth, requireAuth } from "../middlewares/authMiddleware.js";
+import { adminAuth } from "../middlewares/authMiddleware.js";
 import {
   createRazorpayOrder,
   getPaymentModeSettings,
@@ -70,7 +70,6 @@ router.get("/razorpay/config", getRazorpayConfig);
 
 checkoutPaymentRoutes.post(
   "/create-order",
-  requireAuth,
   orderLimiter,
   createRazorpayOrderValidation,
   validateRequest,
@@ -78,7 +77,6 @@ checkoutPaymentRoutes.post(
 );
 checkoutPaymentRoutes.post(
   "/verify-payment",
-  requireAuth,
   orderLimiter,
   verifyRazorpayPaymentValidation,
   validateRequest,

@@ -2,12 +2,12 @@ import mongoose from "mongoose";
 import connectDB from "./config/db.js";
 import env from "./config/env.js";
 import logger from "./config/logger.js";
-import { getGoogleOAuthConfigStatus } from "./config/passport.js";
 import { closeRedis } from "./config/redis.js";
 import { captureException, flushSentry, initSentry } from "./config/sentry.js";
 import { closeEmailQueue } from "./queues/emailQueue.js";
 import { ensureAdminAccount } from "./services/auth/adminBootstrapService.js";
 import { ensureDefaultBanners } from "./services/bannerService.js";
+import { ensureCategoryIndexes } from "./models/Category.js";
 
 initSentry();
 
@@ -60,10 +60,11 @@ const startServer = async () => {
     const { default: app } = await import("./app.js");
 
     await connectDB();
+    // Ensure category collection has only the proper unique index on `name`.
+    // This routine is resilient and won't crash startup if indexes cannot be modified.
+    await ensureCategoryIndexes();
     await ensureAdminAccount();
     await ensureDefaultBanners();
-
-    logger.info("Google OAuth configuration status", getGoogleOAuthConfigStatus());
 
     if (env.PAYMENT_BYPASS_ENABLED) {
       logger.warn("TEST PAYMENT MODE ENABLED", {
@@ -84,6 +85,9 @@ const startServer = async () => {
     apiServer = app.listen(env.PORT, () => {
       logger.info("Purefumes Hyderabad API running", { port: env.PORT });
     });
+    apiServer.keepAliveTimeout = 65_000;
+    apiServer.headersTimeout = 70_000;
+    apiServer.requestTimeout = 60_000;
 
     process.on("SIGTERM", () => shutdown("SIGTERM"));
     process.on("SIGINT", () => shutdown("SIGINT"));

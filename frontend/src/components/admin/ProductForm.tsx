@@ -558,7 +558,7 @@ export const ProductForm = memo(function ProductForm({
       payload.append("price", String(price));
       payload.append("stock", String(stock));
       payload.append("description", form.description.trim());
-      payload.append("type", form.type.trim());
+      payload.append("type", String(form.type || "").trim());
       payload.append("isLatest", String(Boolean(form.isLatest)));
       appendJson(payload, "topNotes", form.topNotes);
       appendJson(payload, "middleNotes", form.middleNotes);

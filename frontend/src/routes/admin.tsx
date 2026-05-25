@@ -1,5 +1,6 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { accountApi } from "@/services/api";
+import { authSessionQueryOptions } from "@/lib/query/auth";
+import { queryClient } from "@/lib/query/client";
 
 export const Route = createFileRoute("/admin")({
   beforeLoad: async ({ location }) => {
@@ -7,7 +8,7 @@ export const Route = createFileRoute("/admin")({
       return;
     }
 
-    const user = await accountApi.me();
+    const user = await queryClient.ensureQueryData(authSessionQueryOptions());
     if (!user || user.role !== "admin") {
       throw redirect({
         to: "/admin/login",

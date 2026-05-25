@@ -1,4 +1,4 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { LogIn } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/common/Button";
@@ -14,7 +14,10 @@ import {
 import { accountApi } from "@/services/api";
 
 export const Route = createFileRoute("/login")({
-  component: LoginPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/" });
+  },
+  component: () => null,
 });
 
 const getRedirectPath = () => {
