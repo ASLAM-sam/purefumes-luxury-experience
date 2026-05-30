@@ -610,15 +610,15 @@ const syncProductBrandFields = async (
 
 const CATEGORY_FILTER_ALIASES = {
   designer: {
-    slugs: ["designer", "designer-fragrances"],
+    slugs: ["designer", "designer-fragrances", "designer-perfumes"],
     names: ["Designer", "Designer Fragrances"],
   },
   "middle-eastern": {
-    slugs: ["middle-eastern", "middle-eastern-fragrances"],
+    slugs: ["middle-eastern", "middle-eastern-fragrances", "middle-eastern-perfumes"],
     names: ["Middle Eastern", "Middle Eastern Fragrances"],
   },
   niche: {
-    slugs: ["niche", "niche-fragrances"],
+    slugs: ["niche", "niche-fragrances", "niche-perfumes"],
     names: ["Niche", "Niche Fragrances"],
   },
 };
