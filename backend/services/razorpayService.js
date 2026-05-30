@@ -11,6 +11,11 @@ import { buildPreparedOrderItems } from "./pricingService.js";
 let cachedClient = null;
 let cachedKeyId = "";
 let cachedKeySecret = "";
+const SHIPPING_THRESHOLD = 2499;
+const SHIPPING_CHARGE = 100;
+
+const calculateShippingCharge = (subtotalAfterDiscount) =>
+  normalizeMoney(subtotalAfterDiscount) <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
 
 const getCredentials = () => {
   const keyId = String(env.RAZORPAY_KEY_ID || "").trim();
@@ -80,6 +85,8 @@ export const buildCheckoutTotals = async ({ items, couponCode }) => {
     totalAmount = normalizeMoney(couponResult.finalTotal);
   }
 
+  const shippingCharge = calculateShippingCharge(totalAmount);
+  totalAmount = normalizeMoney(totalAmount + shippingCharge);
   const amount = toPaise(totalAmount);
 
   if (!Number.isInteger(amount) || amount < 100) {
@@ -90,6 +97,7 @@ export const buildCheckoutTotals = async ({ items, couponCode }) => {
     preparedItems,
     subtotalAmount,
     discountAmount,
+    shippingCharge,
     totalAmount,
     couponCode: appliedCouponCode,
     amount,
@@ -126,6 +134,7 @@ export const createRazorpayCheckoutOrder = async ({
       receipt: order.receipt || orderReceipt,
       subtotalAmount: totals.subtotalAmount,
       discountAmount: totals.discountAmount,
+      shippingCharge: totals.shippingCharge,
       totalAmount: totals.totalAmount,
       couponCode: totals.couponCode,
     };

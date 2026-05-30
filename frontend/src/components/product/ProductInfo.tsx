@@ -157,7 +157,7 @@ export const ProductInfo = memo(function ProductInfo({
 
               {savings > 0 ? (
                 <div className="rounded-full bg-gold px-4 py-2 text-[0.65rem] uppercase tracking-[0.24em] text-navy">
-                  Save {savings}%
+                  {savings}% OFF
                 </div>
               ) : null}
             </div>

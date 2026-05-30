@@ -14,6 +14,8 @@ export const Route = createFileRoute("/cart")({
 });
 
 const formatCurrency = formatINR;
+const SHIPPING_THRESHOLD = 2499;
+const SHIPPING_CHARGE = 100;
 
 function CartPage() {
   const {
@@ -33,6 +35,8 @@ function CartPage() {
   } = useApp();
   const nav = useNavigate();
   const [couponCode, setCouponCode] = useState(cartCouponCode);
+  const shippingCharge = cartFinalTotal <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
+  const payableTotal = cartFinalTotal + shippingCharge;
 
   useEffect(() => {
     setCouponCode(cartCouponCode);
@@ -190,13 +194,17 @@ function CartPage() {
                       -{formatCurrency(cartDiscount)}
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span>Shipping Charges</span>
+                    <span>{shippingCharge > 0 ? formatCurrency(shippingCharge) : "Free"}</span>
+                  </div>
                 </div>
                 <div className="mt-5 flex items-center justify-between border-t border-border pt-5">
                   <span className="text-xs uppercase tracking-[0.25em] text-navy/60">
                     Final Total
                   </span>
                   <span className="font-display text-3xl text-navy">
-                    {formatCurrency(cartFinalTotal)}
+                    {formatCurrency(payableTotal)}
                   </span>
                 </div>
                 <div className="mt-5 border-t border-border pt-5">

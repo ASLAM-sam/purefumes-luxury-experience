@@ -181,6 +181,11 @@ const orderSchema = new mongoose.Schema(
       default: 0,
       min: [0, "Discount amount cannot be negative"],
     },
+    shippingCharge: {
+      type: Number,
+      default: 0,
+      min: [0, "Shipping charge cannot be negative"],
+    },
     couponCode: {
       type: String,
       trim: true,
@@ -351,8 +356,9 @@ orderSchema.pre("validate", function normalizeOrder(next) {
         : (this.totalAmount ?? 0)),
   );
   this.discountAmount = normalizeMoney(this.discountAmount ?? 0);
+  this.shippingCharge = normalizeMoney(this.shippingCharge ?? 0);
   this.totalAmount = normalizeMoney(
-    this.totalAmount ?? this.subtotalAmount - this.discountAmount,
+    this.totalAmount ?? this.subtotalAmount - this.discountAmount + this.shippingCharge,
   );
   this.couponCode = String(this.couponCode || "")
     .trim()

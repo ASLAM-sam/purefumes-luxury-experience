@@ -25,6 +25,7 @@ type FormState = Omit<
   | "brandDetails"
 > & {
   price: string;
+  originalPrice: string;
   stock: string;
   sizes: FormSize[];
 };
@@ -55,6 +56,7 @@ const createEmptyForm = (): FormState => ({
   categorySlug: "",
   categoryDetails: null,
   price: "",
+  originalPrice: "",
   isLatest: false,
   description: "",
   type: "",
@@ -91,6 +93,7 @@ const toFormState = (product?: Product): FormState => {
     ...rest
   } = product;
   const price = Number(product.price ?? product.sizes?.[0]?.price ?? 0);
+  const originalPrice = Number(product.originalPrice ?? 0);
 
   return {
     ...createEmptyForm(),
@@ -109,6 +112,8 @@ const toFormState = (product?: Product): FormState => {
     primaryCategory: product.primaryCategory || product.categoryId || "",
     category: product.category || product.categoryNames?.join(", ") || "",
     price: Number.isFinite(price) ? String(price) : "",
+    originalPrice:
+      Number.isFinite(originalPrice) && originalPrice > 0 ? String(originalPrice) : "",
     sizes: product.sizes?.length
       ? product.sizes.map((size) => ({
           size: size.size,
@@ -135,6 +140,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 const inputCls =
   "w-full px-4 py-2.5 rounded-lg bg-beige/40 border border-border focus:border-navy outline-none text-sm";
+const TYPE_OPTIONS = ["Retail", "Tester", "Tester without cap", "Unboxed"] as const;
 
 function CSVInput({
   value,
@@ -283,6 +289,11 @@ export const ProductForm = memo(function ProductForm({
     if (value !== "" && Number(value) < 0) return;
 
     set("stock", value);
+  };
+
+  const setOriginalPrice = (value: string) => {
+    if (value !== "" && Number(value) < 0) return;
+    set("originalPrice", value);
   };
 
   const selectedCategoryValue = useMemo(() => {
@@ -484,6 +495,8 @@ export const ProductForm = memo(function ProductForm({
         .filter((size) => size.size);
       const price = Number(form.price);
       const stock = Number(form.stock);
+      const originalPrice =
+        form.originalPrice.trim() === "" ? null : Number(form.originalPrice);
       const selectedBrand = availableBrands.find((brand) => getBrandId(brand) === form.brandId);
       const selectedCategories = categories.filter((category) =>
         form.categoryIds.includes(category.id),
@@ -498,7 +511,11 @@ export const ProductForm = memo(function ProductForm({
       }
 
       if (form.price.trim() === "" || !Number.isFinite(price) || price < 0) {
-        throw new Error("Enter a valid product price.");
+        throw new Error("Enter a valid selling price.");
+      }
+
+      if (originalPrice !== null && (!Number.isFinite(originalPrice) || originalPrice <= 0)) {
+        throw new Error("Original Price / MRP must be greater than 0.");
       }
 
       if (
@@ -556,6 +573,9 @@ export const ProductForm = memo(function ProductForm({
       payload.append("categoryIds", selectedCategories.map((category) => category.id).join(","));
       payload.append("categories", selectedCategories.map((category) => category.name).join(" | "));
       payload.append("price", String(price));
+      if (originalPrice !== null) {
+        payload.append("originalPrice", String(originalPrice));
+      }
       payload.append("stock", String(stock));
       payload.append("description", form.description.trim());
       payload.append("type", String(form.type || "").trim());
@@ -695,7 +715,7 @@ export const ProductForm = memo(function ProductForm({
           </div>
           {categoriesError ? <p className="mt-2 text-xs text-red-600">{categoriesError}</p> : null}
         </Field>
-        <Field label="Price">
+        <Field label="Selling Price / Discount Price">
           <input
             required
             type="number"
@@ -705,6 +725,23 @@ export const ProductForm = memo(function ProductForm({
             onChange={(e) => setPrice(e.target.value)}
             className={inputCls}
           />
+        </Field>
+        <Field label="Original Price / MRP">
+          <>
+            <input
+              type="number"
+              min={0}
+              step="0.01"
+              value={form.originalPrice}
+              onChange={(e) => setOriginalPrice(e.target.value)}
+              className={inputCls}
+            />
+            {form.originalPrice.trim() !== "" && Number(form.originalPrice) < Number(form.price) ? (
+              <p className="mt-2 text-xs text-amber-700">
+                Warning: Original Price is less than Selling Price.
+              </p>
+            ) : null}
+          </>
         </Field>
         <Field label="Stock">
           <input
@@ -848,12 +885,18 @@ export const ProductForm = memo(function ProductForm({
       </Field>
 
       <Field label="Type">
-        <input
+        <select
           value={form.type || ""}
           onChange={(e) => set("type", e.target.value)}
-          placeholder="Fresh, Woody, Summer"
           className={inputCls}
-        />
+        >
+          <option value="">Select type</option>
+          {TYPE_OPTIONS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
       </Field>
 
       <fieldset className="rounded-lg border border-border p-5">

@@ -1,0 +1,43 @@
+AKIF CHANGES - 2026-05-30
+
+Implemented exactly 2 requested changes with backward compatibility:
+
+1) Product Pricing Fields
+- Kept existing `price` as Selling Price (billing price).
+- Added optional `Original Price / MRP` input in admin product form.
+- Renamed admin label from `Price` to `Selling Price / Discount Price`.
+- Added validation:
+  - Selling price required and valid.
+  - Original price optional; if entered, must be > 0.
+  - Warning shown when Original Price < Selling Price (no crash).
+- Existing products continue working even if originalPrice is missing.
+- Discount display is auto-calculated from:
+  ((originalPrice - sellingPrice) / originalPrice) * 100
+- Display behavior:
+  - Show strike-through original + selling + `XX% OFF` only when originalPrice > sellingPrice.
+  - Otherwise show selling only.
+
+2) Shipping Charge Rule
+- Added shipping rule:
+  - subtotalAfterDiscount <= 2499 => shipping = 100
+  - subtotalAfterDiscount > 2499 => shipping = 0
+- Applied in backend order creation and Razorpay order amount.
+- Order stores shippingCharge and includes it in totalAmount.
+- Added shipping display in cart, checkout, and admin order view.
+
+Files changed by this task:
+- backend/models/Order.js
+- backend/services/orders/orderService.js
+- backend/services/razorpayService.js
+- frontend/src/components/admin/ProductForm.tsx
+- frontend/src/components/product/ProductCard.tsx
+- frontend/src/components/product/ProductInfo.tsx
+- frontend/src/routes/cart.tsx
+- frontend/src/routes/checkout.tsx
+- frontend/src/routes/admin.orders.tsx
+- frontend/src/services/api.ts
+
+Notes:
+- Existing `price` field was not renamed/removed.
+- Original price is display-only and NOT used for billing.
+- Billing/payment totals remain based on selling price + shipping rule.

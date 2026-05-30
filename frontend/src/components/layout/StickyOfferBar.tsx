@@ -1,7 +1,7 @@
 import { memo } from "react";
 
 const promoMessage =
-  "Luxury Fragrances Delivered Across India + Free Shipping Above ₹2500";
+  "Luxury Fragrances Delivered Across India + Free Shipping Above ₹2499";
 
 export const StickyOfferBar = memo(function StickyOfferBar() {
   return (

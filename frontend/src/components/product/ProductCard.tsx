@@ -105,7 +105,7 @@ export const ProductCard = memo(function ProductCard({
 
             {discountPercentage > 0 ? (
               <span className="absolute left-3 top-3 bg-[#7b5136] px-2.5 py-1 text-[clamp(0.56rem,0.12vw+0.54rem,0.66rem)] uppercase tracking-[0.12em] text-[#fffaf4]">
-                -{discountPercentage}%
+                {discountPercentage}% OFF
               </span>
             ) : null}
 
@@ -157,12 +157,12 @@ export const ProductCard = memo(function ProductCard({
           ) : null}
 
           <div className="product-price mt-2 flex items-center justify-center gap-2 text-[clamp(0.88rem,0.18vw+0.84rem,1rem)] text-[#5b3a29]">
-            <span className="font-medium">{formatINR(startPrice)}</span>
             {hasDiscount ? (
               <span className="text-xs text-[#8b6b56]/70 line-through">
                 {formatINR(originalPrice)}
               </span>
             ) : null}
+            <span className="font-medium">{formatINR(startPrice)}</span>
           </div>
 
           {showSize && featuredSize && (

@@ -313,6 +313,12 @@ function AdminOrders() {
                         {order.brand || "Brand unavailable"} - {order.size || "Size unavailable"}
                       </p>
                       <p>Payment Status: {formatPaymentStatusLabel(order.paymentStatus)}</p>
+                      <p>
+                        Shipping:{" "}
+                        {order.shippingCharge && order.shippingCharge > 0
+                          ? formatINR(order.shippingCharge)
+                          : "Free"}
+                      </p>
                       <p className="font-semibold text-gold">{formatINR(price)}</p>
                     </div>
                   </article>
@@ -398,6 +404,12 @@ function AdminOrders() {
                       </td>
                       <td className="px-6 py-4 text-navy/70">
                         {formatPaymentStatusLabel(order.paymentStatus)}
+                        <p className="mt-1 text-xs text-navy/55">
+                          Shipping:{" "}
+                          {order.shippingCharge && order.shippingCharge > 0
+                            ? formatINR(order.shippingCharge)
+                            : "Free"}
+                        </p>
                       </td>
                       <td className="px-6 py-4">
                         <select

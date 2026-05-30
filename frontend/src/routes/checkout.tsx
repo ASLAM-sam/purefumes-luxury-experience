@@ -29,6 +29,8 @@ import { formatINR, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/m
 import { couponsApi, ordersApi, paymentsApi, type Order, type PaymentConfig } from "@/services/api";
 
 const RAZORPAY_URL = "https://checkout.razorpay.com/v1/checkout.js";
+const SHIPPING_THRESHOLD = 2499;
+const SHIPPING_CHARGE = 100;
 
 type RazorpaySuccessResponse = {
   razorpay_payment_id: string;
@@ -242,6 +244,9 @@ const retryOperation = async <T,>(operation: () => Promise<T>, retries = 1): Pro
   }
 };
 
+const calculateShippingCharge = (subtotalAfterDiscount: number) =>
+  normalizeMoney(subtotalAfterDiscount) <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
+
 const orderItemsForSuccess = (order: Order) =>
   Array.isArray(order.items)
     ? order.items.map((item) => ({
@@ -367,7 +372,9 @@ function CheckoutPage() {
     return multiplyMoney(size.price, quantity);
   }, [quantity, size]);
   const discount = appliedCoupon?.discount ?? 0;
-  const finalTotal = appliedCoupon?.finalTotal ?? subtotal;
+  const discountedTotal = appliedCoupon?.finalTotal ?? subtotal;
+  const shippingCharge = calculateShippingCharge(discountedTotal);
+  const finalTotal = normalizeMoney(discountedTotal + shippingCharge);
 
   useEffect(() => {
     if (appliedCoupon && appliedCoupon.subtotal !== subtotal) {
@@ -962,6 +969,10 @@ function CheckoutPage() {
                     -{formatINR(discount)}
                   </span>
                 </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Shipping Charges</span>
+                  <span>{shippingCharge > 0 ? formatINR(shippingCharge) : "Free"}</span>
+                </div>
               </div>
               <div className="mt-5 border-t border-beige/10 pt-5">
                 <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">
@@ -1040,6 +1051,8 @@ function CartCheckout() {
   const nav = useNavigate();
   const { addNotification } = useNotification();
   const { cart, cartTotal, cartDiscount, cartFinalTotal, cartCouponCode, clearCart } = useApp();
+  const cartShippingCharge = calculateShippingCharge(cartFinalTotal);
+  const cartPayableTotal = normalizeMoney(cartFinalTotal + cartShippingCharge);
   const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(null));
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);
@@ -1433,12 +1446,16 @@ function CartCheckout() {
                   <span>Discount</span>
                   <span>-{formatINR(cartDiscount)}</span>
                 </div>
+                <div className="mt-3 flex justify-between">
+                  <span>Shipping Charges</span>
+                  <span>{cartShippingCharge > 0 ? formatINR(cartShippingCharge) : "Free"}</span>
+                </div>
               </div>
               <div className="mt-5 border-t border-beige/10 pt-5">
                 <p className="text-[0.6rem] uppercase tracking-[0.28em] text-beige/55">
                   Final Total
                 </p>
-                <p className="mt-2 font-display text-4xl text-beige">{formatINR(cartFinalTotal)}</p>
+                <p className="mt-2 font-display text-4xl text-beige">{formatINR(cartPayableTotal)}</p>
                 {isBypassMode ? (
                   <p className="mt-3 text-xs uppercase tracking-[0.2em] text-amber-300">
                     TEST MODE

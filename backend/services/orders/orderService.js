@@ -52,6 +52,11 @@ const normalizePhone = (value = "") => String(value || "").trim();
 
 const isTestPaymentMode = (paymentMode = "live") => paymentMode === "test";
 const PAID_CONFIRMED_STATUS = "Confirmed";
+const SHIPPING_THRESHOLD = 2499;
+const SHIPPING_CHARGE = 100;
+
+const calculateShippingCharge = (subtotalAfterDiscount = 0) =>
+  normalizeMoney(subtotalAfterDiscount) <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
 
 const buildOrderAddressEntry = (shippingAddress = {}) => {
   const line1 = String(shippingAddress.line1 || "").trim();
@@ -366,6 +371,7 @@ export const serializeOrder = (order) => {
         0,
     ),
     discountAmount: normalizeMoney(raw.discountAmount ?? 0),
+    shippingCharge: normalizeMoney(raw.shippingCharge ?? 0),
     couponCode: raw.couponCode || "",
     paymentStatus: resolveDisplayPaymentStatus(raw),
     status: normalizeDisplayStatus(raw),
@@ -456,6 +462,8 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
         discountAmount = couponResult.discount;
         totalAmount = couponResult.finalTotal;
       }
+      const shippingCharge = calculateShippingCharge(totalAmount);
+      totalAmount = normalizeMoney(totalAmount + shippingCharge);
 
       if (
         isRazorpayOrderInput(orderInput) &&
@@ -519,6 +527,7 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
             totalAmount,
             subtotalAmount,
             discountAmount,
+            shippingCharge,
             couponCode,
             paymentId: String(orderInput.paymentId || "").trim(),
             paymentMethod: String(orderInput.paymentMethod || "").trim(),

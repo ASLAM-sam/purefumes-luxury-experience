@@ -275,6 +275,7 @@ export type Order = {
   totalAmount: number;
   subtotalAmount?: number;
   discountAmount?: number;
+  shippingCharge?: number;
   couponCode?: string;
   status: "Pending" | "Confirmed" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
   orderStatus?: "Pending" | "Confirmed" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
@@ -572,6 +573,7 @@ export type RazorpayOrderResponse = {
   receipt?: string;
   subtotalAmount?: number;
   discountAmount?: number;
+  shippingCharge?: number;
   totalAmount?: number;
   couponCode?: string;
 };
@@ -1482,6 +1484,7 @@ const normalizeOrder = (order: Order): Order => {
     totalAmount: normalizeMoney(order.totalAmount ?? order.price ?? firstItem?.price),
     subtotalAmount: normalizeMoney(order.subtotalAmount ?? order.totalAmount),
     discountAmount: normalizeMoney(order.discountAmount ?? 0),
+    shippingCharge: normalizeMoney(order.shippingCharge ?? 0),
     couponCode: order.couponCode ?? "",
     publicOrderId: String(order.publicOrderId || "").trim(),
     status: displayStatus,
