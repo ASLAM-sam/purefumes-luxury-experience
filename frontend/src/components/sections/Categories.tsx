@@ -6,16 +6,11 @@ import { SectionTitle } from "@/components/common/SectionTitle";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
 import type { Category } from "@/data/categories";
 import { filterStorefrontCategories } from "@/lib/categories";
-import {
-  getStorefrontCategoryCardImage,
-  storefrontFallbackCategories,
-} from "@/lib/static-image-overrides";
 import { categoriesApi } from "@/services/api";
 
 export const Categories = memo(function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
-  const sourceCategories = categories.length ? categories : storefrontFallbackCategories;
-  const visibleCategories = filterStorefrontCategories(sourceCategories);
+  const visibleCategories = filterStorefrontCategories(categories);
 
   useEffect(() => {
     let active = true;
@@ -42,7 +37,7 @@ export const Categories = memo(function Categories() {
         <SectionTitle
           eyebrow="Curated Collections"
           title="Explore Our Universe"
-          subtitle="Every fragrance family on the storefront now flows from admin-managed categories."
+          subtitle="Every fragrance tells a story. Find the scent that becomes part of yours."
         />
 
         {visibleCategories.length > 0 ? (
@@ -61,8 +56,7 @@ export const Categories = memo(function Categories() {
                 ? visibleCategories.filter((category) => category.featured)
                 : visibleCategories
               ).map((category, index) => {
-                const fixedImage = getStorefrontCategoryCardImage(category);
-                const image = fixedImage || category.image || "";
+                const image = category.image || "";
 
                 return (
                   <motion.div
@@ -77,29 +71,15 @@ export const Categories = memo(function Categories() {
                       className="group relative block aspect-[4/5] overflow-hidden rounded-[clamp(1.3rem,2vw,1.8rem)] bg-[#efe7dc] shadow-soft transition duration-300 ease-in-out hover:-translate-y-1 hover:shadow-[0_28px_60px_-38px_rgba(91,58,41,0.38)]"
                     >
                       {image ? (
-                        fixedImage ? (
-                          <img
-                            src={image}
-                            alt={category.name}
-                            width={1024}
-                            height={1280}
-                            loading="eager"
-                            decoding="async"
-                            fetchPriority={index < 3 ? "high" : "auto"}
-                            sizes="(max-width: 639px) calc(100vw - 2.5rem), (max-width: 1023px) calc((100vw - 3.75rem) / 2), 24vw"
-                            className="h-full w-full object-cover object-center transition duration-700 ease-out group-hover:scale-105"
-                          />
-                        ) : (
-                          <OptimizedImage
-                            src={image}
-                            alt={category.name}
-                            width={1024}
-                            height={1280}
-                            sizes="(max-width: 639px) calc(100vw - 2.5rem), (max-width: 1023px) calc((100vw - 3.75rem) / 2), 24vw"
-                            wrapperClassName="h-full w-full"
-                            className="h-full w-full object-cover object-center transition duration-700 ease-out group-hover:scale-105"
-                          />
-                        )
+                        <OptimizedImage
+                          src={image}
+                          alt={category.name}
+                          width={1024}
+                          height={1280}
+                          sizes="(max-width: 639px) calc(100vw - 2.5rem), (max-width: 1023px) calc((100vw - 3.75rem) / 2), 24vw"
+                          wrapperClassName="h-full w-full"
+                          className="h-full w-full object-cover object-center transition duration-700 ease-out group-hover:scale-105"
+                        />
                       ) : (
                         <div className="flex h-full w-full items-center justify-center bg-[#efe7dc] px-6 text-center font-display text-4xl text-[#5b3a29]/28">
                           {category.name}

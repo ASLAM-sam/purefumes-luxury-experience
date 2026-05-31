@@ -4,7 +4,7 @@ import Product from "../models/Product.js";
 import app from "../app.js";
 
 const createCategoryBackedProduct = async ({
-  categoryName = "Middle Eastern",
+  categoryName = "Middle Eastern Fragrances",
   ...product
 }) => {
   const category = await Category.create({ name: categoryName });

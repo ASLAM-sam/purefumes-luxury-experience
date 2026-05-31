@@ -38,7 +38,7 @@ type SelectedPerfume = {
 
 const initialForm: CouponFormState = {
   code: "",
-  discountType: "percentage",
+  discountType: "fixed",
   discountValue: "",
   minOrderAmount: "",
   maxDiscount: "",
@@ -404,14 +404,14 @@ function AdminCoupons() {
                   onChange={updateForm("discountType")}
                   className="w-full rounded-lg border border-border bg-beige/30 px-4 py-3 text-sm text-navy outline-none transition focus:border-gold"
                 >
+                  <option value="fixed">Fixed Rupees</option>
                   <option value="percentage">Percentage</option>
-                  <option value="fixed">Fixed</option>
                 </select>
               </div>
 
               <div>
                 <span className="mb-2 block text-xs uppercase tracking-[0.22em] text-navy/60">
-                  Discount Value
+                  {form.discountType === "fixed" ? "Discount Amount (₹)" : "Discount Percent (%)"}
                 </span>
                 <input
                   required
@@ -420,7 +420,7 @@ function AdminCoupons() {
                   step="0.01"
                   value={form.discountValue}
                   onChange={updateForm("discountValue")}
-                  placeholder={form.discountType === "percentage" ? "10" : "500"}
+                  placeholder={form.discountType === "percentage" ? "10" : "100"}
                   className="w-full rounded-lg border border-border bg-beige/30 px-4 py-3 text-sm text-navy outline-none transition focus:border-gold"
                 />
               </div>

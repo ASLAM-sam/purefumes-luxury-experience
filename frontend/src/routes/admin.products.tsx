@@ -222,11 +222,11 @@ function AdminProducts() {
           <button
             type="button"
             onClick={() => setBulkOpen(true)}
-            disabled={brandsLoading}
+            disabled={brandsLoading || categoriesLoading}
             className="inline-flex items-center justify-center gap-2 rounded-lg border border-border bg-card px-5 py-3 text-xs uppercase tracking-[0.25em] text-navy transition hover:bg-beige/40 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <FileSpreadsheet className="h-4 w-4" />
-            {brandsLoading ? "Loading Brands..." : "Bulk Upload"}
+            {brandsLoading || categoriesLoading ? "Loading Catalog..." : "Bulk Upload"}
           </button>
           <Link
             to="/admin/products/new"
@@ -441,6 +441,7 @@ function AdminProducts() {
         onOpenChange={setBulkOpen}
         existingProducts={list}
         existingBrands={brands}
+        existingCategories={categories}
         onImported={handleImported}
       />
     </AdminShell>

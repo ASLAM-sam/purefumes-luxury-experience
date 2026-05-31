@@ -1,17 +1,13 @@
 import { memo, useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Search } from "lucide-react";
-import { alphabet, type Brand, type BrandCategory } from "@/data/brands";
+import { alphabet, type Brand } from "@/data/brands";
+import type { Category } from "@/data/categories";
 import { Skeleton } from "@/components/ui/skeleton";
-import { brandsApi } from "@/services/api";
+import { filterBrandsByCategory } from "@/lib/catalog-relations";
+import { filterStorefrontCategories } from "@/lib/categories";
+import { brandsApi, categoriesApi } from "@/services/api";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
-
-const CATEGORY_OPTIONS: Array<{ label: string; value: "all" | BrandCategory }> = [
-  { label: "All", value: "all" },
-  { label: "Middle Eastern", value: "middle-eastern" },
-  { label: "Designer", value: "designer" },
-  { label: "Niche", value: "niche" },
-];
 
 const getBrandLetter = (brand: Brand) => (brand.fallbackLetter || brand.name.charAt(0) || "#").toUpperCase();
 
@@ -21,10 +17,11 @@ export const BrandDirectory = memo(function BrandDirectory({
   searchable?: boolean;
 }) {
   const [brands, setBrands] = useState<Brand[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [letter, setLetter] = useState<string | null>(null);
-  const [category, setCategory] = useState<"all" | BrandCategory>("all");
+  const [category, setCategory] = useState("all");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
 
@@ -70,9 +67,44 @@ export const BrandDirectory = memo(function BrandDirectory({
     };
   }, []);
 
+  useEffect(() => {
+    let isActive = true;
+
+    categoriesApi
+      .list()
+      .then((nextCategories) => {
+        if (isActive) {
+          setCategories(filterStorefrontCategories(nextCategories));
+        }
+      })
+      .catch(() => {
+        if (isActive) setCategories([]);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  const activeCategory = useMemo(
+    () => categories.find((item) => item.id === category || item.slug === category) || null,
+    [categories, category],
+  );
+
   const categoryBrands = useMemo(
-    () => (category === "all" ? brands : brands.filter((brand) => brand.category === category)),
-    [brands, category],
+    () => (category === "all" ? brands : filterBrandsByCategory(brands, activeCategory || category)),
+    [activeCategory, brands, category],
+  );
+
+  const categoryOptions = useMemo(
+    () => [
+      { label: "All", value: "all" },
+      ...categories.map((item) => ({
+        label: item.name,
+        value: item.id || item.slug,
+      })),
+    ],
+    [categories],
   );
 
   const availableLetters = useMemo(
@@ -133,7 +165,7 @@ export const BrandDirectory = memo(function BrandDirectory({
         </div>
 
         <div className="mt-5 flex flex-wrap gap-2">
-          {CATEGORY_OPTIONS.map((option) => {
+          {categoryOptions.map((option) => {
             const active = category === option.value;
 
             return (

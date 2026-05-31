@@ -49,7 +49,7 @@ describe("Cart API", () => {
     const product = await createCategoryBackedProduct({
       name: "Oud Reserve",
       brand: "Purefumes",
-      categoryName: "Middle Eastern",
+      categoryName: "Middle Eastern Fragrances",
       price: 2499,
       stock: 20,
       sizes: [{ size: "50ml", price: 2499 }],
@@ -100,7 +100,7 @@ describe("Cart API", () => {
     const product = await createCategoryBackedProduct({
       name: "Amber Silk",
       brand: "Purefumes",
-      categoryName: "Designer",
+      categoryName: "Designer Fragrances",
       price: 1999,
       stock: 10,
       sizes: [{ size: "100ml", price: 1999 }],

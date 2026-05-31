@@ -105,7 +105,13 @@ router.post(
       .isArray({ min: 1, max: 500 })
       .withMessage("brands must be a non-empty array"),
     body("brands.*.name").optional().isLength({ max: 120 }),
-    body("brands.*.category").optional().isLength({ max: 40 }),
+    body("brands.*.category").optional().isLength({ max: 120 }),
+    body("brands.*.categoryId")
+      .optional({ values: "falsy" })
+      .isMongoId()
+      .withMessage("Valid category id is required"),
+    body("brands.*.categoryName").optional().isLength({ max: 120 }),
+    body("brands.*.categorySlug").optional().isLength({ max: 120 }),
     body("brands.*.logo").optional({ values: "falsy" }).isLength({ max: 1000 }),
   ],
   validateRequest,

@@ -45,23 +45,7 @@ const toCategoryId = (value) => {
   return mongoose.Types.ObjectId.isValid(raw) ? raw : "";
 };
 
-const getPublicCategorySlug = (name = "") => {
-  const slug = createCategorySlug(name);
-
-  if (slug === "designer" || slug === "designer-fragrances") {
-    return "designer";
-  }
-
-  if (slug === "middle-eastern" || slug === "middle-eastern-fragrances") {
-    return "middle-eastern";
-  }
-
-  if (slug === "niche" || slug === "niche-fragrances") {
-    return "niche";
-  }
-
-  return slug;
-};
+const getPublicCategorySlug = (name = "") => createCategorySlug(name);
 
 const buildVisibleCategoryFilter = () => ({
   isDeleted: { $ne: true },

@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileSpreadsheet, PencilLine, Trash2, Upload } from "lucide-react";
 import type { Brand } from "@/data/brands";
+import type { Category } from "@/data/categories";
 import { useNotification } from "@/context/NotificationContext";
-import { brandsApi, type BulkBrandImportResult, type BulkBrandImportRow } from "@/services/api";
+import { createCatalogSlug } from "@/lib/catalog-relations";
+import {
+  brandsApi,
+  categoriesApi,
+  type BulkBrandImportResult,
+  type BulkBrandImportRow,
+} from "@/services/api";
 import {
   Dialog,
   DialogContent,
@@ -23,7 +30,7 @@ type UploadMode = "csv" | "manual";
 type ManualEntryRow = {
   id: string;
   name: string;
-  category: Brand["category"] | "";
+  category: string;
   logo: string;
 };
 
@@ -49,31 +56,21 @@ const normalizeHeader = (value = "") =>
 
 const normalizeBrandName = (value = "") => String(value).trim().toLowerCase().replace(/\s+/g, " ");
 
-const normalizeCategory = (value = "") => {
-  const normalized = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const findCategoryMatch = (value = "", categories: Category[]) => {
+  const input = String(value || "").trim();
+  const inputSlug = createCatalogSlug(input);
 
-  if (
-    normalized === "middle eastern" ||
-    normalized === "middleeastern" ||
-    normalized === "middle eastern perfumes"
-  ) {
-    return "middle-eastern";
-  }
+  if (!input && !inputSlug) return null;
 
-  if (normalized === "designer") {
-    return "designer";
-  }
-
-  if (normalized === "niche") {
-    return "niche";
-  }
-
-  return "";
+  return (
+    categories.find(
+      (category) =>
+        category.id === input ||
+        category._id === input ||
+        createCatalogSlug(category.slug) === inputSlug ||
+        createCatalogSlug(category.name) === inputSlug,
+    ) || null
+  );
 };
 
 const isHttpImageUrl = (value = "") => {
@@ -169,12 +166,15 @@ const parseBrandCsvText = (text = ""): BulkBrandImportRow[] => {
     .filter((row) => row.name || row.category || row.logo);
 };
 
-function downloadTemplate() {
+function downloadTemplate(categories: Category[]) {
+  const exampleCategories = categories.length
+    ? categories.slice(0, 3).map((category) => category.name)
+    : ["Category Name"];
   const csv = [
     "name,category,logo",
-    "Afnan,middle-eastern,",
-    "Armaf,designer,",
-    "Mancera,niche,https://example.com/mancera-logo.png",
+    ...exampleCategories.map((category, index) =>
+      `Brand ${index + 1},${category},${index === 0 ? "" : "https://example.com/logo.png"}`,
+    ),
   ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -202,6 +202,8 @@ export function BulkBrandUploadDialog({
   const [fileName, setFileName] = useState("");
   const [csvRows, setCsvRows] = useState<BulkBrandImportRow[]>([]);
   const [manualRows, setManualRows] = useState<ManualEntryRow[]>(() => createManualEntryRows());
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<BulkBrandImportResult | null>(null);
@@ -219,6 +221,40 @@ export function BulkBrandUploadDialog({
         inputRef.current.value = "";
       }
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    let isActive = true;
+    setCategoriesLoading(true);
+
+    categoriesApi
+      .listAdmin({ forceFresh: true })
+      .then((nextCategories) => {
+        if (isActive) {
+          setCategories(nextCategories.filter((category) => !category.isDeleted));
+        }
+      })
+      .catch((nextError) => {
+        if (isActive) {
+          setCategories([]);
+          setError(
+            nextError instanceof Error
+              ? nextError.message
+              : "Categories could not be loaded.",
+          );
+        }
+      })
+      .finally(() => {
+        if (isActive) {
+          setCategoriesLoading(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, [open]);
 
   const activeRows = useMemo<BulkBrandImportRow[]>(() => {
@@ -249,7 +285,8 @@ export function BulkBrandUploadDialog({
       const category = String(row.category || "").trim();
       const logo = String(row.logo || "").trim();
       const normalizedName = normalizeBrandName(name);
-      const normalizedCategory = normalizeCategory(category);
+      const matchedCategory = findCategoryMatch(category, categories);
+      const normalizedCategory = matchedCategory?.name || "";
 
       if (!name) {
         return {
@@ -261,13 +298,13 @@ export function BulkBrandUploadDialog({
         };
       }
 
-      if (!normalizedCategory) {
+      if (!matchedCategory) {
         return {
           ...row,
           rowNumber: row.rowNumber || 0,
           normalizedCategory,
           status: "failed",
-          reason: "Category must be middle-eastern, designer, or niche.",
+          reason: `Category '${category}' does not exist.`,
         };
       }
 
@@ -311,9 +348,17 @@ export function BulkBrandUploadDialog({
         reason: "Ready to import.",
       };
     });
-  }, [activeRows, existingBrands]);
+  }, [activeRows, categories, existingBrands]);
 
   const readyCount = previewRows.filter((row) => row.status === "ready").length;
+  const readyRows = previewRows
+    .filter((row) => row.status === "ready")
+    .map((row) => ({
+      rowNumber: row.rowNumber,
+      name: row.name,
+      category: row.category,
+      logo: row.logo,
+    }));
   const issueCount = previewRows.length - readyCount;
   const filledManualRowCount = manualRows.filter(
     (row) => row.name.trim() || row.category || row.logo.trim(),
@@ -372,7 +417,7 @@ export function BulkBrandUploadDialog({
     setError("");
 
     try {
-      const response = await brandsApi.bulkCreate(activeRows);
+      const response = await brandsApi.bulkCreate(readyRows);
       setResult(response);
       await onImported();
       addNotification(`${response.createdCount} brands imported successfully.`);
@@ -458,7 +503,7 @@ export function BulkBrandUploadDialog({
                         </button>
                         <button
                           type="button"
-                          onClick={downloadTemplate}
+                          onClick={() => downloadTemplate(categories)}
                           className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-3 text-sm text-navy/70 transition hover:bg-beige/40"
                         >
                           <Download className="h-4 w-4" /> Download Template
@@ -577,10 +622,14 @@ export function BulkBrandUploadDialog({
                             }
                             className="w-full rounded-lg border border-border bg-beige/35 px-3 py-2.5 text-sm text-navy outline-none focus:border-navy"
                           >
-                            <option value="">Select category</option>
-                            <option value="middle-eastern">Middle Eastern</option>
-                            <option value="designer">Designer</option>
-                            <option value="niche">Niche</option>
+                            <option value="">
+                              {categoriesLoading ? "Loading categories..." : "Select category"}
+                            </option>
+                            {categories.map((category) => (
+                              <option key={category.id} value={category.id}>
+                                {category.name}
+                              </option>
+                            ))}
                           </select>
                         </td>
                         <td className="px-5 py-3">
@@ -736,7 +785,7 @@ export function BulkBrandUploadDialog({
             <button
               type="button"
               onClick={handleImport}
-              disabled={saving || activeRows.length === 0 || readyCount === 0}
+              disabled={saving || categoriesLoading || activeRows.length === 0 || readyCount === 0}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-navy px-5 py-3 text-sm text-beige transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Upload className="h-4 w-4" />

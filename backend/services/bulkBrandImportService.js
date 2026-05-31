@@ -1,19 +1,14 @@
 import Brand, { normalizeBrandName } from "../models/Brand.js";
+import { createCategorySlug } from "../models/Category.js";
 import Product from "../models/Product.js";
+import { ApiError } from "../middlewares/errorMiddleware.js";
+import { resolveCategoryFromInput } from "./categoryService.js";
 import {
   buildLinkedBrandFilter,
   normalizeBrandResponse,
 } from "../utils/brandHelpers.js";
 
 const BULK_BRAND_BATCH_SIZE = 20;
-
-const BRAND_CATEGORY_ALIASES = new Map([
-  ["middle-eastern", "middle-eastern"],
-  ["middle eastern", "middle-eastern"],
-  ["middleeastern", "middle-eastern"],
-  ["designer", "designer"],
-  ["niche", "niche"],
-]);
 
 const chunk = (items = [], size = BULK_BRAND_BATCH_SIZE) => {
   const chunks = [];
@@ -37,17 +32,6 @@ const isHttpImageUrl = (value = "") => {
   }
 };
 
-const normalizeBrandCategory = (value = "") => {
-  const normalized = String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return BRAND_CATEGORY_ALIASES.get(normalized) || "";
-};
-
 const syncProductsWithBrand = async (brand) => {
   const normalizedBrand = normalizeBrandResponse(brand);
   if (!normalizedBrand) return;
@@ -61,19 +45,39 @@ const syncProductsWithBrand = async (brand) => {
 const normalizeImportRow = (row = {}, index = 0) => ({
   rowNumber: Number(row.rowNumber) || index + 2,
   name: String(row.name || "").trim(),
-  categoryInput: String(row.category || "").trim(),
-  category: normalizeBrandCategory(row.category),
+  categoryInput: String(row.categoryId || row.category || row.categoryName || row.categorySlug || "").trim(),
   logo: String(row.logo || "").trim(),
 });
 
 const createRowResult = (row, status, reason = "") => ({
   rowNumber: row.rowNumber,
   name: row.name,
-  category: row.category || row.categoryInput || "",
+  category: row.categoryName || row.categoryInput || "",
   logo: row.logo,
   status,
   reason,
 });
+
+const resolveImportCategory = async (row) => {
+  if (!row.categoryInput) {
+    throw new ApiError(422, "Category is required");
+  }
+
+  const category = await resolveCategoryFromInput({
+    categoryId: row.categoryInput,
+    categoryName: row.categoryInput,
+    allowCreate: false,
+  });
+  const categoryName = String(category.name || "").trim();
+  const categorySlug = createCategorySlug(categoryName);
+
+  return {
+    categoryId: category._id,
+    categoryName,
+    categorySlug,
+    category: categorySlug,
+  };
+};
 
 export const bulkImportBrands = async (rows = []) => {
   const normalizedRows = rows.map((row, index) => normalizeImportRow(row, index));
@@ -100,45 +104,51 @@ export const bulkImportBrands = async (rows = []) => {
     existingBrands.map((brand) => String(brand.normalizedName || "").trim()),
   );
 
-  normalizedRows.forEach((row) => {
+  for (const row of normalizedRows) {
     const normalizedName = normalizeBrandName(row.name);
 
     if (!row.name) {
       failedRows.push(createRowResult(row, "failed", "Brand name is required"));
-      return;
+      continue;
     }
 
-    if (!row.category) {
+    let categoryPayload;
+
+    try {
+      categoryPayload = await resolveImportCategory(row);
+    } catch (error) {
+      const reason =
+        error instanceof ApiError && error.statusCode === 404
+          ? `Category '${row.categoryInput}' does not exist.`
+          : error instanceof Error
+            ? error.message
+            : "Category could not be resolved";
       failedRows.push(
-        createRowResult(
-          row,
-          "failed",
-          "Category must be middle-eastern, designer, or niche",
-        ),
+        createRowResult(row, "failed", reason),
       );
-      return;
+      continue;
     }
 
     if (!isHttpImageUrl(row.logo)) {
       failedRows.push(createRowResult(row, "failed", "Logo must be a valid HTTP or HTTPS URL"));
-      return;
+      continue;
     }
 
     if (seenNames.has(normalizedName)) {
       skippedRows.push(
-        createRowResult(row, "skipped", "Duplicate brand name in the uploaded file"),
+          createRowResult(row, "skipped", "Duplicate brand name in the uploaded file"),
       );
-      return;
+      continue;
     }
 
     if (existingNames.has(normalizedName)) {
       skippedRows.push(createRowResult(row, "skipped", "Brand already exists"));
-      return;
+      continue;
     }
 
     seenNames.add(normalizedName);
-    validRows.push(row);
-  });
+    validRows.push({ ...row, ...categoryPayload });
+  }
 
   for (const batch of chunk(validRows, BULK_BRAND_BATCH_SIZE)) {
     const settled = await Promise.allSettled(
@@ -146,6 +156,9 @@ export const bulkImportBrands = async (rows = []) => {
         const brand = await Brand.create({
           name: row.name,
           category: row.category,
+          categoryId: row.categoryId,
+          categoryName: row.categoryName,
+          categorySlug: row.categorySlug,
           logo: row.logo,
         });
 

@@ -1,22 +1,14 @@
 import Brand, { formatBrandName, normalizeBrandName } from "../models/Brand.js";
+import { createCategorySlug } from "../models/Category.js";
 import Product from "../models/Product.js";
 import { escapeRegex } from "../utils/apiFeatures.js";
 import { normalizeMoney } from "../utils/money.js";
-import { resolveCategoriesFromInput } from "./categoryService.js";
+import {
+  resolveCategoriesFromInput,
+  resolveCategoryFromInput,
+} from "./categoryService.js";
 
 const BULK_PRODUCT_BATCH_SIZE = 20;
-
-const LEGACY_BRAND_CATEGORY_BY_PRODUCT_CATEGORY = {
-  "middle eastern": "middle-eastern",
-  designer: "designer",
-  niche: "niche",
-};
-
-const LEGACY_PRODUCT_CATEGORY_BY_BRAND_CATEGORY = {
-  "middle-eastern": "Middle Eastern",
-  designer: "Designer",
-  niche: "Niche",
-};
 
 const chunk = (items = [], size = BULK_PRODUCT_BATCH_SIZE) => {
   const chunks = [];
@@ -174,12 +166,7 @@ const normalizeCreatedProduct = (product) =>
     ? product.toObject({ virtuals: true })
     : product;
 
-const mapBrandCategoryFromProductCategory = (categoryName = "") => {
-  const normalized = String(categoryName || "").trim().toLowerCase();
-  return LEGACY_BRAND_CATEGORY_BY_PRODUCT_CATEGORY[normalized] || "designer";
-};
-
-const ensureBrandsExist = async (rows = []) => {
+const loadExistingBrands = async (rows = []) => {
   const candidateBrandNames = rows.map((row) => normalizeBrandName(row.brandInput)).filter(Boolean);
   const uniqueBrandNames = [...new Set(candidateBrandNames)];
 
@@ -187,47 +174,75 @@ const ensureBrandsExist = async (rows = []) => {
     ? await Brand.find({
         normalizedName: { $in: uniqueBrandNames },
       })
-        .select("name category normalizedName")
+        .select("name category categoryId categoryName categorySlug normalizedName")
         .lean({ virtuals: true })
     : [];
 
-  const brandsByNormalizedName = new Map(
+  return new Map(
     existingBrands.map((brand) => [normalizeBrandName(brand.name), brand]),
   );
+};
 
-  const missingBrandPayloads = uniqueBrandNames
-    .filter((normalizedName) => !brandsByNormalizedName.has(normalizedName))
-    .map((normalizedName) => {
-      const matchingRow = rows.find(
-        (row) => normalizeBrandName(row.brandInput) === normalizedName,
-      );
-      const productCategory = String(matchingRow?.categoryInput || "").trim();
+const getCategoryPayload = async (categoryInput = "") => {
+  const category = await resolveCategoryFromInput({
+    categoryId: categoryInput,
+    categoryName: categoryInput,
+    allowCreate: false,
+  });
+  const categoryName = String(category.name || "").trim();
+  const categorySlug = createCategorySlug(categoryName);
 
-      return {
-        name: formatBrandName(matchingRow?.brandInput || normalizedName),
-        category: mapBrandCategoryFromProductCategory(productCategory),
-      };
-    });
+  return {
+    categoryId: category._id,
+    categoryName,
+    categorySlug,
+    category: categorySlug,
+  };
+};
 
-  if (missingBrandPayloads.length) {
-    const createdBrands = await Brand.insertMany(missingBrandPayloads, { ordered: false });
+const resolveBrandForRow = async (row, brandsByNormalizedName) => {
+  const normalizedName = normalizeBrandName(row.brandInput);
+  const existingBrand = brandsByNormalizedName.get(normalizedName);
 
-    createdBrands.forEach((brand) => {
-      const normalizedName = normalizeBrandName(brand.name);
-      brandsByNormalizedName.set(normalizedName, normalizeCreatedProduct(brand));
-    });
+  if (existingBrand) {
+    return existingBrand;
   }
 
-  return brandsByNormalizedName;
+  if (!row.categoryInput) {
+    throw new Error("Category is required when creating a missing brand");
+  }
+
+  const categoryPayload = await getCategoryPayload(row.categoryInput);
+  const createdBrand = await Brand.create({
+    name: formatBrandName(row.brandInput),
+    ...categoryPayload,
+  });
+  const normalizedBrand = normalizeCreatedProduct(createdBrand);
+  brandsByNormalizedName.set(normalizedName, normalizedBrand);
+
+  return normalizedBrand;
 };
 
 const resolveRowCategories = async (row, brand) => {
-  const fallbackCategory =
-    row.categoryInput || LEGACY_PRODUCT_CATEGORY_BY_BRAND_CATEGORY[brand.category] || "Designer";
+  const categoryArgs = row.categoryInput
+    ? { category: row.categoryInput }
+    : brand.categoryId
+      ? { categoryId: brand.categoryId }
+      : { category: brand.categoryName || brand.categorySlug || brand.category };
+  const categoryLabel =
+    row.categoryInput ||
+    brand.categoryName ||
+    brand.categorySlug ||
+    brand.category ||
+    String(brand.categoryId || "");
+
+  if (!String(categoryLabel || "").trim()) {
+    throw new Error("Category is required");
+  }
 
   const categories = await resolveCategoriesFromInput({
-    category: fallbackCategory,
-    allowCreate: true,
+    ...categoryArgs,
+    allowCreate: false,
   });
 
   if (!categories.length) {
@@ -236,14 +251,14 @@ const resolveRowCategories = async (row, brand) => {
       categoryNames: [],
       categorySlugs: [],
       primaryCategory: null,
-      categoryLabel: fallbackCategory,
+      categoryLabel,
     };
   }
 
   return {
     categoryIds: categories.map((category) => category._id),
     categoryNames: categories.map((category) => category.name),
-    categorySlugs: categories.map((category) => category.slug),
+    categorySlugs: categories.map((category) => createCategorySlug(category.name)),
     primaryCategory: categories[0]._id,
     categoryLabel: categories.map((category) => category.name).join(" | "),
   };
@@ -258,60 +273,7 @@ export const bulkImportProducts = async (rows = []) => {
   const validRows = [];
   const seenUploadKeys = new Set();
 
-  const brandsByNormalizedName = await ensureBrandsExist(normalizedRows);
-  const duplicateLookupRows = normalizedRows
-    .map((row) => {
-      const brand = brandsByNormalizedName.get(normalizeBrandName(row.brandInput));
-
-      if (!brand || !row.name) {
-        return null;
-      }
-
-      return { name: row.name, brand };
-    })
-    .filter(Boolean);
-
-  const existingProductFilters = duplicateLookupRows.map((row) => ({
-    $and: [
-      {
-        $or: [
-          {
-            name: {
-              $regex: `^${escapeRegex(row.name)}$`,
-              $options: "i",
-            },
-          },
-          {
-            name: {
-              $regex: `^${escapeRegex(normalizeProductName(row.name)).replace(/\\s\+/g, "\\\\s+")}$`,
-              $options: "i",
-            },
-          },
-        ],
-      },
-      {
-        $or: [
-          { brandId: row.brand._id },
-          {
-            brand: {
-              $regex: `^${escapeRegex(row.brand.name)}$`,
-              $options: "i",
-            },
-          },
-        ],
-      },
-    ],
-  }));
-
-  const existingProducts = existingProductFilters.length
-    ? await Product.find({ $or: existingProductFilters })
-        .select("name brand brandId")
-        .lean()
-    : [];
-
-  const existingProductKeys = new Set(
-    existingProducts.map((product) => getProductKey(product.brand, product.name)),
-  );
+  const brandsByNormalizedName = await loadExistingBrands(normalizedRows);
 
   for (const row of normalizedRows) {
     if (!row.name) {
@@ -329,10 +291,18 @@ export const bulkImportProducts = async (rows = []) => {
       continue;
     }
 
-    const brand = brandsByNormalizedName.get(normalizeBrandName(row.brandInput));
+    let brand;
 
-    if (!brand) {
-      failedRows.push(createRowResult(row, "failed", "Brand could not be created automatically"));
+    try {
+      brand = await resolveBrandForRow(row, brandsByNormalizedName);
+    } catch (error) {
+      failedRows.push(
+        createRowResult(
+          row,
+          "failed",
+          error instanceof Error ? error.message : "Brand could not be resolved",
+        ),
+      );
       continue;
     }
 
@@ -368,7 +338,41 @@ export const bulkImportProducts = async (rows = []) => {
       continue;
     }
 
-    if (existingProductKeys.has(productKey)) {
+    const existingProduct = await Product.findOne({
+      $and: [
+        {
+          $or: [
+            {
+              name: {
+                $regex: `^${escapeRegex(row.name)}$`,
+                $options: "i",
+              },
+            },
+            {
+              name: {
+                $regex: `^${escapeRegex(normalizeProductName(row.name)).replace(/\\s\+/g, "\\\\s+")}$`,
+                $options: "i",
+              },
+            },
+          ],
+        },
+        {
+          $or: [
+            { brandId: brand._id },
+            {
+              brand: {
+                $regex: `^${escapeRegex(brand.name)}$`,
+                $options: "i",
+              },
+            },
+          ],
+        },
+      ],
+    })
+      .select("_id")
+      .lean();
+
+    if (existingProduct) {
       skippedRows.push(
         createRowResult(row, "skipped", "Product already exists for this brand"),
       );

@@ -15,7 +15,7 @@ const STATIC_HERO_SLIDES: Banner[] = [
   {
     _id: "static-hero-1",
     id: "static-hero-1",
-    title: "Designer Perfumes",
+    title: "Designer Fragrances",
     subtitle: "Discover iconic and luxury fragrances.",
     image: heroSlide1,
     buttonText: "Shop Now",

@@ -14,19 +14,14 @@ import {
 import { Container } from "@/components/common/Container";
 import { CategoryRail } from "@/components/category/CategoryRail";
 import { SearchBar } from "@/components/search/SearchBar";
-import type { Brand, BrandCategory } from "@/data/brands";
+import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import { brandsApi, categoriesApi } from "@/services/api";
 import { useRenderInstrumentation } from "@/hooks/useRenderInstrumentation";
+import { filterBrandsByCategory } from "@/lib/catalog-relations";
 import { filterStorefrontCategories } from "@/lib/categories";
 import { throttle } from "@/lib/performance/scheduler";
 import { useNavbarCounters } from "@/lib/performance/state-observers";
-
-const brandCategoryLabels: Record<BrandCategory, string> = {
-  "middle-eastern": "Middle Eastern",
-  designer: "Designer",
-  niche: "Niche",
-};
 
 const dropdownVariants = {
   hidden: { opacity: 0, y: 10, pointerEvents: "none" as const },
@@ -112,22 +107,6 @@ export const Navbar = memo(function Navbar() {
     [closeMobileMenu],
   );
 
-  const groupedBrands = useMemo(() => {
-    const groups: Record<BrandCategory, Brand[]> = {
-      "middle-eastern": [],
-      designer: [],
-      niche: [],
-    };
-
-    brands.forEach((brand) => {
-      groups[brand.category]?.push(brand);
-    });
-
-    Object.values(groups).forEach((group) => group.sort((a, b) => a.name.localeCompare(b.name)));
-
-    return groups;
-  }, [brands]);
-
   const mobileBrandMatches = useMemo(() => {
     const query = mobileBrandQuery.trim().toLowerCase();
     if (!query) return [];
@@ -141,6 +120,15 @@ export const Navbar = memo(function Navbar() {
         (left, right) => left.sortOrder - right.sortOrder,
       ),
     [categories],
+  );
+
+  const groupedBrands = useMemo(
+    () =>
+      navigationCategories.map((category) => ({
+        category,
+        brands: filterBrandsByCategory(brands, category),
+      })),
+    [brands, navigationCategories],
   );
 
   const quickCategories = useMemo(() => {
@@ -266,7 +254,6 @@ export const Navbar = memo(function Navbar() {
             >
               Latest Arrivals
             </button>
-            {/* Niche Collection removed per product spec */}
             <Link to="/about" className="nav-link font-medium uppercase">
               About
             </Link>
@@ -321,14 +308,14 @@ export const Navbar = memo(function Navbar() {
               className="absolute left-1/2 top-full z-40 hidden w-[min(72rem,calc(100vw-2rem))] -translate-x-1/2 border border-[#5b3a29]/10 bg-[#fffaf4]/95 p-6 text-[#5b3a29] shadow-[0_26px_70px_-38px_rgba(91,58,41,0.38)] backdrop-blur-xl xl:block"
             >
               <div className="grid gap-8 lg:grid-cols-3">
-                {(Object.keys(groupedBrands) as BrandCategory[]).map((category) => (
-                  <div key={category}>
+                {groupedBrands.map(({ category, brands: categoryBrands }) => (
+                  <div key={category.id}>
                     <p className="text-[0.68rem] uppercase tracking-[0.34em] text-[#c89b63]">
-                      {brandCategoryLabels[category]}
+                      {category.name}
                     </p>
                     <div className="mt-4 max-h-72 space-y-1 overflow-y-auto pr-2">
-                      {groupedBrands[category].length ? (
-                        groupedBrands[category].map((brand) => (
+                      {categoryBrands.length ? (
+                        categoryBrands.map((brand) => (
                           <a
                             key={brand.id}
                             href={getBrandHref(brand)}

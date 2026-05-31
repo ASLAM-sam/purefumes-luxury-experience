@@ -15,6 +15,7 @@ import {
 import { useNotification } from "@/context/NotificationContext";
 import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
+import { getBrandCategoryId, getBrandCategorySlug } from "@/lib/catalog-relations";
 import { frontendEventBus } from "@/lib/performance/event-bus";
 import { brandsApi, categoriesApi } from "@/services/api";
 
@@ -25,6 +26,7 @@ export const Route = createFileRoute("/admin/brands")({
 const formatCategory = (category: Brand["category"]) =>
   category
     .split("-")
+    .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
 
@@ -107,9 +109,9 @@ function AdminBrands() {
     };
 
     brands.forEach((brand) => {
-      const category = brand.category || brand.categorySlug || "";
-      if (!category) return;
-      counts[category] = (counts[category] || 0) + 1;
+      const key = getBrandCategoryId(brand) || getBrandCategorySlug(brand);
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + 1;
     });
 
     return counts;
@@ -119,11 +121,11 @@ function AdminBrands() {
     const bySlug = new Map<string, string>();
 
     categories.forEach((category) => {
-      bySlug.set(category.slug, category.name);
+      bySlug.set(category.id || category.slug, category.name);
     });
 
     brands.forEach((brand) => {
-      const slug = brand.category || brand.categorySlug || "";
+      const slug = getBrandCategoryId(brand) || getBrandCategorySlug(brand);
       if (slug && !bySlug.has(slug)) {
         bySlug.set(slug, brand.categoryName || formatCategory(slug));
       }
@@ -138,7 +140,9 @@ function AdminBrands() {
     const filtered =
       categoryFilter === "all"
         ? [...brands]
-        : brands.filter((brand) => (brand.category || brand.categorySlug) === categoryFilter);
+        : brands.filter((brand) =>
+            [getBrandCategoryId(brand), getBrandCategorySlug(brand)].includes(categoryFilter),
+          );
 
     filtered.sort((left, right) => {
       if (sortMode === "name-desc") {
@@ -212,18 +216,14 @@ function AdminBrands() {
           <p className="text-xs uppercase tracking-[0.18em] text-navy/50">All Brands</p>
           <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.all}</p>
         </div>
-        <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
-          <p className="text-xs uppercase tracking-[0.18em] text-navy/50">Middle Eastern</p>
-          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts["middle-eastern"] || 0}</p>
-        </div>
-        <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
-          <p className="text-xs uppercase tracking-[0.18em] text-navy/50">Designer</p>
-          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.designer || 0}</p>
-        </div>
-        <div className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
-          <p className="text-xs uppercase tracking-[0.18em] text-navy/50">Niche</p>
-          <p className="mt-2 font-display text-4xl text-navy">{categoryCounts.niche || 0}</p>
-        </div>
+        {categories.map((category) => (
+          <div key={category.id} className="rounded-2xl border border-border/70 bg-card p-5 shadow-soft">
+            <p className="text-xs uppercase tracking-[0.18em] text-navy/50">{category.name}</p>
+            <p className="mt-2 font-display text-4xl text-navy">
+              {categoryCounts[category.id] || categoryCounts[category.slug] || 0}
+            </p>
+          </div>
+        ))}
       </section>
 
       <section className="mt-6 rounded-2xl border border-border/70 bg-card p-5 shadow-soft">

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Download, FileSpreadsheet, PencilLine, Trash2, Upload } from "lucide-react";
 import type { Brand } from "@/data/brands";
+import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
 import { useNotification } from "@/context/NotificationContext";
+import { createCatalogSlug } from "@/lib/catalog-relations";
 import {
   productsApi,
   type BulkProductImportResult,
@@ -66,10 +68,24 @@ const normalizeName = (value = "") => String(value).trim().toLowerCase().replace
 
 const getProductCategoryFromBrand = (brand: Brand | undefined): string => {
   if (!brand) return "";
-  if (brand.category === "middle-eastern") return "Middle Eastern";
-  if (brand.category === "designer") return "Designer";
-  if (brand.category === "niche") return "Niche";
-  return "";
+  return brand.categoryName || brand.categorySlug || brand.category || "";
+};
+
+const findCategoryMatch = (value = "", categories: Category[]) => {
+  const input = String(value || "").trim();
+  const inputSlug = createCatalogSlug(input);
+
+  if (!input && !inputSlug) return null;
+
+  return (
+    categories.find(
+      (category) =>
+        category.id === input ||
+        category._id === input ||
+        createCatalogSlug(category.slug) === inputSlug ||
+        createCatalogSlug(category.name) === inputSlug,
+    ) || null
+  );
 };
 
 const parsePrice = (value: string | number): ParsedNumberResult => {
@@ -200,9 +216,7 @@ const parseProductCsvText = (text = ""): BulkProductImportRow[] => {
 function downloadTemplate() {
   const csv = [
     "name,brand,category,price,stock,description,image,sizes",
-    "9PM,Afnan,Designer,2499,18,Fruity vanilla evening scent,https://example.com/9pm.jpg,Standard:2499|100ml:3299",
-    "Club De Nuit Intense Man,Armaf,Designer,3299,12,Citrus smoky bestseller,https://example.com/cdnim.jpg,Standard:3299",
-    "Red Tobacco,Mancera,Niche,5999,6,Powerful niche tobacco fragrance,https://example.com/red-tobacco.jpg,60ml:5999|120ml:8999",
+    "Sample Perfume,Brand Name,Category Name,2499,18,Short product description,https://example.com/product.jpg,Standard:2499|100ml:3299",
   ].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -218,12 +232,14 @@ export function BulkProductUploadDialog({
   onOpenChange,
   existingProducts,
   existingBrands,
+  existingCategories,
   onImported,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingProducts: Product[];
   existingBrands: Brand[];
+  existingCategories: Category[];
   onImported: () => Promise<void> | void;
 }) {
   const { addNotification } = useNotification();
@@ -299,6 +315,7 @@ export function BulkProductUploadDialog({
       const description = String(row.description || "").trim();
       const matchedBrand = brandMap.get(normalizeName(brandName));
       const detectedCategory = row.category?.trim() || getProductCategoryFromBrand(matchedBrand);
+      const matchedCategory = findCategoryMatch(detectedCategory, existingCategories);
 
       if (!name) {
         return {
@@ -327,6 +344,36 @@ export function BulkProductUploadDialog({
           detectedCategory,
           status: "failed",
           reason: "Brand is required.",
+        };
+      }
+
+      if (!detectedCategory) {
+        return {
+          ...row,
+          rowNumber: row.rowNumber || 0,
+          detectedCategory,
+          status: "failed",
+          reason: "Category is required.",
+        };
+      }
+
+      if (!matchedBrand && !matchedCategory) {
+        return {
+          ...row,
+          rowNumber: row.rowNumber || 0,
+          detectedCategory,
+          status: "failed",
+          reason: "Category is required for a new brand and must match an existing category.",
+        };
+      }
+
+      if (detectedCategory && !matchedCategory) {
+        return {
+          ...row,
+          rowNumber: row.rowNumber || 0,
+          detectedCategory,
+          status: "failed",
+          reason: `Category '${detectedCategory}' does not exist.`,
         };
       }
 
@@ -398,10 +445,10 @@ export function BulkProductUploadDialog({
         detectedCategory,
         status: "ready",
         reason:
-          "Ready to import. Missing brands will be created automatically and exact duplicate products will be skipped.",
+          "Ready to import. Missing brands will be created with the selected category, and exact duplicate products will be skipped.",
       };
     });
-  }, [activeRows, brandMap, existingProducts]);
+  }, [activeRows, brandMap, existingCategories, existingProducts]);
 
   const readyCount = previewRows.filter((row) => row.status === "ready").length;
   const readyRows = previewRows.filter((row) => row.status === "ready");
@@ -759,7 +806,7 @@ export function BulkProductUploadDialog({
               </h3>
               <p className="mt-1 text-sm text-navy/60">
                 Review the rows before importing. Categories can come from the file, or the importer
-                will fall back to legacy brand mapping when needed.
+                will use the selected brand's saved category relationship when needed.
               </p>
             </div>
 

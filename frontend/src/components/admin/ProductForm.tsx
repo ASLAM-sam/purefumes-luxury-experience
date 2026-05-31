@@ -3,8 +3,8 @@ import { ImagePlus, Plus, X } from "lucide-react";
 import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
-import { filterBrandsForCategory, normalizeCategory } from "@/data/brandsByCategory";
 import { Button } from "@/components/common/Button";
+import { createCatalogSlug, filterBrandsByCategory } from "@/lib/catalog-relations";
 import { brandsApi, categoriesApi } from "@/services/api";
 
 type FormSize = { size: string; price: string };
@@ -127,7 +127,7 @@ const toFormState = (product?: Product): FormState => {
 const getBrandId = (brand: Brand) => brand.id || brand._id || "";
 
 const getCategoryBrandValue = (category?: Category | null) =>
-  category?.slug || normalizeCategory(category?.name || "") || category?.name || "";
+  category?.id || category?.slug || createCatalogSlug(category?.name || "") || category?.name || "";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -296,27 +296,29 @@ export const ProductForm = memo(function ProductForm({
     set("originalPrice", value);
   };
 
-  const selectedCategoryValue = useMemo(() => {
-    const selectedCategory =
+  const selectedCategory = useMemo(
+    () =>
       categories.find((category) => form.categoryIds.includes(category.id)) ||
-      form.categoryDetails;
+      form.categoryDetails ||
+      null,
+    [categories, form.categoryDetails, form.categoryIds],
+  );
 
+  const selectedCategoryValue = useMemo(() => {
     return (
       getCategoryBrandValue(selectedCategory) ||
       form.categorySlug ||
       form.categorySlugs[0] ||
-      normalizeCategory(form.categoryNames[0] || form.category) ||
+      createCatalogSlug(form.categoryNames[0] || form.category) ||
       form.categoryNames[0] ||
       form.category
     );
   }, [
-    categories,
     form.category,
-    form.categoryDetails,
-    form.categoryIds,
     form.categoryNames,
     form.categorySlug,
     form.categorySlugs,
+    selectedCategory,
   ]);
 
   useEffect(() => {
@@ -346,7 +348,7 @@ export const ProductForm = memo(function ProductForm({
 
         if (!isActive) return;
 
-        setBrands(filterBrandsForCategory(nextBrands, selectedCategoryValue));
+        setBrands(filterBrandsByCategory(nextBrands, selectedCategory || selectedCategoryValue));
       } catch (ex) {
         if (!isActive) return;
 
@@ -364,12 +366,12 @@ export const ProductForm = memo(function ProductForm({
     return () => {
       isActive = false;
     };
-  }, [selectedCategoryValue]);
+  }, [selectedCategory, selectedCategoryValue]);
 
   const availableBrands = useMemo(() => {
-    const mappedCategory = normalizeCategory(selectedCategoryValue);
-    return mappedCategory ? filterBrandsForCategory(brands, mappedCategory) : brands;
-  }, [brands, selectedCategoryValue]);
+    if (!selectedCategoryValue) return [];
+    return filterBrandsByCategory(brands, selectedCategory || selectedCategoryValue);
+  }, [brands, selectedCategory, selectedCategoryValue]);
 
   useEffect(() => {
     if (!form.brandId || brandsLoading || !selectedCategoryValue) return;

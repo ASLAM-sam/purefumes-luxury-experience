@@ -25,24 +25,6 @@ const buildBrandPayload = (body = {}) => {
   return payload;
 };
 
-const getBrandCategorySlug = (value = "") => {
-  const slug = createCategorySlug(value);
-
-  if (slug === "designer" || slug === "designer-fragrances") {
-    return "designer";
-  }
-
-  if (slug === "middle-eastern" || slug === "middle-eastern-fragrances") {
-    return "middle-eastern";
-  }
-
-  if (slug === "niche" || slug === "niche-fragrances") {
-    return "niche";
-  }
-
-  return slug;
-};
-
 const hasCategoryInput = (payload = {}) =>
   ["categoryId", "category", "categoryName", "categorySlug"].some((field) =>
     Object.prototype.hasOwnProperty.call(payload, field),
@@ -64,7 +46,7 @@ const resolveBrandCategoryPayload = async (payload = {}) => {
   }
 
   const categoryName = String(category.name || "").trim();
-  const categorySlug = getBrandCategorySlug(categoryName);
+  const categorySlug = createCategorySlug(categoryName);
 
   return {
     ...payload,
@@ -204,12 +186,23 @@ export const getBrands = asyncHandler(async (req, res) => {
     if (mongoose.Types.ObjectId.isValid(rawCategory)) {
       filter.categoryId = rawCategory;
     } else {
-      const categorySlug = getBrandCategorySlug(rawCategory);
-      filter.$or = [
-        { category: categorySlug },
-        { categorySlug },
-        { categoryName: rawCategory },
-      ];
+      let category = null;
+
+      try {
+        category = await resolveCategoryFromInput({
+          categoryName: rawCategory,
+          allowCreate: false,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 404) {
+          res.json({ success: true, data: [] });
+          return;
+        }
+
+        throw error;
+      }
+
+      filter.categoryId = category._id;
     }
   }
 

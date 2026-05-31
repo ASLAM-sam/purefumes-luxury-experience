@@ -61,7 +61,7 @@ export const testimonials = [
   },
   {
     name: "Zara K.",
-    text: "Authenticity, packaging, fragrance, everything is impeccable. My go-to for niche scents.",
+    text: "Authenticity, packaging, fragrance, everything is impeccable. My go-to for rare scents.",
     location: "Mumbai",
   },
   {

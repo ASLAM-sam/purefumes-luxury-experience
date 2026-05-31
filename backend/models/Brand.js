@@ -1,7 +1,5 @@
 import mongoose from "mongoose";
 
-export const BRAND_CATEGORIES = ["middle-eastern", "designer", "niche"];
-
 export const formatBrandName = (value = "") =>
   String(value)
     .trim()
@@ -44,7 +42,7 @@ const brandSchema = new mongoose.Schema(
     categoryId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
-      default: null,
+      required: [true, "Brand category is required"],
       index: true,
     },
     categoryName: {
@@ -62,9 +60,9 @@ const brandSchema = new mongoose.Schema(
     },
     category: {
       type: String,
-      required: [true, "Brand category is required"],
       trim: true,
       index: true,
+      default: "",
     },
   },
   {

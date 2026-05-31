@@ -19,6 +19,7 @@ import { deleteCacheByPrefix, getCachedJson, setCachedJson } from "../utils/cach
 import { bulkImportProducts } from "../services/bulkProductImportService.js";
 import {
   attachCategoryDetails,
+  resolveCategoryFromInput,
   syncProductCategoryFields,
 } from "../services/categoryService.js";
 import { normalizeMoney } from "../utils/money.js";
@@ -608,32 +609,6 @@ const syncProductBrandFields = async (
   return payload;
 };
 
-const CATEGORY_FILTER_ALIASES = {
-  designer: {
-    slugs: ["designer", "designer-fragrances", "designer-perfumes"],
-    names: ["Designer", "Designer Fragrances"],
-  },
-  "middle-eastern": {
-    slugs: ["middle-eastern", "middle-eastern-fragrances", "middle-eastern-perfumes"],
-    names: ["Middle Eastern", "Middle Eastern Fragrances"],
-  },
-  niche: {
-    slugs: ["niche", "niche-fragrances", "niche-perfumes"],
-    names: ["Niche", "Niche Fragrances"],
-  },
-};
-
-const normalizeCategoryFilterValue = (value = "") => {
-  const slug = createCategorySlug(value);
-
-  if (!slug) return "";
-  if (slug.includes("designer")) return "designer";
-  if (slug.includes("middle")) return "middle-eastern";
-  if (slug.includes("niche")) return "niche";
-
-  return slug;
-};
-
 const mergeProductFilter = (filter, matcher) => {
   if (!matcher || !Object.keys(matcher).length) {
     return filter;
@@ -648,31 +623,29 @@ const mergeProductFilter = (filter, matcher) => {
   };
 };
 
-const buildCategoryQueryMatcher = (categoryQuery = "") => {
+const buildCategoryQueryMatcher = async (categoryQuery = "") => {
   const rawCategory = String(categoryQuery || "").trim();
-  const normalizedCategory = normalizeCategoryFilterValue(rawCategory);
 
-  if (!normalizedCategory) {
+  if (!rawCategory) {
     return { _id: null };
   }
 
-  const aliases = CATEGORY_FILTER_ALIASES[normalizedCategory] || {
-    slugs: [normalizedCategory],
-    names: [rawCategory],
-  };
-  const slugs = [...new Set([normalizedCategory, ...aliases.slugs].filter(Boolean))];
-  const names = [...new Set(aliases.names.filter(Boolean))];
+  try {
+    const category = await resolveCategoryFromInput({
+      categoryName: rawCategory,
+      allowCreate: false,
+    });
 
-  return {
-    $or: [
-      { categorySlugs: { $in: slugs } },
-      { categorySlug: { $in: slugs } },
-      ...names.flatMap((name) => [
-        { categoryNames: { $regex: `^${escapeRegex(name)}$`, $options: "i" } },
-        { category: { $regex: `^${escapeRegex(name)}$`, $options: "i" } },
-      ]),
-    ],
-  };
+    return {
+      categories: category._id,
+    };
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 404) {
+      return { _id: null };
+    }
+
+    throw error;
+  }
 };
 
 const buildProductQueryFilter = async (query = {}) => {
@@ -691,7 +664,7 @@ const buildProductQueryFilter = async (query = {}) => {
       categories: new mongoose.Types.ObjectId(categoryId),
     });
   } else if (categoryQuery) {
-    filter = mergeProductFilter(filter, buildCategoryQueryMatcher(categoryQuery));
+    filter = mergeProductFilter(filter, await buildCategoryQueryMatcher(categoryQuery));
   }
 
   if (genderQuery) {
@@ -918,7 +891,7 @@ export const getLatestProducts = asyncHandler(async (_req, res) => {
 
 export const createProduct = asyncHandler(async (req, res) => {
   const payload = buildProductPayload(req.body);
-  await syncProductCategoryFields(payload, req.body, { allowCreate: true });
+  await syncProductCategoryFields(payload, req.body, { allowCreate: false });
   await syncProductBrandFields(payload, req.body);
   await addUploadedImages(payload, req.productImageFiles || req.files);
   validateProductPayload(payload, {
@@ -990,7 +963,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
     payload.image = payload.images[0] || "";
   }
 
-  await syncProductCategoryFields(payload, req.body, { allowCreate: true });
+  await syncProductCategoryFields(payload, req.body, { allowCreate: false });
   await syncProductBrandFields(payload, req.body);
 
   if (payload.categories === undefined) {

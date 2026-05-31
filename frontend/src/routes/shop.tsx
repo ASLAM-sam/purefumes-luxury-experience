@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import type { Brand } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Product } from "@/data/products";
-import { filterBrandsForCategory, normalizeCategory } from "@/data/brandsByCategory";
+import { createCatalogSlug, filterBrandsByCategory } from "@/lib/catalog-relations";
 import { filterStorefrontCategories } from "@/lib/categories";
 import { brandsApi, categoriesApi, productsApi } from "@/services/api";
 
@@ -53,7 +53,7 @@ type Filters = {
 };
 
 const categoryToApi = (category: string): Brand["category"] | undefined => {
-  const normalizedCategory = normalizeCategory(category);
+  const normalizedCategory = createCatalogSlug(category);
   return !normalizedCategory || normalizedCategory === "all" ? undefined : normalizedCategory;
 };
 
@@ -66,7 +66,7 @@ const getInitialFilters = (): Filters => {
 
   return {
     q: searchParams.get("q") || "",
-    category: normalizeCategory(searchParams.get("category") || "all") || "all",
+    category: createCatalogSlug(searchParams.get("category") || "all") || "all",
     brand: searchParams.get("brand") || "",
     sort: searchParams.get("sort") || "featured",
   };
@@ -158,7 +158,7 @@ function ShopPage() {
 
   useEffect(() => {
     let active = true;
-    const normalizedCategory = normalizeCategory(filters.category) || "all";
+    const normalizedCategory = createCatalogSlug(filters.category) || "all";
     const brandCategory = categoryToApi(normalizedCategory);
 
     setBrandsLoading(true);
@@ -167,7 +167,7 @@ function ShopPage() {
       .list(brandCategory ? { category: brandCategory } : {})
       .then((nextBrands) => {
         if (active) {
-          setBrands(filterBrandsForCategory(nextBrands, normalizedCategory));
+          setBrands(nextBrands);
         }
       })
       .catch(() => {
@@ -237,20 +237,23 @@ function ShopPage() {
     [filters.sort, products],
   );
 
-  const availableBrands = useMemo(
-    () => filterBrandsForCategory(brands, filters.category),
-    [brands, filters.category],
-  );
-  const activeBrand = availableBrands.find((brand) => brand.id === filters.brand);
   const storefrontCategories = useMemo(
     () =>
       filterStorefrontCategories(categories).map((category) => ({
         ...category,
-        slug: normalizeCategory(category.slug || category.name) || category.slug,
+        slug: category.slug || createCatalogSlug(category.name),
       })),
     [categories],
   );
   const activeCategory = storefrontCategories.find((category) => category.slug === filters.category);
+  const availableBrands = useMemo(
+    () =>
+      filters.category === "all"
+        ? [...brands].sort((left, right) => left.name.localeCompare(right.name))
+        : filterBrandsByCategory(brands, activeCategory || filters.category),
+    [activeCategory, brands, filters.category],
+  );
+  const activeBrand = availableBrands.find((brand) => brand.id === filters.brand);
   const categoryOptions = useMemo(
     () => [
       { label: "All Categories", value: "all" },
@@ -284,7 +287,7 @@ function ShopPage() {
       if (key === "category") {
         return {
           ...current,
-          category: normalizeCategory(value) || "all",
+          category: createCatalogSlug(value) || "all",
           brand: "",
         };
       }
@@ -371,7 +374,7 @@ function ShopPage() {
                 allLabel="All Fragrances"
                 allHref="/shop"
                 hrefBuilder={(category) =>
-                  `/shop?category=${normalizeCategory(category.slug || category.name) || category.slug}`
+                  `/shop?category=${category.slug || createCatalogSlug(category.name)}`
                 }
               />
             </div>

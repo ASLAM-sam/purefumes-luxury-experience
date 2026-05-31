@@ -4,17 +4,10 @@ import connectDB from "../config/db.js";
 import Category from "../models/Category.js";
 import Product from "../models/Product.js";
 
-const CATEGORY_NAMES = ["Middle Eastern", "Designer", "Niche"];
-const CATEGORY_SLUGS = {
-  "Middle Eastern": "middle-eastern",
-  Designer: "designer",
-  Niche: "niche",
-};
-
 const sampleProducts = [
   {
     name: "Oud Royal",
-    category: "Middle Eastern",
+    category: "Middle Eastern Fragrances",
     price: 1999,
     brand: "Desert House",
     description: "Rich oud fragrance with deep woody notes.",
@@ -35,7 +28,7 @@ const sampleProducts = [
   },
   {
     name: "Amber Desert",
-    category: "Middle Eastern",
+    category: "Middle Eastern Fragrances",
     price: 1799,
     brand: "Amber Atelier",
     description: "Warm amber fragrance layered with spice and dry woods.",
@@ -53,7 +46,7 @@ const sampleProducts = [
   },
   {
     name: "Musk Al Arab",
-    category: "Middle Eastern",
+    category: "Middle Eastern Fragrances",
     price: 1599,
     brand: "Arabian Musk Co.",
     description: "Soft clean musk with a smooth traditional warmth.",
@@ -71,7 +64,7 @@ const sampleProducts = [
   },
   {
     name: "Royal Bakhoor",
-    category: "Middle Eastern",
+    category: "Middle Eastern Fragrances",
     price: 1899,
     brand: "Royal Incense",
     description: "Smoky bakhoor-inspired scent with a luxurious resin trail.",
@@ -89,7 +82,7 @@ const sampleProducts = [
   },
   {
     name: "Urban Edge",
-    category: "Designer",
+    category: "Designer Fragrances",
     price: 2499,
     brand: "Studio Moderne",
     description: "Fresh modern fragrance with crisp citrus and clean woods.",
@@ -110,7 +103,7 @@ const sampleProducts = [
   },
   {
     name: "Midnight Code",
-    category: "Designer",
+    category: "Designer Fragrances",
     price: 2699,
     brand: "Noir Edition",
     description: "Dark aromatic profile with spices, woods, and a smooth finish.",
@@ -128,7 +121,7 @@ const sampleProducts = [
   },
   {
     name: "Aqua Pulse",
-    category: "Designer",
+    category: "Designer Fragrances",
     price: 2299,
     brand: "Blue Axis",
     description: "Fresh aquatic fragrance with a bright and energizing vibe.",
@@ -146,7 +139,7 @@ const sampleProducts = [
   },
   {
     name: "Velvet Noir",
-    category: "Designer",
+    category: "Designer Fragrances",
     price: 2899,
     brand: "Velour Lab",
     description: "Elegant evening fragrance with smooth woods and warm spice.",
@@ -164,7 +157,7 @@ const sampleProducts = [
   },
   {
     name: "Rare Essence",
-    category: "Niche",
+    category: "Niche Fragrances",
     price: 3499,
     brand: "Atelier Rare",
     description: "Unique handcrafted blend with polished woods and airy spice.",
@@ -185,7 +178,7 @@ const sampleProducts = [
   },
   {
     name: "Golden Resin",
-    category: "Niche",
+    category: "Niche Fragrances",
     price: 3799,
     brand: "Resin House",
     description: "Deep resinous fragrance with a rich ambered heart.",
@@ -203,7 +196,7 @@ const sampleProducts = [
   },
   {
     name: "Silent Woods",
-    category: "Niche",
+    category: "Niche Fragrances",
     price: 3599,
     brand: "Silent Grove",
     description: "Earthy calming woods softened by spice and suede accents.",
@@ -221,7 +214,7 @@ const sampleProducts = [
   },
   {
     name: "Mystic Bloom",
-    category: "Niche",
+    category: "Niche Fragrances",
     price: 3699,
     brand: "Bloom Archive",
     description: "Complex floral composition with depth, texture, and soft woods.",
@@ -238,6 +231,17 @@ const sampleProducts = [
     seasons: ["Spring", "Autumn"],
   },
 ];
+
+const getSampleCategoryCounts = () =>
+  sampleProducts.reduce((counts, product) => {
+    const category = String(product.category || "").trim();
+    if (!category) return counts;
+
+    counts[category] = (counts[category] || 0) + 1;
+    return counts;
+  }, {});
+
+const getSampleCategoryNames = () => Object.keys(getSampleCategoryCounts());
 
 const verifyReset = async () => {
   const totalProducts = await Product.countDocuments();
@@ -256,17 +260,18 @@ const verifyReset = async () => {
     { $match: { count: { $gt: 1 } } },
   ]);
   const categories = await Category.find({}, "name slug").sort({ name: 1 }).lean();
+  const expectedCountsByCategory = getSampleCategoryCounts();
+  const categoryNames = Object.keys(expectedCountsByCategory);
 
-  const countsByCategory = Object.fromEntries(CATEGORY_NAMES.map((name) => [name, 0]));
+  const countsByCategory = Object.fromEntries(categoryNames.map((name) => [name, 0]));
   categoryCounts.forEach(({ _id, count }) => {
     countsByCategory[_id] = count;
   });
 
-  const invalidCategoryCount = CATEGORY_NAMES.filter((name) => countsByCategory[name] !== 4);
-  const extraCategories = categories
-    .map((category) => category.name)
-    .filter((name) => !CATEGORY_NAMES.includes(name));
-  const missingCategories = CATEGORY_NAMES.filter(
+  const invalidCategoryCount = categoryNames.filter(
+    (name) => countsByCategory[name] !== expectedCountsByCategory[name],
+  );
+  const missingCategories = categoryNames.filter(
     (name) => !categories.some((category) => category.name === name),
   );
 
@@ -276,7 +281,7 @@ const verifyReset = async () => {
 
   if (invalidCategoryCount.length > 0) {
     throw new Error(
-      `Verification failed: expected 4 products in each category. Offending categories: ${invalidCategoryCount.join(", ")}.`,
+      `Verification failed: sample category counts did not match. Offending categories: ${invalidCategoryCount.join(", ")}.`,
     );
   }
 
@@ -287,11 +292,9 @@ const verifyReset = async () => {
     throw new Error(`Verification failed: duplicate product names found: ${duplicates}.`);
   }
 
-  if (missingCategories.length > 0 || extraCategories.length > 0) {
+  if (missingCategories.length > 0) {
     throw new Error(
-      `Verification failed: category collection mismatch. Missing: ${
-        missingCategories.join(", ") || "none"
-      }. Extra: ${extraCategories.join(", ") || "none"}.`,
+      `Verification failed: sample categories were not created. Missing: ${missingCategories.join(", ")}.`,
     );
   }
 
@@ -306,20 +309,17 @@ const resetProducts = async () => {
   await connectDB();
 
   try {
+    const categoryNames = getSampleCategoryNames();
+
     await Product.deleteMany({});
 
-    await Category.deleteMany({
-      name: { $nin: CATEGORY_NAMES },
-    });
-
     await Category.bulkWrite(
-      CATEGORY_NAMES.map((name) => ({
+      categoryNames.map((name) => ({
         updateOne: {
           filter: { name },
           update: {
-            $set: {
+            $setOnInsert: {
               name,
-              slug: CATEGORY_SLUGS[name],
             },
           },
           upsert: true,

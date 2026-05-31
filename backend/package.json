@@ -9,6 +9,7 @@
     "start": "node server.js",
     "start:worker": "node worker.js",
     "start:pm2": "pm2-runtime ecosystem.config.cjs",
+    "cleanup:catalog": "node scripts/catalog.cleanup.js",
     "cleanup:categories": "node scripts/category.cleanup.js",
     "reset:products": "node scripts/resetProducts.js",
     "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js --runInBand"

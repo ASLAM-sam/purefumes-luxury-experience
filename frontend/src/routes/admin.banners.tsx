@@ -390,7 +390,7 @@ function AdminBanners() {
                 required
                 value={form.link}
                 onChange={updateForm("link")}
-                placeholder="/category/designer"
+                placeholder="/shop"
                 className="w-full rounded-lg border border-border bg-beige/30 px-4 py-3 text-sm text-navy outline-none transition focus:border-gold"
               />
             </div>

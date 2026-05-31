@@ -10,10 +10,12 @@ const getCsrfToken = async (agent) => {
 };
 
 const createCategoryBackedProduct = async ({
-  categoryName = "Middle Eastern",
+  categoryName = "Middle Eastern Fragrances",
   ...product
 }) => {
-  const category = await Category.create({ name: categoryName });
+  const category =
+    (await Category.findOne({ name: categoryName })) ||
+    (await Category.create({ name: categoryName }));
 
   return Product.create({
     ...product,
@@ -25,6 +27,40 @@ const createCategoryBackedProduct = async ({
 };
 
 describe("Coupon API", () => {
+  it("subtracts the exact fixed rupee amount entered for all-perfume coupons", async () => {
+    const product = await createCategoryBackedProduct({
+      name: "Exact Discount Perfume",
+      brand: "Purefumes",
+      price: 999,
+      stock: 5,
+      sizes: [{ size: "100ml", price: 999 }],
+      image: "https://example.com/exact.jpg",
+    });
+
+    await Coupon.create({
+      code: "RUPEES100",
+      discountType: "fixed",
+      discountValue: 100,
+      minOrderAmount: 0,
+      applicabilityType: "all",
+    });
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    const response = await agent
+      .post("/api/coupons/apply")
+      .set("X-CSRF-Token", csrfToken)
+      .send({
+        code: "RUPEES100",
+        items: [{ productId: product.id, quantity: 1, size: "100ml" }],
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.discount).toBe(100);
+    expect(response.body.data.finalTotal).toBe(899);
+  });
+
   it("applies fixed selected-product coupons case-insensitively", async () => {
     const product = await createCategoryBackedProduct({
       name: "KHAMRAH WAHA",
