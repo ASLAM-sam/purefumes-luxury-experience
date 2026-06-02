@@ -25,12 +25,11 @@ import {
   getBuyNowCheckoutState,
   saveBuyNowSuccessState,
 } from "@/lib/buy-now";
-import { formatINR, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
+import { calculateCheckoutTotals } from "@/lib/checkout-totals";
+import { formatINR, multiplyMoney, normalizeMoney } from "@/lib/money";
 import { couponsApi, ordersApi, paymentsApi, type Order, type PaymentConfig } from "@/services/api";
 
 const RAZORPAY_URL = "https://checkout.razorpay.com/v1/checkout.js";
-const SHIPPING_THRESHOLD = 2499;
-const SHIPPING_CHARGE = 100;
 
 type RazorpaySuccessResponse = {
   razorpay_payment_id: string;
@@ -244,9 +243,6 @@ const retryOperation = async <T,>(operation: () => Promise<T>, retries = 1): Pro
   }
 };
 
-const calculateShippingCharge = (subtotalAfterDiscount: number) =>
-  normalizeMoney(subtotalAfterDiscount) <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
-
 const orderItemsForSuccess = (order: Order) =>
   Array.isArray(order.items)
     ? order.items.map((item) => ({
@@ -372,9 +368,9 @@ function CheckoutPage() {
     return multiplyMoney(size.price, quantity);
   }, [quantity, size]);
   const discount = appliedCoupon?.discount ?? 0;
-  const discountedTotal = appliedCoupon?.finalTotal ?? subtotal;
-  const shippingCharge = calculateShippingCharge(discountedTotal);
-  const finalTotal = normalizeMoney(discountedTotal + shippingCharge);
+  const checkoutTotals = calculateCheckoutTotals({ subtotal, discount });
+  const shippingCharge = checkoutTotals.shippingCharge;
+  const finalTotal = appliedCoupon?.finalTotal ?? checkoutTotals.finalPayable;
 
   useEffect(() => {
     if (appliedCoupon && appliedCoupon.subtotal !== subtotal) {
@@ -447,9 +443,11 @@ function CheckoutPage() {
           result.discount ?? result.coupon?.discountValue ?? 0,
         );
         const resultSubtotal = normalizeMoney(result.subtotal ?? subtotal);
-        const resultFinalTotal = normalizeMoney(
-          result.finalTotal ?? subtractMoney(resultSubtotal, discountAmount),
-        );
+        const fallbackTotals = calculateCheckoutTotals({
+          subtotal: resultSubtotal,
+          discount: discountAmount,
+        });
+        const resultFinalTotal = normalizeMoney(result.finalTotal ?? fallbackTotals.finalPayable);
 
         setAppliedCoupon({
           code: result.coupon?.code || result.code || trimmedCode.toUpperCase(),
@@ -1051,8 +1049,9 @@ function CartCheckout() {
   const nav = useNavigate();
   const { addNotification } = useNotification();
   const { cart, cartTotal, cartDiscount, cartFinalTotal, cartCouponCode, clearCart } = useApp();
-  const cartShippingCharge = calculateShippingCharge(cartFinalTotal);
-  const cartPayableTotal = normalizeMoney(cartFinalTotal + cartShippingCharge);
+  const cartTotals = calculateCheckoutTotals({ subtotal: cartTotal, discount: cartDiscount });
+  const cartShippingCharge = cartTotals.shippingCharge;
+  const cartPayableTotal = cartCouponCode ? cartFinalTotal : cartTotals.finalPayable;
   const [form, setForm] = useState<DeliveryFormValues>(() => createDeliveryFormFromUser(null));
   const [showPaymentOptions, setShowPaymentOptions] = useState(false);
   const [loading, setLoading] = useState<string | null>(null);

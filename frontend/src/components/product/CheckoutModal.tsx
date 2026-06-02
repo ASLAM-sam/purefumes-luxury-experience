@@ -14,6 +14,7 @@ import {
   type DeliveryFormValues,
 } from "@/components/checkout/DeliveryDetailsFields";
 import { ordersApi } from "@/services/api";
+import { calculateCheckoutTotals } from "@/lib/checkout-totals";
 import { formatINR, multiplyMoney } from "@/lib/money";
 
 export const CheckoutModal = memo(function CheckoutModal() {
@@ -39,6 +40,9 @@ export const CheckoutModal = memo(function CheckoutModal() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const closeTimeoutRef = useRef<number | null>(null);
+  const cartTotals = calculateCheckoutTotals({ subtotal: cartTotal, discount: cartDiscount });
+  const shippingCharge = cartTotals.shippingCharge;
+  const payableTotal = cartCouponCode ? cartFinalTotal : cartTotals.finalPayable;
 
   useEffect(() => {
     setCouponCode(cartCouponCode);
@@ -184,13 +188,17 @@ export const CheckoutModal = memo(function CheckoutModal() {
                         -{formatINR(cartDiscount)}
                       </span>
                     </div>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span>Shipping Charges</span>
+                      <span>{shippingCharge > 0 ? formatINR(shippingCharge) : "Free"}</span>
+                    </div>
                   </div>
                   <div className="flex items-center justify-between border-t border-border pt-3">
                     <span className="text-xs uppercase tracking-[0.25em] text-navy/60">
                       Final Total
                     </span>
                     <span className="font-display text-2xl text-navy">
-                      {formatINR(cartFinalTotal)}
+                      {formatINR(payableTotal)}
                     </span>
                   </div>
                 </div>
@@ -257,7 +265,7 @@ export const CheckoutModal = memo(function CheckoutModal() {
                     disabled={submitting || !cart.length}
                     className="mt-4 w-full"
                   >
-                    {submitting ? "Placing..." : `Place Order ${formatINR(cartFinalTotal)}`}
+                    {submitting ? "Placing..." : `Place Order ${formatINR(payableTotal)}`}
                   </Button>
                 </form>
               </>

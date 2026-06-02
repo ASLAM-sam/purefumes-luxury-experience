@@ -181,22 +181,56 @@ const runWithRefreshLock = async <T,>(action: () => Promise<T>): Promise<T> => {
   return runWithStorageRefreshLock(action);
 };
 
-const isAdminSessionRequest = (url: string) =>
-  url === "/auth/me" ||
-  url.startsWith("/admin") ||
-  url.startsWith("/analytics") ||
-  url === "/payments/settings" ||
-  url.startsWith("/payments/settings?") ||
-  url === "/orders" ||
-  url.startsWith("/orders?") ||
-  url.startsWith("/orders/unseen") ||
-  /^\/orders\/[^/]+(?:\/seen)?$/.test(url);
+const getRequestPath = (url: string) => {
+  try {
+    return new URL(url, apiBaseUrl || "https://local.invalid").pathname;
+  } catch (_error) {
+    return url.split("?")[0];
+  }
+};
+
+const ADMIN_SESSION_PATHS = new Set([
+  "/auth/me",
+  "/payments/settings",
+  "/orders",
+]);
+
+const ADMIN_SESSION_PREFIXES = [
+  "/admin",
+  "/analytics",
+  "/products",
+  "/categories",
+  "/brands",
+  "/coupons",
+  "/banners",
+  "/perfume-requests",
+];
+
+const isAdminSessionRequest = (url: string) => {
+  const path = getRequestPath(url);
+
+  return (
+    ADMIN_SESSION_PATHS.has(path) ||
+    ADMIN_SESSION_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`)) ||
+    path.startsWith("/orders/unseen") ||
+    /^\/orders\/[^/]+(?:\/seen)?$/.test(path)
+  );
+};
 
 const shouldAttemptRefresh = (url: string) =>
   isAdminSessionRequest(url) &&
   Date.now() >= refreshBackoffUntilMs &&
-  !url.startsWith("/auth/login") &&
-  !url.startsWith("/auth/refresh");
+  getRequestPath(url) !== "/auth/login" &&
+  getRequestPath(url) !== "/auth/refresh";
+
+const isPermissionError = (error: AxiosError<ApiEnvelope<unknown>>) => {
+  const message =
+    error.response?.data && typeof error.response.data === "object" && "message" in error.response.data
+      ? String(error.response.data.message || "")
+      : "";
+
+  return error.response?.status === 403 && message.toLowerCase().includes("permission");
+};
 
 const refreshAuthSession = async () => {
   if (refreshPromise) {
@@ -277,9 +311,10 @@ client.interceptors.response.use(
   async (error: AxiosError<ApiEnvelope<unknown>>) => {
     const config = (error.config || {}) as RequestConfig & { _retry?: boolean };
     const normalizedUrl = String(config.url || "");
+    const shouldRefreshStatus = error.response?.status === 401 || isPermissionError(error);
 
     if (
-      error.response?.status === 401 &&
+      shouldRefreshStatus &&
       !config.skipAuthRefresh &&
       !config._retry &&
       shouldAttemptRefresh(normalizedUrl)
@@ -289,6 +324,15 @@ client.interceptors.response.use(
       if (refreshed) {
         return client.request(config);
       }
+
+      const sessionExpired = new Error("Session expired. Please sign in again.");
+      (sessionExpired as Error & { status?: number }).status = 401;
+      captureFrontendException(sessionExpired, {
+        source: "axios.response",
+        path: normalizedUrl,
+        status: error.response?.status || 0,
+      });
+      throw sessionExpired;
     }
 
     const normalized = normalizeError(error);

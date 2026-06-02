@@ -21,7 +21,8 @@ import {
   sanitizeFrontendUrl,
 } from "@/lib/sentry";
 import { applyProductImageOverride } from "@/lib/static-image-overrides";
-import { addMoney, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
+import { addMoney, multiplyMoney, normalizeMoney } from "@/lib/money";
+import { calculateCheckoutTotals } from "@/lib/checkout-totals";
 import { normalizeDisplayOrderStatus, normalizePaymentStatus } from "@/lib/order-status";
 
 const BASE = runtimeConfig.apiUrl.replace(/\/$/, "");
@@ -360,6 +361,8 @@ export type ApplyCouponResult = {
   discount: number;
   finalTotal: number;
   subtotal: number;
+  shippingCharge?: number;
+  totalBeforeDiscount?: number;
   eligibleSubtotal?: number;
   ineligibleSubtotal?: number;
   partialApplication?: boolean;
@@ -2275,13 +2278,19 @@ export const couponsApi = {
         body: JSON.stringify(payload),
       })) || {};
     const coupon = response.coupon ? normalizeCoupon(response.coupon) : null;
-    const couponDiscount =
-      response.coupon?.discountValue ?? response.coupon?.discount ?? 0;
-    const discount = normalizeMoney(response.discount ?? couponDiscount);
-    const subtotal = normalizeMoney(response.subtotal ?? payload.cartTotal ?? 0);
-    const finalTotal = normalizeMoney(
-      response.finalTotal ?? subtractMoney(subtotal, discount),
+    const fixedCouponDiscount =
+      coupon?.discountType === "fixed"
+        ? coupon.discountValue
+        : response.coupon?.discountValue ?? response.coupon?.discount ?? 0;
+    const requestedDiscount = normalizeMoney(
+      coupon?.discountType === "fixed"
+        ? fixedCouponDiscount
+        : response.discount ?? fixedCouponDiscount,
     );
+    const subtotal = normalizeMoney(response.subtotal ?? payload.cartTotal ?? 0);
+    const fallbackTotals = calculateCheckoutTotals({ subtotal, discount: requestedDiscount });
+    const discount = fallbackTotals.discount;
+    const finalTotal = fallbackTotals.finalPayable;
 
     return {
       success: response.success !== false,
@@ -2291,6 +2300,10 @@ export const couponsApi = {
       discount,
       finalTotal,
       subtotal,
+      shippingCharge: normalizeMoney(response.shippingCharge ?? fallbackTotals.shippingCharge),
+      totalBeforeDiscount: normalizeMoney(
+        response.totalBeforeDiscount ?? fallbackTotals.totalBeforeDiscount,
+      ),
       eligibleSubtotal: normalizeMoney(response.eligibleSubtotal ?? subtotal),
       ineligibleSubtotal: normalizeMoney(response.ineligibleSubtotal ?? 0),
       partialApplication: Boolean(response.partialApplication),
@@ -2617,6 +2630,7 @@ const normalizeCartResponse = (cart: CartApiResponse): CartApiResponse => {
     cart.subtotal ?? addMoney(...items.map((item) => item.lineTotal || 0)),
   );
   const discount = normalizeMoney(cart.discount ?? 0);
+  const checkoutTotals = calculateCheckoutTotals({ subtotal, discount });
 
   return {
     ...cart,
@@ -2625,9 +2639,7 @@ const normalizeCartResponse = (cart: CartApiResponse): CartApiResponse => {
     totalItems: Number(cart.totalItems ?? items.reduce((sum, item) => sum + item.quantity, 0)),
     subtotal,
     discount,
-    finalTotal: normalizeMoney(
-      cart.finalTotal && cart.finalTotal > 0 ? cart.finalTotal : subtractMoney(subtotal, discount),
-    ),
+    finalTotal: checkoutTotals.finalPayable,
   };
 };
 

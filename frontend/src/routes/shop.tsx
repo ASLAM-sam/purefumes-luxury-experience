@@ -564,8 +564,14 @@ function ShopPage() {
               {!loading && !error && displayedProducts.length > 0 ? (
                 <>
                   <div className="product-grid mt-6">
-                    {displayedProducts.map((product) => (
-                      <ProductCard key={product.id} product={product} showSize />
+                    {displayedProducts.map((product, index) => (
+                      <ProductCard
+                        key={product.id}
+                        product={product}
+                        showSize
+                        imageLoading={index < 8 ? "eager" : "lazy"}
+                        imageFetchPriority={index < 8 ? "high" : "auto"}
+                      />
                     ))}
                   </div>
 

@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, type ImgHTMLAttributes, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ImgHTMLAttributes, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 type OptimizedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src" | "alt"> & {
@@ -25,12 +25,24 @@ export const OptimizedImage = memo(function OptimizedImage({
   onError,
   ...props
 }: OptimizedImageProps) {
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    setLoaded(false);
     setFailed(false);
+    setLoaded(false);
+
+    const image = imageRef.current;
+    if (!src || !image) return;
+
+    if (image.complete) {
+      if (image.naturalWidth > 0) {
+        setLoaded(true);
+      } else {
+        setFailed(true);
+      }
+    }
   }, [src]);
 
   if (!src || failed) {
@@ -66,6 +78,7 @@ export const OptimizedImage = memo(function OptimizedImage({
       ) : null}
 
       <img
+        ref={imageRef}
         {...props}
         src={src}
         alt={alt}

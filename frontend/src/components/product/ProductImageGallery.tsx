@@ -3,6 +3,13 @@ import { ChevronLeft, ChevronRight, Expand } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
+import {
+  PRODUCT_DETAIL_IMAGE_TRANSFORM,
+  PRODUCT_FULLSCREEN_IMAGE_TRANSFORM,
+  PRODUCT_THUMBNAIL_IMAGE_TRANSFORM,
+  getCloudinaryImageUrl,
+  getCloudinarySrcSet,
+} from "@/lib/cloudinary-images";
 
 const SWIPE_THRESHOLD_PX = 40;
 type GalleryMedia = { url: string };
@@ -195,7 +202,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                     aria-pressed={selected}
                   >
                     <OptimizedImage
-                      src={media.url}
+                      src={getCloudinaryImageUrl(media.url, PRODUCT_THUMBNAIL_IMAGE_TRANSFORM)}
+                      srcSet={getCloudinarySrcSet(
+                        media.url,
+                        [120, 160, 240],
+                        PRODUCT_THUMBNAIL_IMAGE_TRANSFORM,
+                      )}
                       alt={`${productName} thumbnail ${index + 1}`}
                       width={160}
                       height={160}
@@ -235,7 +247,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
               >
                 {hasMedia && activeMedia.url ? (
                   <OptimizedImage
-                    src={activeMedia.url}
+                    src={getCloudinaryImageUrl(activeMedia.url, PRODUCT_DETAIL_IMAGE_TRANSFORM)}
+                    srcSet={getCloudinarySrcSet(
+                      activeMedia.url,
+                      [640, 1000],
+                      PRODUCT_DETAIL_IMAGE_TRANSFORM,
+                    )}
                     alt={productName}
                     width={1100}
                     height={1100}
@@ -309,7 +326,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
               <div className="flex h-full w-full items-center justify-center rounded-[2rem] border border-white/10 bg-white/5 p-4 sm:p-8">
                 {hasMedia && activeMedia.url ? (
                   <OptimizedImage
-                    src={activeMedia.url}
+                    src={getCloudinaryImageUrl(activeMedia.url, PRODUCT_FULLSCREEN_IMAGE_TRANSFORM)}
+                    srcSet={getCloudinarySrcSet(
+                      activeMedia.url,
+                      [1000, 1400],
+                      PRODUCT_FULLSCREEN_IMAGE_TRANSFORM,
+                    )}
                     alt={productName}
                     width={1400}
                     height={1400}
@@ -364,7 +386,12 @@ export const ProductImageGallery = memo(function ProductImageGallery({
                       aria-label={`Fullscreen image ${index + 1}`}
                     >
                       <OptimizedImage
-                        src={media.url}
+                        src={getCloudinaryImageUrl(media.url, PRODUCT_THUMBNAIL_IMAGE_TRANSFORM)}
+                        srcSet={getCloudinarySrcSet(
+                          media.url,
+                          [120, 160, 240],
+                          PRODUCT_THUMBNAIL_IMAGE_TRANSFORM,
+                        )}
                         alt={`${productName} fullscreen thumbnail ${index + 1}`}
                         width={160}
                         height={160}

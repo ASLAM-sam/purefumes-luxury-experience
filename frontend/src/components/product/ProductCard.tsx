@@ -7,6 +7,11 @@ import type { Product } from "@/data/products";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { useApp } from "@/context/AppContext";
 import { useNotification } from "@/context/NotificationContext";
+import {
+  PRODUCT_CARD_IMAGE_TRANSFORM,
+  getCloudinaryImageUrl,
+  getCloudinarySrcSet,
+} from "@/lib/cloudinary-images";
 import { formatINR } from "@/lib/money";
 
 type ProductCardProps = {
@@ -18,11 +23,43 @@ type ProductCardProps = {
 };
 
 const getValidImageUrl = (product: Product) => {
-  const normalizedImages = Array.isArray(product.images)
-    ? product.images.map((image: string) => String(image || "").trim()).filter(Boolean)
-    : [];
+  const getFirstImage = (images: unknown) => {
+    if (Array.isArray(images)) {
+      return images[0] || "";
+    }
 
-  const candidates = [product.image, ...normalizedImages];
+    if (typeof images === "string" && images.trim().startsWith("[")) {
+      try {
+        const parsed = JSON.parse(images) as unknown;
+        return Array.isArray(parsed) ? parsed[0] || "" : "";
+      } catch {
+        return "";
+      }
+    }
+
+    return "";
+  };
+
+  const normalizeImageSource = (image: unknown) => {
+    if (typeof image === "string") {
+      const trimmed = image.trim();
+
+      if (!trimmed || trimmed.startsWith("[") || trimmed.includes(",")) {
+        return "";
+      }
+
+      return trimmed;
+    }
+
+    if (image && typeof image === "object" && "url" in image) {
+      return normalizeImageSource((image as { url?: unknown }).url);
+    }
+
+    return "";
+  };
+
+  const firstImage = getFirstImage((product as { images?: unknown }).images);
+  const candidates = [product.image, firstImage].map(normalizeImageSource);
   return candidates.find((url) => typeof url === "string" && url.trim())?.trim() || "";
 };
 
@@ -52,6 +89,8 @@ export const ProductCard = memo(function ProductCard({
 
   const isBestsellerCard = variant === "bestseller";
   const imageSrc = getValidImageUrl(product);
+  const optimizedImageSrc = getCloudinaryImageUrl(imageSrc, PRODUCT_CARD_IMAGE_TRANSFORM);
+  const optimizedImageSrcSet = getCloudinarySrcSet(imageSrc, [320, 480, 640]);
   const inStock = Number(product.stock || 0) > 0;
   const selectedSize = product.sizes[0] || { size: "Standard", price: startPrice };
 
@@ -85,7 +124,8 @@ export const ProductCard = memo(function ProductCard({
         <Link to="/product/$id" params={{ id: product.id }} className="block">
           <div className="product-card-media product-fit-frame relative aspect-[4/5] overflow-hidden bg-[#f1e8dc]">
             <OptimizedImage
-              src={imageSrc}
+              src={optimizedImageSrc}
+              srcSet={optimizedImageSrcSet}
               alt={product.name}
               width={900}
               height={900}
@@ -123,13 +163,16 @@ export const ProductCard = memo(function ProductCard({
           </div>
         </Link>
 
-        <div className="absolute right-3 bottom-3 z-10 flex items-center gap-2">
-          <WishlistButton product={product} />
+        <div className="product-card-actions absolute bottom-2 right-2 z-10 flex items-center gap-2 md:bottom-3 md:right-3">
+          <WishlistButton
+            product={product}
+            className="h-8 w-8 border-[#5b3a29]/10 bg-[#fffaf4]/95 text-[#5b3a29] shadow-[0_10px_22px_rgba(91,58,41,0.14)] hover:border-[#c89b63] hover:text-[#c89b63] [&_svg]:h-3.5 [&_svg]:w-3.5 md:h-10 md:w-10 md:[&_svg]:h-4 md:[&_svg]:w-4"
+          />
           <button
             type="button"
             onClick={quickAdd}
             disabled={!inStock}
-            className="touch-target flex h-10 w-10 items-center justify-center rounded-full border border-[#5b3a29]/15 bg-[#fffaf4]/95 text-[#5b3a29] shadow-soft backdrop-blur transition hover:border-[#c89b63] hover:text-[#c89b63] disabled:cursor-not-allowed disabled:opacity-50"
+            className="touch-target hidden h-10 w-10 items-center justify-center rounded-full border border-[#5b3a29]/15 bg-[#fffaf4]/95 text-[#5b3a29] shadow-soft backdrop-blur transition hover:border-[#c89b63] hover:text-[#c89b63] disabled:cursor-not-allowed disabled:opacity-50 md:flex"
             aria-label="Quick add to cart"
             title="Quick add"
           >

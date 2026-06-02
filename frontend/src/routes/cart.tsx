@@ -7,6 +7,7 @@ import { Button } from "@/components/common/Button";
 import { OptimizedImage } from "@/components/common/OptimizedImage";
 import { AutoCouponSuggestion } from "@/components/common/AutoCouponSuggestion";
 import { useApp } from "@/context/AppContext";
+import { calculateCheckoutTotals } from "@/lib/checkout-totals";
 import { formatINR } from "@/lib/money";
 
 export const Route = createFileRoute("/cart")({
@@ -14,8 +15,6 @@ export const Route = createFileRoute("/cart")({
 });
 
 const formatCurrency = formatINR;
-const SHIPPING_THRESHOLD = 2499;
-const SHIPPING_CHARGE = 100;
 
 function CartPage() {
   const {
@@ -35,8 +34,9 @@ function CartPage() {
   } = useApp();
   const nav = useNavigate();
   const [couponCode, setCouponCode] = useState(cartCouponCode);
-  const shippingCharge = cartFinalTotal <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
-  const payableTotal = cartFinalTotal + shippingCharge;
+  const cartTotals = calculateCheckoutTotals({ subtotal: cartTotal, discount: cartDiscount });
+  const shippingCharge = cartTotals.shippingCharge;
+  const payableTotal = cartCouponCode ? cartFinalTotal : cartTotals.finalPayable;
 
   useEffect(() => {
     setCouponCode(cartCouponCode);

@@ -50,6 +50,13 @@ const trustItems = [
   { label: "Fast Delivery Across India", Icon: Truck },
 ] as const;
 
+const WhatsAppIcon = ({ className = "" }: { className?: string }) => (
+  <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
+    <path d="M19.11 17.42c-.27-.14-1.6-.79-1.85-.88-.25-.09-.43-.14-.61.14s-.7.88-.86 1.06c-.16.18-.32.2-.59.07-.27-.14-1.14-.42-2.16-1.35-.8-.72-1.33-1.61-1.49-1.88-.16-.27-.02-.41.12-.55.12-.12.27-.32.41-.48.14-.16.18-.27.27-.45.09-.18.05-.34-.02-.48-.07-.14-.61-1.47-.84-2.01-.22-.53-.45-.46-.61-.47h-.52c-.18 0-.48.07-.73.34-.25.27-.95.93-.95 2.27 0 1.33.98 2.62 1.11 2.8.14.18 1.91 2.92 4.63 4.1.65.28 1.16.45 1.55.58.65.2 1.24.17 1.71.1.52-.08 1.6-.65 1.82-1.28.23-.63.23-1.17.16-1.28-.07-.11-.25-.18-.52-.32Z" />
+    <path d="M27.06 4.91A15.86 15.86 0 0 0 16 0C7.18 0 0 7.18 0 16c0 2.82.74 5.57 2.14 7.99L0 32l8.24-2.11A15.92 15.92 0 0 0 16 32c8.82 0 16-7.18 16-16 0-4.27-1.66-8.28-4.94-11.09ZM16 29.29c-2.4 0-4.75-.64-6.81-1.84l-.49-.29-4.89 1.25 1.31-4.76-.32-.5A13.23 13.23 0 0 1 2.71 16C2.71 8.67 8.67 2.71 16 2.71S29.29 8.67 29.29 16 23.33 29.29 16 29.29Z" />
+  </svg>
+);
+
 export const Footer = memo(function Footer() {
   return (
     <footer className="border-t border-border bg-[#fffaf4] text-[#5b3a29]">
@@ -133,6 +140,18 @@ export const Footer = memo(function Footer() {
                 <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[#c89b63]" />
                 <a href="tel:+918686003446" className="transition hover:text-[#c89b63]">
                   +91-8686 003 446
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://wa.me/918341174677"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Chat on WhatsApp at +91 83411 74677"
+                  className="flex items-start gap-3 transition hover:text-[#c89b63]"
+                >
+                  <WhatsAppIcon className="mt-0.5 h-4 w-4 shrink-0 fill-current text-[#c89b63]" />
+                  <span>WhatsApp: +91 83411 74677</span>
                 </a>
               </li>
               <li className="flex items-start gap-3">

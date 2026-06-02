@@ -186,8 +186,8 @@ function CategoryPage() {
                   <ProductCard
                     key={product.id}
                     product={product}
-                    imageLoading={index < 3 ? "eager" : "lazy"}
-                    imageFetchPriority={index < 3 ? "high" : "auto"}
+                    imageLoading={index < 8 ? "eager" : "lazy"}
+                    imageFetchPriority={index < 8 ? "high" : "auto"}
                   />
                 ))}
               </div>

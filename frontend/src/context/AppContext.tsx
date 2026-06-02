@@ -18,7 +18,8 @@ import {
   type CartApiResponse,
 } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
-import { addMoney, multiplyMoney, normalizeMoney, subtractMoney } from "@/lib/money";
+import { calculateCheckoutTotals } from "@/lib/checkout-totals";
+import { addMoney, multiplyMoney, normalizeMoney } from "@/lib/money";
 import { uiActionObserver, uiStateObserver } from "@/lib/performance/state-observers";
 
 export type CartItem = {
@@ -533,9 +534,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
           result.discount ?? result.coupon?.discountValue ?? 0,
         );
         const resultSubtotal = normalizeMoney(result.subtotal ?? cartSummary.subtotal);
-        const resultFinalTotal = normalizeMoney(
-          result.finalTotal ?? subtractMoney(resultSubtotal, discountAmount),
-        );
+        const fallbackTotals = calculateCheckoutTotals({
+          subtotal: resultSubtotal,
+          discount: discountAmount,
+        });
+        const resultFinalTotal = normalizeMoney(result.finalTotal ?? fallbackTotals.finalPayable);
 
         setCartCoupon({
           code: result.coupon?.code || result.code || trimmedCode.toUpperCase(),
@@ -720,8 +723,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const cartCount = customerUser ? cartSummary.totalItems : guestCartCount;
   const cartTotal = customerUser ? cartSummary.subtotal : guestSubtotal;
   const cartDiscount = cartCoupon?.discount ?? 0;
-  const cartFinalTotal =
-    cartCoupon?.finalTotal ?? (customerUser ? cartSummary.finalTotal : guestSubtotal);
+  const fallbackCartTotals = calculateCheckoutTotals({
+    subtotal: cartTotal,
+    discount: cartDiscount,
+  });
+  const cartFinalTotal = cartCoupon?.finalTotal ?? fallbackCartTotals.finalPayable;
   const cartCouponCode = cartCoupon?.code ?? "";
   const wishlistCount = wishlist.length;
 
