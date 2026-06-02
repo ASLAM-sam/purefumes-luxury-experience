@@ -4,7 +4,8 @@ import Product from "../../models/Product.js";
 import { ApiError } from "../../middlewares/errorMiddleware.js";
 import { findRawCartByUserId, upsertCart } from "../../repositories/cartRepository.js";
 import { normalizeSelectedVariant, resolveProductVariant } from "../pricingService.js";
-import { addMoney, multiplyMoney, normalizeMoney, subtractMoney } from "../../utils/money.js";
+import { addMoney, multiplyMoney, normalizeMoney } from "../../utils/money.js";
+import { calculateCheckoutTotals } from "../checkoutTotals.js";
 
 const getEmptyCart = (userId = "") => ({
   id: "",
@@ -190,19 +191,24 @@ export const serializeCart = (cart) => {
         .filter(Boolean)
     : [];
 
+  const subtotal = normalizeMoney(
+    raw.subtotal ?? addMoney(...items.map((item) => item.lineTotal)),
+  );
+  const discount = normalizeMoney(raw.discount ?? 0);
+  const checkoutTotals = calculateCheckoutTotals({
+    subtotalAmount: subtotal,
+    discountAmount: discount,
+  });
+
   return {
     id: raw._id?.toString?.() || raw._id || "",
     userId: raw.userId?.toString?.() || raw.userId || "",
     items,
     products: items,
     totalItems: Number(raw.totalItems ?? items.reduce((sum, item) => sum + item.quantity, 0)),
-    subtotal: normalizeMoney(
-      raw.subtotal ?? addMoney(...items.map((item) => item.lineTotal)),
-    ),
-    discount: normalizeMoney(raw.discount ?? 0),
-    finalTotal: normalizeMoney(
-      raw.finalTotal ?? subtractMoney(raw.subtotal ?? 0, raw.discount ?? 0),
-    ),
+    subtotal,
+    discount,
+    finalTotal: checkoutTotals.totalAmount,
     createdAt: raw.createdAt || null,
     updatedAt: raw.updatedAt || null,
   };

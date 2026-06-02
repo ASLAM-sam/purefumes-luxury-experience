@@ -6,6 +6,7 @@ import {
   normalizeMoney,
   subtractMoney,
 } from "../utils/money.js";
+import { calculateCheckoutTotals } from "./checkoutTotals.js";
 
 export const normalizeCouponCode = (value) =>
   String(value || "")
@@ -138,7 +139,7 @@ export const calculateCouponDiscount = (coupon, subtotalAmount) => {
   return {
     subtotal,
     discount,
-    finalTotal: normalizeMoney(subtractMoney(subtotal, discount)),
+    finalTotal: subtotal > 0 ? normalizeMoney(subtractMoney(subtotal, discount)) : 0,
   };
 };
 
@@ -242,7 +243,10 @@ export const applyCouponToPreparedItems = async ({
   validateCouponForSubtotal(coupon, eligibleSubtotal);
   const eligibleTotals = calculateCouponDiscount(coupon, eligibleSubtotal);
   const discount = eligibleTotals.discount;
-  const finalTotal = normalizeMoney(subtractMoney(subtotal, discount));
+  const payableTotals = calculateCheckoutTotals({
+    subtotalAmount: subtotal,
+    discountAmount: discount,
+  });
   const partialApplication =
     getCouponApplicabilityType(coupon) === "selected" &&
     eligibleItems.length < preparedItems.length;
@@ -256,7 +260,9 @@ export const applyCouponToPreparedItems = async ({
       subtractMoney(subtotal, eligibleSubtotal),
     ),
     discount,
-    finalTotal,
+    finalTotal: payableTotals.totalAmount,
+    shippingCharge: payableTotals.shippingCharge,
+    totalBeforeDiscount: payableTotals.totalBeforeDiscount,
     partialApplication,
     message: partialApplication
       ? "Discount applied only to eligible fragrances."
@@ -277,15 +283,24 @@ export const applyCouponToSubtotal = async ({ code, subtotalAmount }) => {
     throw new ApiError(400, RESTRICTED_COUPON_MESSAGE);
   }
 
-  const subtotal = validateCouponForSubtotal(coupon, subtotalAmount);
+  const subtotal = normalizeMoney(subtotalAmount);
+  validateCouponForSubtotal(coupon, subtotal);
   const totals = calculateCouponDiscount(coupon, subtotal);
+  const payableTotals = calculateCheckoutTotals({
+    subtotalAmount: subtotal,
+    discountAmount: totals.discount,
+  });
 
   return {
     coupon,
     code: normalizedCode,
-    ...totals,
+    subtotal,
+    discount: totals.discount,
+    finalTotal: payableTotals.totalAmount,
     eligibleSubtotal: totals.subtotal,
     ineligibleSubtotal: 0,
+    shippingCharge: payableTotals.shippingCharge,
+    totalBeforeDiscount: payableTotals.totalBeforeDiscount,
     partialApplication: false,
     message: "Coupon applied successfully",
   };

@@ -58,10 +58,49 @@ describe("Coupon API", () => {
 
     expect(response.body.success).toBe(true);
     expect(response.body.data.discount).toBe(100);
-    expect(response.body.data.finalTotal).toBe(899);
+    expect(response.body.data.shippingCharge).toBe(100);
+    expect(response.body.data.totalBeforeDiscount).toBe(1099);
+    expect(response.body.data.finalTotal).toBe(999);
   });
 
-  it("applies fixed selected-product coupons case-insensitively", async () => {
+  it("caps fixed all-perfume coupons at product subtotal and keeps shipping payable", async () => {
+    const product = await createCategoryBackedProduct({
+      name: "Shipping Discount Perfume",
+      brand: "Purefumes",
+      price: 1230,
+      stock: 5,
+      sizes: [{ size: "100ml", price: 1230 }],
+      image: "https://example.com/shipping-discount.jpg",
+    });
+
+    await Coupon.create({
+      code: "ASLAM",
+      discountType: "fixed",
+      discountValue: 1329,
+      minOrderAmount: 100,
+      applicabilityType: "all",
+    });
+
+    const agent = request.agent(app);
+    const csrfToken = await getCsrfToken(agent);
+    const response = await agent
+      .post("/api/coupons/apply")
+      .set("X-CSRF-Token", csrfToken)
+      .send({
+        code: "ASLAM",
+        items: [{ productId: product.id, quantity: 1, size: "100ml" }],
+      })
+      .expect(200);
+
+    expect(response.body.success).toBe(true);
+    expect(response.body.data.subtotal).toBe(1230);
+    expect(response.body.data.shippingCharge).toBe(100);
+    expect(response.body.data.totalBeforeDiscount).toBe(1330);
+    expect(response.body.data.discount).toBe(1230);
+    expect(response.body.data.finalTotal).toBe(100);
+  });
+
+  it("applies fixed selected-product coupons case-insensitively against product subtotal only", async () => {
     const product = await createCategoryBackedProduct({
       name: "KHAMRAH WAHA",
       brand: "Lattafa",
@@ -94,7 +133,9 @@ describe("Coupon API", () => {
     expect(response.body.success).toBe(true);
     expect(response.body.data.code).toBe("ASLAM");
     expect(response.body.data.discount).toBe(400);
-    expect(response.body.data.finalTotal).toBe(1);
+    expect(response.body.data.shippingCharge).toBe(100);
+    expect(response.body.data.totalBeforeDiscount).toBe(501);
+    expect(response.body.data.finalTotal).toBe(101);
     expect(response.body.data.coupon.code).toBe("ASLAM");
   });
 

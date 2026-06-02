@@ -1,6 +1,6 @@
 export const ACCESS_COOKIE_NAME = "accessToken";
 export const REFRESH_COOKIE_NAME = "refreshToken";
-export const ACCESS_TOKEN_TTL = "15m";
+export const ACCESS_TOKEN_TTL = "1h";
 export const REFRESH_TOKEN_TTL = "7d";
 export const AUTH_LOCK_TTL_MS = 10_000;
 export const AUTH_LOCK_WAIT_MS = 2_500;

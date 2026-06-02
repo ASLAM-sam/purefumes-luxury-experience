@@ -125,6 +125,7 @@ export const env = {
   isProduction,
   isTest,
   MONGO_URI: read("MONGO_URI"),
+  MONGO_URI_DIRECT: read("MONGO_URI_DIRECT"),
   MONGO_AUTO_INDEX: parseBoolean(read("MONGO_AUTO_INDEX"), !isProduction),
   ENFORCE_HTTPS: parseBoolean(read("ENFORCE_HTTPS"), isProduction),
   JWT_SECRET: read("JWT_SECRET"),

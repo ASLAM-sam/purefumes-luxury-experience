@@ -30,6 +30,7 @@ import {
 } from "../../repositories/orderRepository.js";
 import { normalizeMoney } from "../../utils/money.js";
 import { upsertGuestCustomer } from "../user/customerUpsertService.js";
+import { calculateCheckoutTotals } from "../checkoutTotals.js";
 
 const shippingToString = (shippingAddress = {}) =>
   [
@@ -52,11 +53,6 @@ const normalizePhone = (value = "") => String(value || "").trim();
 
 const isTestPaymentMode = (paymentMode = "live") => paymentMode === "test";
 const PAID_CONFIRMED_STATUS = "Confirmed";
-const SHIPPING_THRESHOLD = 2499;
-const SHIPPING_CHARGE = 100;
-
-const calculateShippingCharge = (subtotalAfterDiscount = 0) =>
-  normalizeMoney(subtotalAfterDiscount) <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
 
 const buildOrderAddressEntry = (shippingAddress = {}) => {
   const line1 = String(shippingAddress.line1 || "").trim();
@@ -449,7 +445,6 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
         },
       );
       let discountAmount = 0;
-      let totalAmount = subtotalAmount;
       let couponCode = "";
 
       if (String(orderInput.couponCode || "").trim()) {
@@ -460,10 +455,13 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
 
         couponCode = couponResult.code;
         discountAmount = couponResult.discount;
-        totalAmount = couponResult.finalTotal;
       }
-      const shippingCharge = calculateShippingCharge(totalAmount);
-      totalAmount = normalizeMoney(totalAmount + shippingCharge);
+      const payableTotals = calculateCheckoutTotals({
+        subtotalAmount,
+        discountAmount,
+      });
+      const shippingCharge = payableTotals.shippingCharge;
+      const totalAmount = payableTotals.totalAmount;
 
       if (
         isRazorpayOrderInput(orderInput) &&

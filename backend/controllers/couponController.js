@@ -12,6 +12,7 @@ import {
   normalizeOrderItems,
 } from "../services/pricingService.js";
 import { normalizeMoney } from "../utils/money.js";
+import { calculateCheckoutTotals } from "../services/checkoutTotals.js";
 
 const normalizeApplicableProducts = (value) => {
   if (!Array.isArray(value)) {
@@ -79,6 +80,7 @@ const buildCouponResponse = (coupon) => serializeCoupon(coupon);
 
 const sendCouponApplyFailure = ({ res, error, code, subtotalAmount }) => {
   const subtotal = normalizeMoney(subtotalAmount);
+  const totals = calculateCheckoutTotals({ subtotalAmount: subtotal });
   const message = error.message || "Invalid coupon code";
 
   return res.status(error.statusCode || 400).json({
@@ -88,8 +90,10 @@ const sendCouponApplyFailure = ({ res, error, code, subtotalAmount }) => {
       success: false,
       code: normalizeCouponCode(code),
       discount: 0,
-      finalTotal: subtotal,
+      finalTotal: totals.totalAmount,
       subtotal,
+      shippingCharge: totals.shippingCharge,
+      totalBeforeDiscount: totals.totalBeforeDiscount,
       eligibleSubtotal: 0,
       ineligibleSubtotal: subtotal,
       partialApplication: false,
@@ -217,6 +221,8 @@ export const applyCoupon = asyncHandler(async (req, res) => {
         discount: result.discount,
         finalTotal: result.finalTotal,
         subtotal: result.subtotal,
+        shippingCharge: result.shippingCharge,
+        totalBeforeDiscount: result.totalBeforeDiscount,
         eligibleSubtotal: result.eligibleSubtotal,
         ineligibleSubtotal: result.ineligibleSubtotal,
         partialApplication: result.partialApplication,

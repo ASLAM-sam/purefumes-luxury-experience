@@ -5,17 +5,13 @@ import logger from "../config/logger.js";
 import { captureException } from "../config/sentry.js";
 import { ApiError } from "../middlewares/errorMiddleware.js";
 import { normalizeMoney, toPaise } from "../utils/money.js";
+import { calculateCheckoutTotals } from "./checkoutTotals.js";
 import { applyCouponToPreparedItems } from "./couponService.js";
 import { buildPreparedOrderItems } from "./pricingService.js";
 
 let cachedClient = null;
 let cachedKeyId = "";
 let cachedKeySecret = "";
-const SHIPPING_THRESHOLD = 2499;
-const SHIPPING_CHARGE = 100;
-
-const calculateShippingCharge = (subtotalAfterDiscount) =>
-  normalizeMoney(subtotalAfterDiscount) <= SHIPPING_THRESHOLD ? SHIPPING_CHARGE : 0;
 
 const getCredentials = () => {
   const keyId = String(env.RAZORPAY_KEY_ID || "").trim();
@@ -71,7 +67,6 @@ export const buildCheckoutTotals = async ({ items, couponCode }) => {
   );
 
   let discountAmount = 0;
-  let totalAmount = normalizeMoney(subtotalAmount);
   let appliedCouponCode = "";
 
   if (String(couponCode || "").trim()) {
@@ -82,11 +77,14 @@ export const buildCheckoutTotals = async ({ items, couponCode }) => {
 
     appliedCouponCode = couponResult.code;
     discountAmount = normalizeMoney(couponResult.discount);
-    totalAmount = normalizeMoney(couponResult.finalTotal);
   }
 
-  const shippingCharge = calculateShippingCharge(totalAmount);
-  totalAmount = normalizeMoney(totalAmount + shippingCharge);
+  const payableTotals = calculateCheckoutTotals({
+    subtotalAmount,
+    discountAmount,
+  });
+  const shippingCharge = payableTotals.shippingCharge;
+  const totalAmount = payableTotals.totalAmount;
   const amount = toPaise(totalAmount);
 
   if (!Number.isInteger(amount) || amount < 100) {
