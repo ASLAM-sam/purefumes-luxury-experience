@@ -14,6 +14,9 @@ import {
 import { accountApi } from "@/services/api";
 
 export const Route = createFileRoute("/login")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   beforeLoad: () => {
     throw redirect({ to: "/" });
   },

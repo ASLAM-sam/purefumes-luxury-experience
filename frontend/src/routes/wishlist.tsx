@@ -8,6 +8,9 @@ import { useApp } from "@/context/AppContext";
 import { useNotification } from "@/context/NotificationContext";
 
 export const Route = createFileRoute("/wishlist")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   component: WishlistPage,
 });
 

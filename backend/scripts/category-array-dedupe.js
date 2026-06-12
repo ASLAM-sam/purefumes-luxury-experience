@@ -91,6 +91,77 @@ const countUniqueCategoryProducts = async () => {
   }));
 };
 
+const countDuplicateCategoryEntries = async () => {
+  const [result = {}] = await Product.collection
+    .aggregate([
+      {
+        $project: {
+          duplicateCategories: {
+            $subtract: [
+              { $size: { $ifNull: ["$categories", []] } },
+              { $size: { $setUnion: [{ $ifNull: ["$categories", []] }, []] } },
+            ],
+          },
+          duplicateCategoryNames: {
+            $subtract: [
+              { $size: { $ifNull: ["$categoryNames", []] } },
+              { $size: { $setUnion: [{ $ifNull: ["$categoryNames", []] }, []] } },
+            ],
+          },
+          duplicateCategorySlugs: {
+            $subtract: [
+              { $size: { $ifNull: ["$categorySlugs", []] } },
+              { $size: { $setUnion: [{ $ifNull: ["$categorySlugs", []] }, []] } },
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          categories: { $sum: "$duplicateCategories" },
+          categoryNames: { $sum: "$duplicateCategoryNames" },
+          categorySlugs: { $sum: "$duplicateCategorySlugs" },
+        },
+      },
+    ])
+    .toArray();
+
+  return {
+    categories: Number(result.categories || 0),
+    categoryNames: Number(result.categoryNames || 0),
+    categorySlugs: Number(result.categorySlugs || 0),
+  };
+};
+
+const getMiddleEasternVerification = async () => {
+  const category = await Category.findOne({ name: "Middle Eastern Fragrances" }).lean();
+
+  if (!category) {
+    return null;
+  }
+
+  const categoryId = category._id;
+  const [uniqueCount, [unwound = {}]] = await Promise.all([
+    Product.collection.countDocuments({ categories: categoryId }),
+    Product.collection
+      .aggregate([
+        { $match: { categories: categoryId } },
+        { $project: { categories: { $setUnion: ["$categories", []] } } },
+        { $unwind: "$categories" },
+        { $match: { categories: categoryId } },
+        { $count: "count" },
+      ])
+      .toArray(),
+  ]);
+
+  return {
+    categoryId: String(categoryId),
+    uniqueProductCount: uniqueCount,
+    customerCountAfterFixedAggregation: Number(unwound.count || 0),
+  };
+};
+
 const main = async () => {
   await connect();
 
@@ -153,9 +224,32 @@ const main = async () => {
     });
   }
 
+  const preflight = {
+    totalProductsScanned: before.products,
+    productsNeedingCleanup: affected.length,
+    fieldsThatWillBeUpdatedInApplyMode: ["categories", "categoryNames", "categorySlugs"],
+    protectedFieldsNotTouched: [
+      "name",
+      "brand",
+      "price",
+      "stock",
+      "description",
+      "image",
+      "images",
+      "Cloudinary URLs",
+      "variants",
+      "offers",
+      "discounts",
+      "slug",
+    ],
+    warning:
+      "Apply mode uses targeted $set only for duplicate category arrays. It does not delete products, images, brands, categories, or Cloudinary URLs.",
+  };
+
   let modified = 0;
 
   if (mode === "apply" && operations.length) {
+    console.error(JSON.stringify({ mode, preflight }, null, 2));
     const writeResult = await Product.collection.bulkWrite(operations, {
       ordered: false,
     });
@@ -179,6 +273,7 @@ const main = async () => {
 
   const result = {
     mode,
+    preflight,
     before,
     after,
     protectedDataUnchanged,
@@ -190,6 +285,10 @@ const main = async () => {
       duplicateTotals.categoryNames +
       duplicateTotals.categorySlugs,
     finalCategoryCounts: await countUniqueCategoryProducts(),
+    verification: {
+      duplicateCategoryEntries: await countDuplicateCategoryEntries(),
+      middleEasternFragrances: await getMiddleEasternVerification(),
+    },
     affected,
   };
 

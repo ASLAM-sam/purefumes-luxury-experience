@@ -3,6 +3,24 @@ import { Container } from "@/components/common/Container";
 import { SiteShell } from "@/components/layout/SiteShell";
 
 export const Route = createFileRoute("/about")({
+  head: () => ({
+    meta: [
+      { title: "About Purefumes Hyderabad | Authentic Perfume Store" },
+      {
+        name: "description",
+        content:
+          "Learn about Purefumes Hyderabad, an online perfume store based in Hyderabad offering authentic Designer, Middle Eastern, and Niche fragrances across India.",
+      },
+      { property: "og:title", content: "About Purefumes Hyderabad" },
+      {
+        property: "og:description",
+        content:
+          "Purefumes Hyderabad offers authentic perfumes online with trusted service from Hyderabad, Telangana.",
+      },
+      { property: "og:type", content: "website" },
+    ],
+    links: [{ rel: "canonical", href: "https://purefumeshyderabad.in/about" }],
+  }),
   component: AboutPage,
 });
 

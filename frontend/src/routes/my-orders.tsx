@@ -15,6 +15,9 @@ import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-st
 import { ordersApi, type Order } from "@/services/api";
 
 export const Route = createFileRoute("/my-orders")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   beforeLoad: () => {
     throw redirect({ to: "/" });
   },

@@ -9,6 +9,9 @@ import { useNotification } from "@/context/NotificationContext";
 import { clearRedirectAfterLogin, getRedirectAfterLogin } from "@/lib/auth-redirect";
 
 export const Route = createFileRoute("/signup")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   beforeLoad: () => {
     throw redirect({ to: "/" });
   },

@@ -40,6 +40,9 @@ import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-st
 import { frontendMediator } from "@/lib/performance/mediator";
 
 export const Route = createFileRoute("/profile")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   beforeLoad: () => {
     throw redirect({ to: "/" });
   },

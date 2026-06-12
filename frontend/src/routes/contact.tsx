@@ -3,6 +3,24 @@ import { Container } from "@/components/common/Container";
 import { SiteShell } from "@/components/layout/SiteShell";
 
 export const Route = createFileRoute("/contact")({
+  head: () => ({
+    meta: [
+      { title: "Contact Purefumes Hyderabad | Perfume Store Support" },
+      {
+        name: "description",
+        content:
+          "Contact Purefumes Hyderabad for perfume orders, support, and authentic fragrance shopping assistance from Hyderabad, Telangana, India.",
+      },
+      { property: "og:title", content: "Contact Purefumes Hyderabad" },
+      {
+        property: "og:description",
+        content:
+          "Reach Purefumes Hyderabad for authentic perfume order support and customer assistance.",
+      },
+      { property: "og:type", content: "website" },
+    ],
+    links: [{ rel: "canonical", href: "https://purefumeshyderabad.in/contact" }],
+  }),
   component: ContactPage,
 });
 

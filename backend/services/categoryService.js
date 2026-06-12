@@ -90,6 +90,11 @@ const buildCategoryCounts = async (ids = []) => {
         categories: { $in: objectIds },
       },
     },
+    {
+      $project: {
+        categories: { $setUnion: ["$categories", []] },
+      },
+    },
     { $unwind: "$categories" },
     {
       $match: {
@@ -320,9 +325,29 @@ const getCategoryDocumentsByIds = async (ids = [], { includeDeleted = false } = 
   return sortCategoryDocuments(categories);
 };
 
+const dedupeCategoryDocuments = (categories = []) => {
+  const seen = new Set();
+  const uniqueCategories = [];
+
+  for (const category of Array.isArray(categories) ? categories : []) {
+    const id = String(category?._id || category?.id || "").trim();
+
+    if (!id || seen.has(id)) {
+      continue;
+    }
+
+    seen.add(id);
+    uniqueCategories.push(category);
+  }
+
+  return uniqueCategories;
+};
+
 const buildCategorySnapshot = (categories = [], preferredPrimaryId = "") => {
-  const normalizedCategories = sortCategoryDocuments(categories).filter(
-    (category) => category && category.isDeleted !== true,
+  const normalizedCategories = dedupeCategoryDocuments(
+    sortCategoryDocuments(categories).filter(
+      (category) => category && category.isDeleted !== true,
+    ),
   );
 
   if (!normalizedCategories.length) {
@@ -385,7 +410,7 @@ const resolveCategoriesByTokens = async ({ tokens = [], allowCreate = false, def
     resolved.push(created.toObject({ virtuals: true }));
   }
 
-  return sortCategoryDocuments(resolved);
+  return sortCategoryDocuments(dedupeCategoryDocuments(resolved));
 };
 
 export const resolveCategoryFromInput = async ({
@@ -558,8 +583,11 @@ export const attachCategoryDetails = async (products = []) => {
         : product.categoryId
           ? [product.categoryId]
           : [];
-    const categoryDetails = categoryIdsForProduct
-      .map((id) => categoryMap.get(toCategoryId(id)))
+    const uniqueCategoryIdsForProduct = [
+      ...new Set(categoryIdsForProduct.map((id) => toCategoryId(id)).filter(Boolean)),
+    ];
+    const categoryDetails = uniqueCategoryIdsForProduct
+      .map((id) => categoryMap.get(id))
       .filter(Boolean);
     const primaryCategory = categoryDetails[0] || null;
 

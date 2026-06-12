@@ -11,6 +11,7 @@ lerna-debug.log*
 node_modules
 
 # Frontend build output
+.vite-cache/
 frontend/.env*
 !frontend/.env.example
 frontend/dist

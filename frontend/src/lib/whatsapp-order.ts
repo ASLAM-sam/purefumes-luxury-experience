@@ -1,7 +1,7 @@
 import type { OrderSuccessItem } from "@/lib/buy-now";
 import { formatINR } from "@/lib/money";
 
-export const WHATSAPP_PHONE = "918686003446";
+export const WHATSAPP_PHONE = "918341174677";
 
 export type WhatsAppOrderDetails = {
   customerName: string;

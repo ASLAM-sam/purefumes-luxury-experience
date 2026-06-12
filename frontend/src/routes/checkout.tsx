@@ -273,6 +273,9 @@ function PaymentVerificationOverlay({ message }: { message: string }) {
 }
 
 export const Route = createFileRoute("/checkout")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   component: CheckoutPage,
 });
 

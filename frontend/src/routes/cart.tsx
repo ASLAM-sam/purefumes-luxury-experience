@@ -11,6 +11,9 @@ import { calculateCheckoutTotals } from "@/lib/checkout-totals";
 import { formatINR } from "@/lib/money";
 
 export const Route = createFileRoute("/cart")({
+  head: () => ({
+    meta: [{ name: "robots", content: "noindex, nofollow" }],
+  }),
   component: CartPage,
 });
 

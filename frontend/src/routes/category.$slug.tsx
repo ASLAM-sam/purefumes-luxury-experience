@@ -12,8 +12,45 @@ import { filterStorefrontCategories, isGenderCategory } from "@/lib/categories";
 import { categoriesApi, productsApi } from "@/services/api";
 
 const PAGE_SIZE = 12;
+const CATEGORY_SEO: Record<string, { name: string; description: string }> = {
+  "designer-fragrances": {
+    name: "Designer Fragrances",
+    description:
+      "Shop authentic designer perfumes online from Purefumes Hyderabad with secure checkout and delivery across India.",
+  },
+  "middle-eastern-fragrances": {
+    name: "Middle Eastern Fragrances",
+    description:
+      "Explore authentic Middle Eastern perfumes and long-lasting Arabian fragrances from Purefumes Hyderabad.",
+  },
+  "niche-fragrances": {
+    name: "Niche Fragrances",
+    description:
+      "Discover niche perfumes and carefully curated luxury fragrances from Purefumes Hyderabad.",
+  },
+};
 
 export const Route = createFileRoute("/category/$slug")({
+  head: ({ params }) => {
+    const seo = CATEGORY_SEO[params.slug] || {
+      name: "Perfume Category",
+      description:
+        "Browse authentic perfume collections from Purefumes Hyderabad with secure checkout and delivery across India.",
+    };
+
+    return {
+      meta: [
+        { title: `${seo.name} | Purefumes Hyderabad` },
+        { name: "description", content: seo.description },
+        { property: "og:title", content: `${seo.name} | Purefumes Hyderabad` },
+        { property: "og:description", content: seo.description },
+        { property: "og:type", content: "website" },
+      ],
+      links: [
+        { rel: "canonical", href: `https://purefumeshyderabad.in/category/${params.slug}` },
+      ],
+    };
+  },
   component: CategoryPage,
 });
 

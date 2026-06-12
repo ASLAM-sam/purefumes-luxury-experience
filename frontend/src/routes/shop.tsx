@@ -30,6 +30,7 @@ export const Route = createFileRoute("/shop")({
       },
       { property: "og:type", content: "website" },
     ],
+    links: [{ rel: "canonical", href: "https://purefumeshyderabad.in/shop" }],
   }),
   component: ShopPage,
 });

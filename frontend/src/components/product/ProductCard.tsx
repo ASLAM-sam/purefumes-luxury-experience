@@ -149,12 +149,6 @@ export const ProductCard = memo(function ProductCard({
               </span>
             ) : null}
 
-            {isBestsellerCard || product.isBestseller ? (
-              <span className="absolute right-3 top-3 bg-[#efd4a9] px-2.5 py-1 text-[clamp(0.56rem,0.12vw+0.54rem,0.66rem)] uppercase tracking-[0.14em] text-[#5b3a29]">
-                Best Seller
-              </span>
-            ) : null}
-
             {!inStock ? (
               <span className="absolute bottom-3 left-3 border border-gold/40 bg-white/90 px-3 py-1 text-[0.58rem] uppercase tracking-[0.18em] text-[#5b3a29] shadow-[0_12px_24px_rgba(91,58,41,0.14)] backdrop-blur md:text-[0.65rem]">
                 Sold Out

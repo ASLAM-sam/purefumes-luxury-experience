@@ -8,6 +8,9 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 export default defineConfig({
   vite: {
+    cacheDir: process.env.LOCALAPPDATA
+      ? `${process.env.LOCALAPPDATA}/purefumes-vite-cache/frontend`
+      : "../.vite-cache/frontend",
     build: {
       rollupOptions: {
         output: {

@@ -235,7 +235,7 @@ function SuccessPage() {
                   className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-navy px-6 py-3 text-xs uppercase tracking-[0.22em] text-beige transition duration-300 ease-in-out hover:opacity-90 sm:w-auto"
                 >
                   <MessageCircle className="h-4 w-4" />
-                  Send Order on WhatsApp
+                  Send this message to WhatsApp
                 </a>
               </div>
             ) : null}
