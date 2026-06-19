@@ -1,0 +1,1 @@
+import{j as o}from"./vendor-react-DiNuo9J2.js";import{P as r,p as t}from"./policies-IxRBqCmN.js";import"./index-CiSC4ybq.js";import"./vendor-motion-DGPToLI7.js";function n(){return o.jsx(r,{...t.refund})}export{n as component};

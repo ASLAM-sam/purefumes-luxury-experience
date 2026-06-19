@@ -1,0 +1,1 @@
+import{j as r}from"./vendor-react-DiNuo9J2.js";import{S as t}from"./index-CiSC4ybq.js";import"./vendor-motion-DGPToLI7.js";const n=({error:e})=>r.jsx(t,{children:r.jsxs("div",{className:"py-40 text-center text-navy",children:["Error: ",e.message]})});export{n as errorComponent};
