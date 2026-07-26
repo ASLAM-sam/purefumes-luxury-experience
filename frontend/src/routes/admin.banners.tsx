@@ -335,7 +335,7 @@ function AdminBanners() {
                 <span>{imageFile ? imageFile.name : "Choose banner image"}</span>
                 <input
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.png,.webp,.avif"
                   onChange={(event) => setImageFile(event.target.files?.[0] || null)}
                   className="sr-only"
                 />

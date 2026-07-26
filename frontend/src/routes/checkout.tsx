@@ -850,40 +850,40 @@ function CheckoutPage() {
             </Link>
           </header>
 
-          <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_24rem]">
-            <div className="rounded-2xl border border-border bg-card p-5 shadow-soft md:p-8">
-              <div className="grid gap-6 md:grid-cols-[8rem_minmax(0,1fr)] md:items-start">
-                {productImage ? (
-                  <OptimizedImage
-                    src={productImage}
-                    alt={product.name}
-                    width={180}
-                    height={180}
-                    sizes="8rem"
-                    wrapperClassName="product-fit-frame aspect-square w-full rounded-xl md:w-32"
-                    className="product-fit-image"
-                  />
-                ) : (
-                  <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-beige text-3xl font-display text-navy/35 md:w-32">
-                    {product.name.trim().charAt(0).toUpperCase() || "P"}
+          <div className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:gap-8">
+            <div className="contents lg:block lg:rounded-2xl lg:border lg:border-border lg:bg-card lg:p-8 lg:shadow-soft">
+              <div className="order-1 rounded-2xl border border-border bg-card p-5 shadow-soft lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none">
+                <div className="grid gap-6 md:grid-cols-[8rem_minmax(0,1fr)] md:items-start">
+                  {productImage ? (
+                    <OptimizedImage
+                      src={productImage}
+                      alt={product.name}
+                      width={180}
+                      height={180}
+                      sizes="8rem"
+                      wrapperClassName="product-fit-frame aspect-square w-full rounded-xl md:w-32"
+                      className="product-fit-image"
+                    />
+                  ) : (
+                    <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-beige text-3xl font-display text-navy/35 md:w-32">
+                      {product.name.trim().charAt(0).toUpperCase() || "P"}
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">
+                      {product.brand}
+                    </p>
+                    <h2 className="mt-2 font-display text-2xl text-navy sm:text-3xl">
+                      {product.name}
+                    </h2>
+                    <p className="mt-2 text-sm text-muted-foreground">{size.size}</p>
+                    <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                      {product.description}
+                    </p>
                   </div>
-                )}
-                <div>
-                  <p className="text-[0.65rem] uppercase tracking-[0.34em] text-gold">
-                    {product.brand}
-                  </p>
-                  <h2 className="mt-2 font-display text-2xl text-navy sm:text-3xl">
-                    {product.name}
-                  </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">{size.size}</p>
-                  <p className="mt-4 text-sm leading-7 text-muted-foreground">
-                    {product.description}
-                  </p>
                 </div>
-              </div>
 
-              <form onSubmit={confirmOrder} className="mt-8 space-y-5">
-                <div>
+                <div className="mt-8">
                   <p className="text-[0.65rem] uppercase tracking-[0.3em] text-navy/60">Quantity</p>
                   <div className="mt-3 inline-flex items-center rounded-full border border-border bg-beige/30 px-2 py-2">
                     <button
@@ -907,7 +907,12 @@ function CheckoutPage() {
                     </button>
                   </div>
                 </div>
+              </div>
 
+              <form
+                onSubmit={confirmOrder}
+                className="order-3 space-y-5 rounded-2xl border border-border bg-card p-5 shadow-soft lg:mt-8 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:shadow-none"
+              >
                 <DeliveryDetailsFields form={form} onChange={updateForm} />
 
                 {error ? <p className="text-sm text-red-600">{error}</p> : null}
@@ -918,12 +923,12 @@ function CheckoutPage() {
                   disabled={Boolean(loading || verificationMessage)}
                   className="mt-2 w-full rounded-full px-6 py-3 text-[0.72rem] font-semibold tracking-[0.28em]"
                 >
-                  Confirm Order
+                  Continue to Payment
                 </Button>
               </form>
 
               {paymentConfigError && !paymentConfig ? (
-                <div className="mt-6">
+                <div className="order-4 mt-6">
                   <ErrorState
                     description={paymentConfigError}
                     onRetry={() => void ensurePaymentConfig()}
@@ -932,20 +937,22 @@ function CheckoutPage() {
               ) : null}
 
               {showPaymentOptions ? (
-                !paymentConfig && !paymentConfigError ? (
-                  <div className="mt-8 space-y-3">
-                    <LoadingSkeleton className="h-24 w-full" />
-                    <LoadingSkeleton className="h-24 w-full" />
-                  </div>
-                ) : isBypassMode ? (
-                  <DevelopmentPaymentPanel loading={loading} onSelect={handlePayment} />
-                ) : (
-                  <PaymentOptions loading={loading} onSelect={handlePayment} />
-                )
+                <div className="order-4 mt-8">
+                  {!paymentConfig && !paymentConfigError ? (
+                    <div className="space-y-3">
+                      <LoadingSkeleton className="h-24 w-full" />
+                      <LoadingSkeleton className="h-24 w-full" />
+                    </div>
+                  ) : isBypassMode ? (
+                    <DevelopmentPaymentPanel loading={loading} onSelect={handlePayment} />
+                  ) : (
+                    <PaymentOptions loading={loading} onSelect={handlePayment} />
+                  )}
+                </div>
               ) : null}
             </div>
 
-            <aside className="h-fit rounded-2xl border border-border bg-navy p-5 text-beige shadow-luxe sm:p-6 lg:sticky lg:top-28">
+            <aside className="order-2 h-fit rounded-2xl border border-border bg-navy p-5 text-beige shadow-luxe sm:p-6 lg:sticky lg:top-28 lg:order-none">
               <p className="text-[0.65rem] uppercase tracking-[0.32em] text-gold">Order Summary</p>
               <div className="mt-5 space-y-4 text-sm text-beige/75">
                 <div className="flex items-center justify-between gap-4">

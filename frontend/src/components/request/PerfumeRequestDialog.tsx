@@ -14,7 +14,7 @@ const BUDGET_OPTIONS = [
   "₹2000+",
   "Not sure",
 ] as const;
-const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 const MAX_FILES = 3;
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 const DISPLAY_BUDGET_OPTIONS = [
@@ -148,7 +148,7 @@ export function PerfumeRequestDialog({
 
     const invalidTypeFile = selectedFiles.find((file) => !ALLOWED_IMAGE_TYPES.has(file.type));
     if (invalidTypeFile) {
-      nextErrors.images = "Only JPG, PNG, and WEBP images are allowed.";
+      nextErrors.images = "Only JPG, JPEG, PNG, WEBP, and AVIF images are allowed.";
       setErrors((current) => ({ ...current, ...nextErrors }));
       return;
     }
@@ -397,12 +397,12 @@ export function PerfumeRequestDialog({
                       Drag photos here or tap to choose from your gallery
                     </span>
                     <span className="mt-1 text-xs uppercase tracking-[0.18em] text-navy/45">
-                      JPG, PNG, WEBP | Max 5MB each
+                      JPG, JPEG, PNG, WEBP, AVIF | Max 5MB each
                     </span>
                     <input
                       ref={inputRef}
                       type="file"
-                      accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                      accept=".jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif"
                       multiple
                       className="sr-only"
                       onChange={(event) => handleFiles(event.target.files || [])}

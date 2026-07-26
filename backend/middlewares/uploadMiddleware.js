@@ -19,7 +19,7 @@ const perfumeRequestUploadDir = path.join(uploadsRoot, "requests");
 const IMAGE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024;
 const WEBP_QUALITY = 80;
 const MAX_IMAGE_INPUT_PIXELS = 50_000_000;
-const IMAGE_UPLOAD_MESSAGE = "Only JPG, PNG, and WEBP images are allowed";
+const IMAGE_UPLOAD_MESSAGE = "Only JPG, JPEG, PNG, WEBP, and AVIF images are allowed";
 const IMAGE_SIZE_MESSAGE = "Image size must be under 5MB";
 
 [
@@ -39,10 +39,11 @@ const allowedImageMimeTypes = new Set([
   "image/pjpeg",
   "image/png",
   "image/webp",
+  "image/avif",
   "application/octet-stream",
 ]);
-const allowedImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp"]);
-const allowedDecodedImageFormats = new Set(["jpeg", "png", "webp"]);
+const allowedImageExtensions = new Set([".jpg", ".jpeg", ".png", ".webp", ".avif"]);
+const allowedDecodedImageFormats = new Set(["jpeg", "png", "webp", "heif"]);
 
 class UploadValidationError extends Error {
   constructor(message, statusCode = 400) {
@@ -199,7 +200,7 @@ const convertImageToWebp = async (file, { destination, fallback }) => {
       throw error;
     }
 
-    throw new UploadValidationError("Uploaded file is not a valid JPG, PNG, or WEBP image");
+    throw new UploadValidationError("Uploaded file is not a valid JPG, JPEG, PNG, WEBP, or AVIF image");
   }
 };
 

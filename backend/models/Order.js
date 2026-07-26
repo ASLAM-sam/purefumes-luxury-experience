@@ -5,6 +5,7 @@ export const ORDER_STATUSES = [
   "Pending",
   "Confirmed",
   "Processing",
+  "Packed",
   "Shipped",
   "Delivered",
   "Cancelled",

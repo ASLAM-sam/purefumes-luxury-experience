@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, PackageOpen, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { ChevronLeft, ChevronRight, Eye, PackageOpen, RefreshCw, Trash2, X } from "lucide-react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { DateRangeFilter } from "@/components/admin/DateRangeFilter";
 import { Button } from "@/components/common/Button";
@@ -21,6 +21,7 @@ const STATUSES: Order["status"][] = [
   "Pending",
   "Confirmed",
   "Processing",
+  "Packed",
   "Shipped",
   "Delivered",
   "Cancelled",
@@ -32,10 +33,250 @@ const statusColor: Record<Order["status"], string> = {
   Pending: "bg-amber-100 text-amber-800",
   Confirmed: "bg-emerald-100 text-emerald-800",
   Processing: "bg-sky-100 text-sky-800",
+  Packed: "bg-violet-100 text-violet-800",
   Shipped: "bg-indigo-100 text-indigo-800",
   Delivered: "bg-green-100 text-green-800",
   Cancelled: "bg-rose-100 text-rose-800",
 };
+
+const cleanText = (value: unknown, fallback = "-") => {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-IN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
+const splitAddressLine2 = (value = "") =>
+  String(value || "")
+    .split("|")
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+const getOrderItems = (order: Order) =>
+  Array.isArray(order.items) && order.items.length
+    ? order.items
+    : [
+        {
+          productId: order.productId || order.product || "",
+          productName: order.productName || "Order item",
+          brand: order.brand || "",
+          quantity: 1,
+          price: order.price || order.totalAmount || 0,
+          priceAtPurchase: order.price || order.totalAmount || 0,
+          productImage: "",
+          size: order.size || "Standard",
+        },
+      ];
+
+function DetailItem({
+  label,
+  value,
+}: {
+  label: string;
+  value?: string | number | null;
+}) {
+  return (
+    <div>
+      <p className="text-[0.62rem] uppercase tracking-[0.2em] text-navy/42">{label}</p>
+      <p className="mt-1 break-words text-sm font-medium text-navy">{cleanText(value)}</p>
+    </div>
+  );
+}
+
+function DetailSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-border/65 bg-white/82 p-5 shadow-[0_14px_30px_rgba(7,31,63,0.06)]">
+      <h3 className="font-display text-2xl text-navy">{title}</h3>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+function OrderDetailsModal({
+  order,
+  onClose,
+  onStatusChange,
+}: {
+  order: Order | null;
+  onClose: () => void;
+  onStatusChange: (id: string, status: Order["status"]) => void;
+}) {
+  if (!order) return null;
+
+  const shipping = order.shippingAddress || {};
+  const addressNotes = splitAddressLine2(shipping.line2 || order.address || "");
+  const items = getOrderItems(order);
+  const orderId = order._id || order.id || "";
+
+  return (
+    <div className="fixed inset-0 z-[120] bg-navy/45 px-3 py-4 backdrop-blur-sm sm:px-6">
+      <div className="ml-auto flex h-full w-full max-w-5xl flex-col overflow-hidden rounded-[1.5rem] border border-white/70 bg-[#f7f2ea] shadow-[0_24px_70px_rgba(7,31,63,0.25)]">
+        <header className="flex flex-col gap-4 border-b border-border/70 bg-white/80 px-5 py-5 sm:flex-row sm:items-start sm:justify-between sm:px-7">
+          <div>
+            <p className="text-[0.65rem] uppercase tracking-[0.3em] text-gold">Order Details</p>
+            <h2 className="mt-1 font-display text-3xl text-navy">{getOrderDisplayId(order)}</h2>
+            <p className="mt-2 text-sm text-navy/58">{cleanText(order.customerName, "Customer")}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-navy/8 text-navy transition hover:bg-navy/12"
+            aria-label="Close order details"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="space-y-5">
+              <DetailSection title="Order Information">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DetailItem label="Order ID" value={getOrderDisplayId(order)} />
+                  <DetailItem label="Payment ID" value={order.paymentId} />
+                  <DetailItem label="Payment Order ID" value={order.paymentOrderId} />
+                  <DetailItem label="Payment Gateway" value={order.paymentGateway} />
+                  <DetailItem label="Payment Method" value={order.paymentMethod} />
+                  <DetailItem label="Payment Status" value={formatPaymentStatusLabel(order.paymentStatus)} />
+                  <DetailItem label="Order Status" value={order.status || order.orderStatus} />
+                  <DetailItem label="Order Date" value={formatDateTime(order.createdAt)} />
+                  <DetailItem label="Last Updated" value={formatDateTime(order.updatedAt)} />
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Customer Information">
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <DetailItem label="Customer Name" value={order.customerName || shipping.fullName} />
+                  <DetailItem label="Email" value={order.email} />
+                  <DetailItem label="Phone" value={order.mobileNumber || order.phone || shipping.mobile} />
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Delivery Address">
+                <div className="space-y-2 text-sm leading-6 text-navy/72">
+                  <p className="font-medium text-navy">{cleanText(shipping.fullName || order.customerName)}</p>
+                  <p>{cleanText(shipping.mobile || order.mobileNumber || order.phone)}</p>
+                  {shipping.line1 ? <p>{shipping.line1}</p> : null}
+                  {addressNotes.map((line) => (
+                    <p key={line}>{line}</p>
+                  ))}
+                  <p>
+                    {[shipping.city, shipping.state, shipping.postalCode || shipping.pincode]
+                      .filter(Boolean)
+                      .join(", ") || "-"}
+                  </p>
+                  <p>{cleanText(shipping.country || "India")}</p>
+                  {!shipping.line1 && order.address ? (
+                    <p className="mt-3 whitespace-pre-line rounded-xl bg-beige/55 p-3 text-navy/65">
+                      {order.address}
+                    </p>
+                  ) : null}
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Products">
+                <div className="space-y-3">
+                  {items.map((item, index) => {
+                    const unitPrice = item.priceAtPurchase ?? item.price ?? 0;
+                    const quantity = Number(item.quantity || 1);
+                    return (
+                      <div
+                        key={`${item.productId || item.productName}-${item.size}-${index}`}
+                        className="grid gap-4 rounded-2xl bg-beige/40 p-4 sm:grid-cols-[4.5rem_minmax(0,1fr)_8rem]"
+                      >
+                        {item.productImage ? (
+                          <img
+                            src={item.productImage}
+                            alt={item.productName || "Order item"}
+                            className="h-16 w-16 rounded-xl object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-white/80 font-display text-2xl text-navy/35">
+                            {(item.productName || "P").charAt(0)}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-medium text-navy">{cleanText(item.productName, "Product")}</p>
+                          <p className="mt-1 text-sm text-navy/58">{cleanText(item.brand, "Brand unavailable")}</p>
+                          <p className="mt-2 text-xs uppercase tracking-[0.18em] text-navy/45">
+                            {cleanText(item.size, "Standard")} x {quantity}
+                          </p>
+                        </div>
+                        <div className="text-left sm:text-right">
+                          <p className="text-sm text-navy/58">Unit {formatINR(unitPrice)}</p>
+                          <p className="mt-2 font-semibold text-gold">{formatINR(unitPrice * quantity)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </DetailSection>
+            </div>
+
+            <aside className="space-y-5">
+              <DetailSection title="Payment Summary">
+                <div className="space-y-3 text-sm text-navy/70">
+                  <div className="flex justify-between gap-4">
+                    <span>Subtotal</span>
+                    <span>{formatINR(order.subtotalAmount ?? order.totalAmount ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>Discount</span>
+                    <span>-{formatINR(order.discountAmount ?? 0)}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>Shipping</span>
+                    <span>{order.shippingCharge ? formatINR(order.shippingCharge) : "Free"}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span>Coupon</span>
+                    <span>{order.couponCode || "-"}</span>
+                  </div>
+                  <div className="flex justify-between gap-4 border-t border-border pt-3 font-semibold text-navy">
+                    <span>Final Total</span>
+                    <span>{formatINR(order.totalAmount ?? 0)}</span>
+                  </div>
+                </div>
+              </DetailSection>
+
+              <DetailSection title="Order Management">
+                <label className="flex flex-col gap-2">
+                  <span className="text-[0.62rem] uppercase tracking-[0.2em] text-navy/42">Status</span>
+                  <select
+                    value={order.status}
+                    onChange={(event) => onStatusChange(orderId, event.target.value as Order["status"])}
+                    className={`h-11 rounded-full border-0 px-4 text-xs uppercase tracking-[0.16em] outline-none ${statusColor[order.status] || "bg-beige text-navy"}`}
+                  >
+                    {STATUSES.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </DetailSection>
+            </aside>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AdminOrders() {
   const { addNotification } = useNotification();
@@ -54,6 +295,7 @@ function AdminOrders() {
   const [clearOrdersOpen, setClearOrdersOpen] = useState(false);
   const [clearingOrders, setClearingOrders] = useState(false);
   const [error, setError] = useState("");
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
   useEffect(() => {
     setPage(1);
@@ -140,6 +382,9 @@ function AdminOrders() {
         const updated = await ordersApi.updateStatus(id, status);
         setOrders((current) =>
           current.map((order) => (order._id === id || order.id === id ? updated : order)),
+        );
+        setSelectedOrder((current) =>
+          current && (current._id === id || current.id === id) ? updated : current,
         );
         addNotification("Order status updated.");
         load(true);
@@ -320,6 +565,15 @@ function AdminOrders() {
                           : "Free"}
                       </p>
                       <p className="font-semibold text-gold">{formatINR(price)}</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-2 w-full gap-2"
+                        onClick={() => setSelectedOrder(order)}
+                      >
+                        <Eye className="h-4 w-4" />
+                        View Details
+                      </Button>
                     </div>
                   </article>
                 );
@@ -340,26 +594,27 @@ function AdminOrders() {
                 <th className="text-left px-6 py-4">Payment</th>
                 <th className="text-left px-6 py-4">Status</th>
                 <th className="text-left px-6 py-4">Date</th>
+                <th className="text-left px-6 py-4">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-navy/50">
+                  <td colSpan={9} className="px-6 py-10 text-center text-navy/50">
                     Loading orders...
                   </td>
                 </tr>
               )}
               {!loading && error && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-red-600">
+                  <td colSpan={9} className="px-6 py-10 text-center text-red-600">
                     {error}
                   </td>
                 </tr>
               )}
               {!loading && !error && orders.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-navy/50">
+                  <td colSpan={9} className="px-6 py-10 text-center text-navy/50">
                     No orders found in this range.
                   </td>
                 </tr>
@@ -432,6 +687,17 @@ function AdminOrders() {
                       <td className="px-6 py-4 text-navy/60">
                         {new Date(order.createdAt).toLocaleDateString("en-IN")}
                       </td>
+                      <td className="px-6 py-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-2 whitespace-nowrap"
+                          onClick={() => setSelectedOrder(order)}
+                        >
+                          <Eye className="h-4 w-4" />
+                          View Details
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -477,6 +743,11 @@ function AdminOrders() {
         loading={clearingOrders}
         onClose={() => setClearOrdersOpen(false)}
         onConfirm={handleClearOrders}
+      />
+      <OrderDetailsModal
+        order={selectedOrder}
+        onClose={() => setSelectedOrder(null)}
+        onStatusChange={updateStatus}
       />
     </AdminShell>
   );

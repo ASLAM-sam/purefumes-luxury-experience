@@ -278,8 +278,8 @@ export type Order = {
   discountAmount?: number;
   shippingCharge?: number;
   couponCode?: string;
-  status: "Pending" | "Confirmed" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
-  orderStatus?: "Pending" | "Confirmed" | "Processing" | "Shipped" | "Delivered" | "Cancelled";
+  status: "Pending" | "Confirmed" | "Processing" | "Packed" | "Shipped" | "Delivered" | "Cancelled";
+  orderStatus?: "Pending" | "Confirmed" | "Processing" | "Packed" | "Shipped" | "Delivered" | "Cancelled";
   createdAt: string;
   product?: string;
   productId?: string;
@@ -295,6 +295,7 @@ export type Order = {
   paymentSignature?: string;
   paymentStatus?: "pending" | "paid" | "failed" | "refunded" | "success" | "completed";
   isTestData?: boolean;
+  updatedAt?: string;
 };
 
 export type CouponDiscountType = "percentage" | "fixed";

@@ -32,7 +32,7 @@ type FormState = Omit<
 
 const MAX_IMAGES = 5;
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
-const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp)$/i;
+const IMAGE_EXTENSIONS = /\.(jpe?g|png|webp|avif)$/i;
 const IMAGE_TYPES = new Set([
   "",
   "image/jpeg",
@@ -40,8 +40,10 @@ const IMAGE_TYPES = new Set([
   "image/pjpeg",
   "image/png",
   "image/webp",
+  "image/avif",
   "application/octet-stream",
 ]);
+const IMAGE_FORMAT_MESSAGE = "Only JPG, JPEG, PNG, WEBP, and AVIF images are allowed.";
 
 const createEmptyForm = (): FormState => ({
   name: "",
@@ -424,11 +426,11 @@ export const ProductForm = memo(function ProductForm({
 
   const validateImageFile = (file: File) => {
     if (!IMAGE_EXTENSIONS.test(file.name)) {
-      throw new Error("Only JPG, PNG, and WEBP images are allowed.");
+      throw new Error(IMAGE_FORMAT_MESSAGE);
     }
 
     if (!IMAGE_TYPES.has(file.type)) {
-      throw new Error("Only JPG, PNG, and WEBP images are allowed.");
+      throw new Error(IMAGE_FORMAT_MESSAGE);
     }
 
     if (file.size > MAX_IMAGE_SIZE_BYTES) {
@@ -811,7 +813,7 @@ export const ProductForm = memo(function ProductForm({
               ref={fileInputRef}
               type="file"
               multiple
-              accept=".jpg,.jpeg,.png,.webp"
+              accept=".jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif"
               onChange={(event) => handleImageInput(event.target.files)}
               className="sr-only"
             />
@@ -824,7 +826,7 @@ export const ProductForm = memo(function ProductForm({
                   ? `${totalImageCount}/${MAX_IMAGES} images selected`
                   : "Upload product images"}
               </p>
-              <p className="mt-1 text-xs text-navy/55">JPG, PNG, or WEBP under 5MB each</p>
+              <p className="mt-1 text-xs text-navy/55">JPG, JPEG, PNG, WEBP, or AVIF under 5MB each</p>
             </div>
           </div>
 

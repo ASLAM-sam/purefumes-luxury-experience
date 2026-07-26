@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
@@ -34,8 +34,6 @@ import { LoadingSkeleton } from "@/components/common/LoadingSkeleton";
 import { useNotification } from "@/context/NotificationContext";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { formatINR } from "@/lib/money";
-import { getOrderDisplayId } from "@/lib/order-id";
-import { formatOrderStatusLabel, formatPaymentStatusLabel } from "@/lib/order-status";
 import {
   adminApi,
   type AdminUser,
@@ -916,12 +914,6 @@ function AdminUsersPage() {
                           Review customer contact details, order health, and saved delivery information without leaving the dashboard.
                         </p>
                       </div>
-                      <Link
-                        to="/admin/orders"
-                        className="text-xs uppercase tracking-[0.24em] text-navy/52 transition hover:text-gold"
-                      >
-                        View all orders
-                      </Link>
                     </div>
 
                     <div className="mt-5 grid gap-4 md:grid-cols-2">
@@ -954,42 +946,6 @@ function AdminUsersPage() {
                     </div>
                   </section>
 
-                  <section className="rounded-[1.7rem] border border-white/70 bg-white/80 p-5 shadow-[0_16px_34px_rgba(7,31,63,0.08)]">
-                    <h3 className="font-display text-2xl text-navy">Recent orders</h3>
-                    <div className="mt-4 space-y-3">
-                      {selectedUser.recentOrders?.length ? (
-                        selectedUser.recentOrders.map((order) => (
-                          <div
-                            key={safeString(order.id || order._id)}
-                            className="rounded-2xl border border-border/70 bg-[#faf8f3] p-4"
-                          >
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                              <div>
-                                <p className="font-medium text-navy">
-                                  {order.productName ||
-                                    order.items?.[0]?.productName ||
-                                    `Order ${getOrderDisplayId(order)}`}
-                                </p>
-                                <p className="mt-1 text-sm text-navy/58">
-                                  {formatDateTime(order.createdAt)} - {formatOrderStatusLabel(order.status || order.orderStatus)}
-                                </p>
-                              </div>
-                              <div className="text-sm text-right">
-                                <p className="font-semibold text-navy">{formatCurrency(order.totalAmount)}</p>
-                                <p className="mt-1 text-navy/52">
-                                  Payment: {formatPaymentStatusLabel(order.paymentStatus)}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="rounded-2xl bg-[#faf8f3] px-4 py-5 text-sm text-navy/58">
-                          No orders found for this user yet.
-                        </p>
-                      )}
-                    </div>
-                  </section>
                 </div>
               ) : null}
             </motion.aside>

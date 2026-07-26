@@ -30,7 +30,14 @@ const addMonths = (date: Date, months: number) => {
   return next;
 };
 
-export const toDateInputValue = (date: Date) => clampDate(date).toISOString().slice(0, 10);
+export const toDateInputValue = (date: Date) => {
+  const localDate = clampDate(date);
+  const year = localDate.getFullYear();
+  const month = String(localDate.getMonth() + 1).padStart(2, "0");
+  const day = String(localDate.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
 
 export const getTodayInputValue = () => toDateInputValue(new Date());
 
