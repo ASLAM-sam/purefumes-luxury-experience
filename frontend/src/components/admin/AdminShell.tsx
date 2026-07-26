@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import {
   Bell,
+  BellRing,
   BarChart3,
   Check,
   ChevronLeft,
@@ -38,6 +39,7 @@ const items = [
   { to: "/admin/banners", label: "Hero Banners", Icon: Images, exact: false },
   { to: "/admin/coupons", label: "Coupons", Icon: TicketPercent, exact: false },
   { to: "/admin/orders", label: "Orders", Icon: ShoppingCart, exact: false },
+  { to: "/admin/back-in-stock", label: "Back In Stock", Icon: BellRing, exact: false },
   { to: "/admin/requests", label: "Queries", Icon: MessageCircle, exact: false },
   { to: "/admin/settings", label: "Settings", Icon: Settings, exact: false },
 ] as const;
@@ -323,8 +325,8 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
       <main className="flex-1 min-w-0">
         {isUsingMock && (
           <div className="bg-amber-100 text-amber-900 text-xs px-6 py-2 text-center border-b border-amber-200">
-            Mock mode - set <code className="font-mono">VITE_API_URL</code> to connect your
-            Express backend.
+            Mock mode - set <code className="font-mono">VITE_API_URL</code> to connect your Express
+            backend.
           </div>
         )}
         <div className="sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-4 backdrop-blur xl:hidden">
@@ -378,7 +380,6 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
               />
             </div>
           )}
-
         </div>
         {mobileMenuOpen && (
           <div
@@ -391,8 +392,12 @@ export const AdminShell = memo(function AdminShell({ children }: { children: Rea
             >
               <div className="flex items-center justify-between gap-3 border-b border-border pb-4">
                 <div>
-                  <p className="font-display text-2xl text-navy">Pure<span className="text-gold">fumes</span></p>
-                  <p className="mt-1 text-[0.6rem] uppercase tracking-[0.3em] text-navy/45">Admin</p>
+                  <p className="font-display text-2xl text-navy">
+                    Pure<span className="text-gold">fumes</span>
+                  </p>
+                  <p className="mt-1 text-[0.6rem] uppercase tracking-[0.3em] text-navy/45">
+                    Admin
+                  </p>
                 </div>
                 <button
                   type="button"

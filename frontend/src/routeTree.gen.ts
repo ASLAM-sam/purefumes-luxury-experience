@@ -48,6 +48,7 @@ import { Route as AdminCategoriesRouteImport } from './routes/admin.categories'
 import { Route as AdminBrandsRouteImport } from './routes/admin.brands'
 import { Route as AdminBestsellersRouteImport } from './routes/admin.bestsellers'
 import { Route as AdminBannersRouteImport } from './routes/admin.banners'
+import { Route as AdminBackInStockRouteImport } from './routes/admin.back-in-stock'
 import { Route as AdminAnalyticsRouteImport } from './routes/admin.analytics'
 import { Route as AdminProductsNewRouteImport } from './routes/admin.products.new'
 import { Route as AdminProductsIdRouteImport } from './routes/admin.products.$id'
@@ -247,6 +248,11 @@ const AdminBannersRoute = AdminBannersRouteImport.update({
   path: '/banners',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminBackInStockRoute = AdminBackInStockRouteImport.update({
+  id: '/back-in-stock',
+  path: '/back-in-stock',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminAnalyticsRoute = AdminAnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
@@ -287,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/verify-email': typeof VerifyEmailRoute
   '/wishlist': typeof WishlistRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/back-in-stock': typeof AdminBackInStockRoute
   '/admin/banners': typeof AdminBannersRoute
   '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
@@ -330,6 +337,7 @@ export interface FileRoutesByTo {
   '/verify-email': typeof VerifyEmailRoute
   '/wishlist': typeof WishlistRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/back-in-stock': typeof AdminBackInStockRoute
   '/admin/banners': typeof AdminBannersRoute
   '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
@@ -375,6 +383,7 @@ export interface FileRoutesById {
   '/verify-email': typeof VerifyEmailRoute
   '/wishlist': typeof WishlistRoute
   '/admin/analytics': typeof AdminAnalyticsRoute
+  '/admin/back-in-stock': typeof AdminBackInStockRoute
   '/admin/banners': typeof AdminBannersRoute
   '/admin/bestsellers': typeof AdminBestsellersRoute
   '/admin/brands': typeof AdminBrandsRoute
@@ -421,6 +430,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/wishlist'
     | '/admin/analytics'
+    | '/admin/back-in-stock'
     | '/admin/banners'
     | '/admin/bestsellers'
     | '/admin/brands'
@@ -464,6 +474,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/wishlist'
     | '/admin/analytics'
+    | '/admin/back-in-stock'
     | '/admin/banners'
     | '/admin/bestsellers'
     | '/admin/brands'
@@ -508,6 +519,7 @@ export interface FileRouteTypes {
     | '/verify-email'
     | '/wishlist'
     | '/admin/analytics'
+    | '/admin/back-in-stock'
     | '/admin/banners'
     | '/admin/bestsellers'
     | '/admin/brands'
@@ -833,6 +845,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminBannersRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/back-in-stock': {
+      id: '/admin/back-in-stock'
+      path: '/back-in-stock'
+      fullPath: '/admin/back-in-stock'
+      preLoaderRoute: typeof AdminBackInStockRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/analytics': {
       id: '/admin/analytics'
       path: '/analytics'
@@ -873,6 +892,7 @@ const AdminProductsRouteWithChildren = AdminProductsRoute._addFileChildren(
 
 interface AdminRouteChildren {
   AdminAnalyticsRoute: typeof AdminAnalyticsRoute
+  AdminBackInStockRoute: typeof AdminBackInStockRoute
   AdminBannersRoute: typeof AdminBannersRoute
   AdminBestsellersRoute: typeof AdminBestsellersRoute
   AdminBrandsRoute: typeof AdminBrandsRoute
@@ -889,6 +909,7 @@ interface AdminRouteChildren {
 
 const AdminRouteChildren: AdminRouteChildren = {
   AdminAnalyticsRoute: AdminAnalyticsRoute,
+  AdminBackInStockRoute: AdminBackInStockRoute,
   AdminBannersRoute: AdminBannersRoute,
   AdminBestsellersRoute: AdminBestsellersRoute,
   AdminBrandsRoute: AdminBrandsRoute,

@@ -76,13 +76,7 @@ const getOrderItems = (order: Order) =>
         },
       ];
 
-function DetailItem({
-  label,
-  value,
-}: {
-  label: string;
-  value?: string | number | null;
-}) {
+function DetailItem({ label, value }: { label: string; value?: string | number | null }) {
   return (
     <div>
       <p className="text-[0.62rem] uppercase tracking-[0.2em] text-navy/42">{label}</p>
@@ -91,13 +85,7 @@ function DetailItem({
   );
 }
 
-function DetailSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: ReactNode;
-}) {
+function DetailSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-2xl border border-border/65 bg-white/82 p-5 shadow-[0_14px_30px_rgba(7,31,63,0.06)]">
       <h3 className="font-display text-2xl text-navy">{title}</h3>
@@ -151,7 +139,10 @@ function OrderDetailsModal({
                   <DetailItem label="Payment Order ID" value={order.paymentOrderId} />
                   <DetailItem label="Payment Gateway" value={order.paymentGateway} />
                   <DetailItem label="Payment Method" value={order.paymentMethod} />
-                  <DetailItem label="Payment Status" value={formatPaymentStatusLabel(order.paymentStatus)} />
+                  <DetailItem
+                    label="Payment Status"
+                    value={formatPaymentStatusLabel(order.paymentStatus)}
+                  />
                   <DetailItem label="Order Status" value={order.status || order.orderStatus} />
                   <DetailItem label="Order Date" value={formatDateTime(order.createdAt)} />
                   <DetailItem label="Last Updated" value={formatDateTime(order.updatedAt)} />
@@ -160,15 +151,23 @@ function OrderDetailsModal({
 
               <DetailSection title="Customer Information">
                 <div className="grid gap-4 sm:grid-cols-3">
-                  <DetailItem label="Customer Name" value={order.customerName || shipping.fullName} />
+                  <DetailItem
+                    label="Customer Name"
+                    value={order.customerName || shipping.fullName}
+                  />
                   <DetailItem label="Email" value={order.email} />
-                  <DetailItem label="Phone" value={order.mobileNumber || order.phone || shipping.mobile} />
+                  <DetailItem
+                    label="Phone"
+                    value={order.mobileNumber || order.phone || shipping.mobile}
+                  />
                 </div>
               </DetailSection>
 
               <DetailSection title="Delivery Address">
                 <div className="space-y-2 text-sm leading-6 text-navy/72">
-                  <p className="font-medium text-navy">{cleanText(shipping.fullName || order.customerName)}</p>
+                  <p className="font-medium text-navy">
+                    {cleanText(shipping.fullName || order.customerName)}
+                  </p>
                   <p>{cleanText(shipping.mobile || order.mobileNumber || order.phone)}</p>
                   {shipping.line1 ? <p>{shipping.line1}</p> : null}
                   {addressNotes.map((line) => (
@@ -211,15 +210,21 @@ function OrderDetailsModal({
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="font-medium text-navy">{cleanText(item.productName, "Product")}</p>
-                          <p className="mt-1 text-sm text-navy/58">{cleanText(item.brand, "Brand unavailable")}</p>
+                          <p className="font-medium text-navy">
+                            {cleanText(item.productName, "Product")}
+                          </p>
+                          <p className="mt-1 text-sm text-navy/58">
+                            {cleanText(item.brand, "Brand unavailable")}
+                          </p>
                           <p className="mt-2 text-xs uppercase tracking-[0.18em] text-navy/45">
                             {cleanText(item.size, "Standard")} x {quantity}
                           </p>
                         </div>
                         <div className="text-left sm:text-right">
                           <p className="text-sm text-navy/58">Unit {formatINR(unitPrice)}</p>
-                          <p className="mt-2 font-semibold text-gold">{formatINR(unitPrice * quantity)}</p>
+                          <p className="mt-2 font-semibold text-gold">
+                            {formatINR(unitPrice * quantity)}
+                          </p>
                         </div>
                       </div>
                     );
@@ -256,10 +261,14 @@ function OrderDetailsModal({
 
               <DetailSection title="Order Management">
                 <label className="flex flex-col gap-2">
-                  <span className="text-[0.62rem] uppercase tracking-[0.2em] text-navy/42">Status</span>
+                  <span className="text-[0.62rem] uppercase tracking-[0.2em] text-navy/42">
+                    Status
+                  </span>
                   <select
                     value={order.status}
-                    onChange={(event) => onStatusChange(orderId, event.target.value as Order["status"])}
+                    onChange={(event) =>
+                      onStatusChange(orderId, event.target.value as Order["status"])
+                    }
                     className={`h-11 rounded-full border-0 px-4 text-xs uppercase tracking-[0.16em] outline-none ${statusColor[order.status] || "bg-beige text-navy"}`}
                   >
                     {STATUSES.map((status) => (
@@ -286,7 +295,10 @@ function AdminOrders() {
   });
   const [orders, setOrders] = useState<Order[]>([]);
   const [statusFilter, setStatusFilter] = useState<Order["status"] | "">("");
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("search") || "";
+  });
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalOrders, setTotalOrders] = useState(0);
@@ -470,9 +482,7 @@ function AdminOrders() {
 
         <section className="grid gap-3 rounded-[var(--radius-panel)] border border-white/70 bg-white/75 p-4 shadow-[0_16px_36px_rgba(7,31,63,0.07)]">
           <label className="flex flex-col gap-2">
-            <span className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/45">
-              Search
-            </span>
+            <span className="text-[0.65rem] uppercase tracking-[0.24em] text-navy/45">Search</span>
             <input
               type="search"
               value={search}
@@ -633,15 +643,11 @@ function AdminOrders() {
                       className="hover:bg-beige/30 transition-colors align-top"
                     >
                       <td className="px-6 py-4">
-                        <span className="font-semibold text-navy">
-                          {getOrderDisplayId(order)}
-                        </span>
+                        <span className="font-semibold text-navy">{getOrderDisplayId(order)}</span>
                       </td>
                       <td className="px-6 py-4">
                         <p className="font-medium text-navy">{order.customerName}</p>
-                        <p className="text-xs text-navy/60">
-                          {order.mobileNumber || order.phone}
-                        </p>
+                        <p className="text-xs text-navy/60">{order.mobileNumber || order.phone}</p>
                         {order.email ? (
                           <p className="mt-1 text-xs text-navy/50">{order.email}</p>
                         ) : null}

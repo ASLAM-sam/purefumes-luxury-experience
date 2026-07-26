@@ -4,6 +4,7 @@ import { Link } from "@tanstack/react-router";
 import { BadgeCheck, Eye, ShoppingBag, Sparkles, Truck } from "lucide-react";
 import type { Product, Size } from "@/data/products";
 import { Button } from "@/components/common/Button";
+import { ProductAvailabilityNotify } from "@/components/product/ProductAvailabilityNotify";
 import { SizeSelector } from "@/components/product/SizeSelector";
 import { WishlistButton } from "@/components/product/WishlistButton";
 import { formatINR } from "@/lib/money";
@@ -174,7 +175,11 @@ export const ProductInfo = memo(function ProductInfo({
           </div>
 
           <div className="mt-8 rounded-[1.75rem] border border-border/60 bg-background/70 p-5 shadow-soft">
-            <PurchaseButtons disabled={!inStock} onAddToCart={onAddToCart} onBuyNow={onBuyNow} />
+            {inStock ? (
+              <PurchaseButtons disabled={false} onAddToCart={onAddToCart} onBuyNow={onBuyNow} />
+            ) : (
+              <ProductAvailabilityNotify product={product} />
+            )}
 
             <div className="mt-4 flex items-center gap-2 text-sm text-navy/60" aria-live="polite">
               <Eye className="h-4 w-4 text-gold" />
@@ -197,36 +202,38 @@ export const ProductInfo = memo(function ProductInfo({
         </div>
       </aside>
 
-      <div className="fixed inset-x-0 bottom-[var(--mobile-bottom-nav-height)] z-40 border-t border-border/70 bg-background/95 p-3 shadow-[0_-16px_35px_-24px_rgba(7,32,63,0.55)] backdrop-blur lg:hidden">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card px-3 py-3 shadow-soft min-[380px]:px-4">
-            <div className="min-w-0">
-              <p className="text-[0.58rem] uppercase tracking-[0.24em] text-navy/45">
-                {selectedSize.size}
-              </p>
-              <p className="mt-1 font-display text-xl text-navy min-[380px]:text-2xl">
-                {formatINR(selectedSize.price)}
-              </p>
+      {inStock ? (
+        <div className="fixed inset-x-0 bottom-[var(--mobile-bottom-nav-height)] z-40 border-t border-border/70 bg-background/95 p-3 shadow-[0_-16px_35px_-24px_rgba(7,32,63,0.55)] backdrop-blur lg:hidden">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-card px-3 py-3 shadow-soft min-[380px]:px-4">
+              <div className="min-w-0">
+                <p className="text-[0.58rem] uppercase tracking-[0.24em] text-navy/45">
+                  {selectedSize.size}
+                </p>
+                <p className="mt-1 font-display text-xl text-navy min-[380px]:text-2xl">
+                  {formatINR(selectedSize.price)}
+                </p>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[0.54rem] uppercase tracking-[0.14em] min-[380px]:px-3 min-[380px]:text-[0.58rem] min-[380px]:tracking-[0.22em] ${
+                  inStock
+                    ? "bg-beige/70 text-navy/70 ring-1 ring-border/60"
+                    : "border border-gold/35 bg-gold/10 text-navy"
+                }`}
+              >
+                {inStock ? "Ready to order" : "Sold Out"}
+              </span>
             </div>
-            <span
-              className={`shrink-0 rounded-full px-2.5 py-1 text-[0.54rem] uppercase tracking-[0.14em] min-[380px]:px-3 min-[380px]:text-[0.58rem] min-[380px]:tracking-[0.22em] ${
-                inStock
-                  ? "bg-beige/70 text-navy/70 ring-1 ring-border/60"
-                  : "border border-gold/35 bg-gold/10 text-navy"
-              }`}
-            >
-              {inStock ? "Ready to order" : "Sold Out"}
-            </span>
-          </div>
 
-          <PurchaseButtons
-            disabled={!inStock}
-            compact
-            onAddToCart={onAddToCart}
-            onBuyNow={onBuyNow}
-          />
+            <PurchaseButtons
+              disabled={false}
+              compact
+              onAddToCart={onAddToCart}
+              onBuyNow={onBuyNow}
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
     </>
   );
 });

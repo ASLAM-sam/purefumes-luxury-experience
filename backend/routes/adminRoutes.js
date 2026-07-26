@@ -2,21 +2,25 @@ import express from "express";
 import { body, param, query } from "express-validator";
 import {
   banUser,
+  cancelAdminBackInStockNotification,
   clearAdminActivity,
   clearAdminAnalytics,
   clearAdminOrders,
   clearAdminUsers,
   deleteUser,
+  getAdminBackInStockNotifications,
   getAdminAnalytics,
   getAdminOrders,
   getAdminUserDetails,
   getAdminUserOrders,
   getAdminUsers,
   patchOrderStatus,
+  retryAdminBackInStockNotification,
 } from "../controllers/adminController.js";
 import { adminAuth } from "../middlewares/authMiddleware.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 import { ORDER_STATUSES } from "../models/Order.js";
+import { BACK_IN_STOCK_NOTIFICATION_STATUSES } from "../models/BackInStockNotification.js";
 import { dateRangeQueryValidation } from "../validators/dateRangeValidators.js";
 
 const router = express.Router();
@@ -50,6 +54,29 @@ router.get(
   ],
   validateRequest,
   getAdminOrders,
+);
+router.get(
+  "/back-in-stock-notifications",
+  [
+    query("page").optional().isInt({ min: 1 }),
+    query("limit").optional().isInt({ min: 1, max: 100 }),
+    query("status").optional({ values: "falsy" }).isIn(BACK_IN_STOCK_NOTIFICATION_STATUSES),
+    query("search").optional({ values: "falsy" }).trim().isLength({ max: 160 }),
+  ],
+  validateRequest,
+  getAdminBackInStockNotifications,
+);
+router.post(
+  "/back-in-stock-notifications/:id/retry",
+  [param("id").isMongoId().withMessage("Valid notification id is required")],
+  validateRequest,
+  retryAdminBackInStockNotification,
+);
+router.patch(
+  "/back-in-stock-notifications/:id/cancel",
+  [param("id").isMongoId().withMessage("Valid notification id is required")],
+  validateRequest,
+  cancelAdminBackInStockNotification,
 );
 router.get(
   "/analytics",

@@ -14,6 +14,11 @@ import {
 import { getDashboardAnalytics } from "../services/analytics/analyticsService.js";
 import { updateOrderStatusAndNotify, serializeOrder } from "../services/orders/orderService.js";
 import { ensureOrdersPublicIds } from "../services/orders/publicOrderIdService.js";
+import {
+  cancelBackInStockNotification,
+  listBackInStockNotifications,
+  retryBackInStockNotification,
+} from "../services/backInStockNotificationService.js";
 import { buildUserOrderIdentityFilter } from "../repositories/orderRepository.js";
 
 const ADMIN_USER_STAT_PREMIUM_SPENT = 15000;
@@ -358,6 +363,34 @@ export const getAdminOrders = asyncHandler(async (req, res) => {
       orders: ordersWithPublicIds.map(serializeOrder),
       pagination: createPaginationMeta({ page, limit, total }),
     },
+  });
+});
+
+export const getAdminBackInStockNotifications = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    data: await listBackInStockNotifications({
+      page: req.query.page,
+      limit: req.query.limit,
+      status: req.query.status,
+      search: req.query.search,
+    }),
+  });
+});
+
+export const retryAdminBackInStockNotification = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    message: "Back in stock email queued.",
+    data: await retryBackInStockNotification(req.params.id),
+  });
+});
+
+export const cancelAdminBackInStockNotification = asyncHandler(async (req, res) => {
+  res.json({
+    success: true,
+    message: "Back in stock notification cancelled.",
+    data: await cancelBackInStockNotification(req.params.id),
   });
 });
 

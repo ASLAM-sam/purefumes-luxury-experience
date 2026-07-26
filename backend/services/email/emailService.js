@@ -10,6 +10,8 @@ import {
 } from "./templates/resetPasswordTemplate.js";
 import { loginAlertTemplate } from "./templates/loginAlertTemplate.js";
 import { orderStatusTemplate, orderTemplate } from "./templates/orderTemplate.js";
+import { backInStockTemplate } from "./templates/backInStockTemplate.js";
+import { adminOrderNotificationTemplate } from "./templates/adminOrderNotificationTemplate.js";
 
 // Helper function to extract plain text from HTML for fallback
 const extractTextFromHtml = (html) => {
@@ -24,6 +26,9 @@ const extractTextFromHtml = (html) => {
     .replace(/&#039;/g, "'")
     .trim();
 };
+
+const resolveTemplateSubject = (subject, data = {}) =>
+  typeof subject === "function" ? subject(data) : subject;
 
 const templates = {
   welcome: {
@@ -54,6 +59,17 @@ const templates = {
     subject: "Your Purefumes Hyderabad order status changed",
     render: orderStatusTemplate,
   },
+  backInStock: {
+    subject: "Great News! Your perfume is back in stock 🎉",
+    render: backInStockTemplate,
+  },
+  adminOrderNotification: {
+    subject: ({ order = {} } = {}) => {
+      const orderNumber = order.publicOrderId || order.id || order._id || "New order";
+      return `🛒 New Order Received - ${orderNumber}`;
+    },
+    render: adminOrderNotificationTemplate,
+  },
   testEmail: {
     subject: "Brevo SMTP Test",
     render: ({ message, timestamp }) => `
@@ -74,9 +90,11 @@ export const sendTemplatedEmail = async ({ to, template, data = {}, subject }) =
     throw new Error(`Unknown email template: ${template}`);
   }
 
+  const resolvedSubject = subject || resolveTemplateSubject(config.subject, data);
+
   const emailLog = await EmailLog.create({
     to,
-    subject: subject || config.subject,
+    subject: resolvedSubject,
     template,
     status: "queued",
   });
@@ -86,7 +104,7 @@ export const sendTemplatedEmail = async ({ to, template, data = {}, subject }) =
     logger.info("Preparing to send email", {
       template,
       to,
-      subject: subject || config.subject,
+      subject: resolvedSubject,
       smtpHost: env.SMTP_HOST,
       smtpUser: env.SMTP_USER ? env.SMTP_USER.substring(0, 10) + "..." : "not set",
       mailFrom: env.MAIL_FROM,
@@ -123,7 +141,7 @@ export const sendTemplatedEmail = async ({ to, template, data = {}, subject }) =
     const mailOptions = {
       from: `"Purefumes Hyderabad" <${env.MAIL_FROM}>`,
       to,
-      subject: subject || config.subject,
+      subject: resolvedSubject,
       html: htmlContent,
       text: textContent,
     };

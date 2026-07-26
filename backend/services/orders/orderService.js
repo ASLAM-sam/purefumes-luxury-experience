@@ -44,6 +44,28 @@ const shippingToString = (shippingAddress = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const getAdminOrderUrl = (order) => {
+  const orderRef = order?.publicOrderId || order?.id || order?._id?.toString?.() || "";
+  const query = orderRef ? `?search=${encodeURIComponent(orderRef)}` : "";
+  return `${env.FRONTEND_URL.replace(/\/$/, "")}/admin/orders${query}`;
+};
+
+const queueOrderEmailSafely = async ({ to, template, data, subject, context }) => {
+  if (!to) return null;
+
+  try {
+    return await addEmailJob({ to, template, data, subject });
+  } catch (error) {
+    logger.error("Order email queue failed", {
+      template,
+      to,
+      orderId: context?.orderId || "",
+      error: error.message,
+    });
+    return null;
+  }
+};
+
 const normalizeEmail = (value = "") =>
   String(value || "")
     .trim()
@@ -628,12 +650,34 @@ export const createAuthenticatedOrder = async ({ user, body }) => {
   createdOrder = await ensureOrderPublicId(createdOrder);
 
   if (!reusedExistingOrder && customerEmail) {
-    await addEmailJob({
+    await queueOrderEmailSafely({
       to: customerEmail,
       template: "orderConfirmation",
       data: {
         name: createdOrder.customerName || user?.name || "Customer",
         order: serializeOrder(createdOrder),
+      },
+      context: {
+        orderId: createdOrder.publicOrderId || createdOrder.id || createdOrder._id?.toString?.(),
+      },
+    });
+  }
+
+  if (!reusedExistingOrder && env.ADMIN_EMAIL) {
+    const serializedOrder = serializeOrder(createdOrder);
+    const orderNumber =
+      serializedOrder.publicOrderId || serializedOrder.id || serializedOrder._id || "New order";
+
+    await queueOrderEmailSafely({
+      to: env.ADMIN_EMAIL,
+      template: "adminOrderNotification",
+      subject: `🛒 New Order Received - ${orderNumber}`,
+      data: {
+        order: serializedOrder,
+        adminOrderUrl: getAdminOrderUrl(serializedOrder),
+      },
+      context: {
+        orderId: orderNumber,
       },
     });
   }

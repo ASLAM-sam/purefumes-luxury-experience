@@ -18,6 +18,10 @@ import {
 import { deleteCacheByPrefix, getCachedJson, setCachedJson } from "../utils/cache.js";
 import { bulkImportProducts } from "../services/bulkProductImportService.js";
 import {
+  createBackInStockSubscription,
+  queueBackInStockNotificationsForProduct,
+} from "../services/backInStockNotificationService.js";
+import {
   attachCategoryDetails,
   resolveCategoryFromInput,
   syncProductCategoryFields,
@@ -852,6 +856,25 @@ export const getProductById = asyncHandler(async (req, res) => {
   res.json({ success: true, message: "Product loaded successfully", data: payload });
 });
 
+export const subscribeToProductAvailability = asyncHandler(async (req, res) => {
+  const result = await createBackInStockSubscription({
+    productId: req.params.id,
+    email: req.body.email,
+    phone: req.body.phone,
+    req,
+  });
+
+  res.status(result.alreadySubscribed ? 200 : 201).json({
+    success: true,
+    message: result.message,
+    data: {
+      alreadySubscribed: result.alreadySubscribed,
+      notification: result.notification,
+      message: result.message,
+    },
+  });
+});
+
 export const getBestsellerProducts = asyncHandler(async (_req, res) => {
   setNoStoreHeaders(res);
   debugBestseller("Fetching bestsellers from DB");
@@ -932,7 +955,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
   }
 
   const existingProduct = await Product.findById(req.params.id).select(
-    "image images categories primaryCategory categoryNames categorySlugs",
+    "name image images categories primaryCategory categoryNames categorySlugs stock",
   );
 
   if (!existingProduct) {
@@ -981,6 +1004,18 @@ export const updateProduct = asyncHandler(async (req, res) => {
     new: true,
     runValidators: true,
   });
+
+  const oldStock = Number(existingProduct.stock || 0);
+  const newStock = Number(product.stock || 0);
+
+  if (oldStock === 0 && newStock > 0) {
+    queueBackInStockNotificationsForProduct(product).catch((error) => {
+      logger.error("Back in stock notification trigger failed", {
+        productId: String(product._id),
+        error: error.message,
+      });
+    });
+  }
 
   clearProductCache();
   const [response] = await enrichProductsForResponse([product]);

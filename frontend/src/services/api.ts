@@ -7,11 +7,7 @@ import type { Brand, BrandPreviewProduct } from "@/data/brands";
 import type { Category } from "@/data/categories";
 import type { Accord, BestTime, Product, Size } from "@/data/products";
 import { apiTrafficProxy } from "@/lib/performance/api-proxy";
-import {
-  clearHttpClientState,
-  requestJson,
-  uploadMultipart,
-} from "@/lib/http/client";
+import { clearHttpClientState, requestJson, uploadMultipart } from "@/lib/http/client";
 import { perfInstrumentation } from "@/lib/performance/instrumentation";
 import { frontendMediator } from "@/lib/performance/mediator";
 import runtimeConfig from "@/lib/runtime-config";
@@ -279,7 +275,14 @@ export type Order = {
   shippingCharge?: number;
   couponCode?: string;
   status: "Pending" | "Confirmed" | "Processing" | "Packed" | "Shipped" | "Delivered" | "Cancelled";
-  orderStatus?: "Pending" | "Confirmed" | "Processing" | "Packed" | "Shipped" | "Delivered" | "Cancelled";
+  orderStatus?:
+    | "Pending"
+    | "Confirmed"
+    | "Processing"
+    | "Packed"
+    | "Shipped"
+    | "Delivered"
+    | "Cancelled";
   createdAt: string;
   product?: string;
   productId?: string;
@@ -393,6 +396,38 @@ type PerfumeRequestPayload = Partial<PerfumeRequest> & {
   id?: string;
 };
 
+export type BackInStockNotificationStatus = "pending" | "queued" | "sent" | "failed" | "cancelled";
+
+export type BackInStockNotification = {
+  _id: string;
+  id: string;
+  productId: string;
+  productName: string;
+  productSlug: string;
+  email: string;
+  phone: string;
+  status: BackInStockNotificationStatus;
+  sentAt?: string | null;
+  lastAttemptAt?: string | null;
+  emailJobId?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  product?: {
+    id: string;
+    name: string;
+    image: string;
+    price: number;
+    stock: number;
+  };
+  createdAt: string;
+  updatedAt: string;
+};
+
+type BackInStockNotificationPayload = Partial<BackInStockNotification> & {
+  _id?: string;
+  id?: string;
+};
+
 type HttpOptions = RequestInit & {
   forceFresh?: boolean;
   skipAuthRefresh?: boolean;
@@ -434,6 +469,18 @@ type PerfumeRequestListParams = DateRangeParams & {
 
 type PaginatedPerfumeRequests = {
   requests: PerfumeRequest[];
+  pagination: PaginatedOrders["pagination"];
+};
+
+type BackInStockNotificationListParams = {
+  page?: number;
+  limit?: number;
+  status?: BackInStockNotificationStatus | "";
+  search?: string;
+};
+
+type PaginatedBackInStockNotifications = {
+  notifications: BackInStockNotification[];
   pagination: PaginatedOrders["pagination"];
 };
 
@@ -977,7 +1024,7 @@ const releaseStorageRefreshLock = (lockId: string) => {
   }
 };
 
-const runWithStorageRefreshLock = async <T,>(action: () => Promise<T>): Promise<T> => {
+const runWithStorageRefreshLock = async <T>(action: () => Promise<T>): Promise<T> => {
   const lockId = createLockId();
   const deadline = Date.now() + AUTH_REFRESH_LOCK_TTL_MS + 2_000;
 
@@ -996,10 +1043,9 @@ const runWithStorageRefreshLock = async <T,>(action: () => Promise<T>): Promise<
   }
 };
 
-const runWithRefreshLock = async <T,>(action: () => Promise<T>): Promise<T> => {
-  const lockManager = (typeof navigator !== "undefined"
-    ? (navigator as NavigatorWithLocks).locks
-    : undefined);
+const runWithRefreshLock = async <T>(action: () => Promise<T>): Promise<T> => {
+  const lockManager =
+    typeof navigator !== "undefined" ? (navigator as NavigatorWithLocks).locks : undefined;
 
   if (lockManager?.request) {
     return lockManager.request(AUTH_REFRESH_LOCK_NAME, action);
@@ -1476,7 +1522,9 @@ const normalizeOrder = (order: Order): Order => {
   return {
     ...order,
     customerName: String(order.customerName || order.shippingAddress?.fullName || "").trim(),
-    email: String(order.email || "").trim().toLowerCase(),
+    email: String(order.email || "")
+      .trim()
+      .toLowerCase(),
     mobileNumber: String(order.mobileNumber || order.phone || "").trim(),
     phone: String(order.phone || order.mobileNumber || "").trim(),
     address: String(order.address || "").trim(),
@@ -1632,6 +1680,13 @@ const normalizeCoupon = (coupon: CouponPayload): Coupon => ({
 const isPerfumeRequestStatus = (value: unknown): value is PerfumeRequestStatus =>
   value === "new" || value === "contacted" || value === "sourced" || value === "closed";
 
+const isBackInStockNotificationStatus = (value: unknown): value is BackInStockNotificationStatus =>
+  value === "pending" ||
+  value === "queued" ||
+  value === "sent" ||
+  value === "failed" ||
+  value === "cancelled";
+
 const normalizePerfumeRequest = (perfumeRequest: PerfumeRequestPayload): PerfumeRequest => ({
   _id: String(perfumeRequest._id || perfumeRequest.id || ""),
   id: String(perfumeRequest.id || perfumeRequest._id || ""),
@@ -1645,6 +1700,37 @@ const normalizePerfumeRequest = (perfumeRequest: PerfumeRequestPayload): Perfume
   status: isPerfumeRequestStatus(perfumeRequest.status) ? perfumeRequest.status : "new",
   createdAt: String(perfumeRequest.createdAt || ""),
   updatedAt: String(perfumeRequest.updatedAt || ""),
+});
+
+const normalizeBackInStockNotification = (
+  notification: BackInStockNotificationPayload,
+): BackInStockNotification => ({
+  _id: String(notification._id || notification.id || ""),
+  id: String(notification.id || notification._id || ""),
+  productId: String(notification.productId || notification.product?.id || ""),
+  productName: String(notification.productName || notification.product?.name || ""),
+  productSlug: String(notification.productSlug || ""),
+  email: String(notification.email || "")
+    .trim()
+    .toLowerCase(),
+  phone: String(notification.phone || ""),
+  status: isBackInStockNotificationStatus(notification.status) ? notification.status : "pending",
+  sentAt: notification.sentAt || null,
+  lastAttemptAt: notification.lastAttemptAt || null,
+  emailJobId: String(notification.emailJobId || ""),
+  ipAddress: String(notification.ipAddress || ""),
+  userAgent: String(notification.userAgent || ""),
+  product: notification.product
+    ? {
+        id: String(notification.product.id || ""),
+        name: String(notification.product.name || notification.productName || ""),
+        image: resolveImageUrl(notification.product.image || ""),
+        price: normalizeMoney(notification.product.price || 0),
+        stock: Number(notification.product.stock || 0),
+      }
+    : undefined,
+  createdAt: String(notification.createdAt || ""),
+  updatedAt: String(notification.updatedAt || ""),
 });
 
 async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
@@ -1696,7 +1782,10 @@ async function http<T>(path: string, init: HttpOptions = {}): Promise<T> {
     let requestBody: unknown = rawBody;
 
     try {
-      if (typeof rawBody === "string" && headers.get("Content-Type")?.includes("application/json")) {
+      if (
+        typeof rawBody === "string" &&
+        headers.get("Content-Type")?.includes("application/json")
+      ) {
         try {
           requestBody = JSON.parse(rawBody);
         } catch (_error) {
@@ -1845,6 +1934,31 @@ export const productsApi = {
   get: async (id: string): Promise<Product | undefined> => {
     const product = await http<ProductPayload>(`/products/${id}`);
     return normalizeProduct(product);
+  },
+  notifyWhenAvailable: async (
+    id: string,
+    payload: { email: string; phone: string },
+  ): Promise<{
+    alreadySubscribed: boolean;
+    notification?: BackInStockNotification | null;
+    message?: string;
+  }> => {
+    const response = await http<{
+      alreadySubscribed: boolean;
+      notification?: BackInStockNotificationPayload | null;
+      message?: string;
+    }>(`/products/${id}/notify`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+
+    return {
+      alreadySubscribed: Boolean(response.alreadySubscribed),
+      notification: response.notification
+        ? normalizeBackInStockNotification(response.notification)
+        : null,
+      message: response.message,
+    };
   },
   create: async (product: Omit<Product, "id">): Promise<Product> => {
     const createdProduct = await http<ProductPayload>("/products", {
@@ -1998,7 +2112,10 @@ export const productsApi = {
 };
 
 export const brandsApi = {
-  list: async (params: BrandListParams = {}, options: CatalogRequestOptions = {}): Promise<Brand[]> => {
+  list: async (
+    params: BrandListParams = {},
+    options: CatalogRequestOptions = {},
+  ): Promise<Brand[]> => {
     const data = await http<BrandPayload[]>(`/brands${queryString(params)}`, {
       forceFresh: options.forceFresh,
     });
@@ -2282,11 +2399,11 @@ export const couponsApi = {
     const fixedCouponDiscount =
       coupon?.discountType === "fixed"
         ? coupon.discountValue
-        : response.coupon?.discountValue ?? response.coupon?.discount ?? 0;
+        : (response.coupon?.discountValue ?? response.coupon?.discount ?? 0);
     const requestedDiscount = normalizeMoney(
       coupon?.discountType === "fixed"
         ? fixedCouponDiscount
-        : response.discount ?? fixedCouponDiscount,
+        : (response.discount ?? fixedCouponDiscount),
     );
     const subtotal = normalizeMoney(response.subtotal ?? payload.cartTotal ?? 0);
     const fallbackTotals = calculateCheckoutTotals({ subtotal, discount: requestedDiscount });
@@ -2870,6 +2987,32 @@ export const adminApi = {
       orders: data.orders.map(normalizeOrder),
     };
   },
+  backInStockNotifications: async (
+    params: BackInStockNotificationListParams = {},
+  ): Promise<PaginatedBackInStockNotifications> => {
+    const data = await http<{
+      notifications: BackInStockNotificationPayload[];
+      pagination: PaginatedOrders["pagination"];
+    }>(`/admin/back-in-stock-notifications${queryString(params)}`);
+
+    return {
+      notifications: data.notifications.map(normalizeBackInStockNotification),
+      pagination: data.pagination,
+    };
+  },
+  retryBackInStockNotification: async (id: string): Promise<BackInStockNotification> =>
+    normalizeBackInStockNotification(
+      await http<BackInStockNotificationPayload>(`/admin/back-in-stock-notifications/${id}/retry`, {
+        method: "POST",
+      }),
+    ),
+  cancelBackInStockNotification: async (id: string): Promise<BackInStockNotification> =>
+    normalizeBackInStockNotification(
+      await http<BackInStockNotificationPayload>(
+        `/admin/back-in-stock-notifications/${id}/cancel`,
+        { method: "PATCH" },
+      ),
+    ),
   users: async (
     params: {
       page?: number;
@@ -2996,4 +3139,3 @@ export const frontendApiFacade = {
 
 export const isUsingMock = false;
 export const isBackendConfigured = !!BASE;
-

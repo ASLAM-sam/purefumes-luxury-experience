@@ -11,11 +11,12 @@ import {
   getProductById,
   getProducts,
   removeProductBestseller,
+  subscribeToProductAvailability,
   updateProduct,
   updateProductBestseller,
 } from "../controllers/productController.js";
 import { adminAuth } from "../middlewares/authMiddleware.js";
-import { adminLimiter, uploadLimiter } from "../middlewares/rateLimiter.js";
+import { adminLimiter, publicRequestLimiter, uploadLimiter } from "../middlewares/rateLimiter.js";
 import { uploadProductImages } from "../middlewares/uploadMiddleware.js";
 import { validateRequest } from "../middlewares/validateRequest.js";
 
@@ -234,10 +235,34 @@ const updateBestsellerValidation = [
   }),
 ];
 
+const productNotifyValidation = [
+  productIdParam,
+  body("email")
+    .trim()
+    .notEmpty()
+    .withMessage("Email address is required")
+    .isEmail()
+    .withMessage("Please enter a valid email address")
+    .normalizeEmail(),
+  body("phone")
+    .trim()
+    .notEmpty()
+    .withMessage("Mobile number is required")
+    .custom((value) => /^[6-9]\d{9}$/.test(String(value || "").replace(/\D/g, "").slice(-10)))
+    .withMessage("Please enter a valid 10-digit mobile number"),
+];
+
 router.get("/", productQueryValidation, validateRequest, getProducts);
 router.get("/bestsellers", getBestsellerProducts);
 router.get("/latest", getLatestProducts);
 router.get("/low-stock", adminLimiter, adminAuth, getLowStockProducts);
+router.post(
+  "/:id/notify",
+  publicRequestLimiter,
+  productNotifyValidation,
+  validateRequest,
+  subscribeToProductAvailability,
+);
 router.get("/:id", productIdParam, validateRequest, getProductById);
 router.post(
   "/bulk",
