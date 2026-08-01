@@ -21,7 +21,25 @@ const getClientIp = (req) =>
     .trim();
 
 const productSlugFor = (product) =>
-  String(product?.slug || product?._id || product?.id || "").trim();
+  String(product?.slug || product?.categorySlug || product?._id || product?.id || "").trim();
+
+const buildProductUrl = (product, fallbackUrl = env.FRONTEND_URL) => {
+  const base = String(fallbackUrl || "").replace(/\/$/, "");
+  if (!base) return "";
+
+  const productId = String(product?._id || product?.id || "").trim();
+  const productSlug = String(product?.slug || product?.categorySlug || "").trim();
+
+  if (productSlug) {
+    return `${base}/product/${encodeURIComponent(productSlug)}`;
+  }
+
+  if (productId) {
+    return `${base}/product/${productId}`;
+  }
+
+  return base;
+};
 
 export const normalizeBackInStockNotification = (notification) => {
   if (!notification) return null;
@@ -206,7 +224,7 @@ export const queueBackInStockNotificationsForProduct = async (product) => {
             image: product.image || product.images?.[0] || "",
             price: product.price,
             stock: product.stock,
-            url: `${env.FRONTEND_URL.replace(/\/$/, "")}/product/${product._id}`,
+            url: buildProductUrl(product, env.FRONTEND_URL),
           },
           customerName: "there",
         },
@@ -277,7 +295,7 @@ export const retryBackInStockNotification = async (notificationId) => {
           image: product.image || product.images?.[0] || "",
           price: product.price,
           stock: product.stock,
-          url: `${env.FRONTEND_URL.replace(/\/$/, "")}/product/${product._id}`,
+          url: buildProductUrl(product, env.FRONTEND_URL),
         },
         customerName: "there",
       },

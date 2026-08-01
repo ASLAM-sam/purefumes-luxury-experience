@@ -12,6 +12,10 @@ const escapeHtml = (value = "") =>
 export const backInStockTemplate = ({ customerName = "there", product = {} }) => {
   const productName = product.name || "Your requested perfume";
   const image = String(product.image || "").trim();
+  const productUrl = String(product.url || "").trim();
+  const productNameHtml = productUrl
+    ? `<a href="${escapeHtml(productUrl)}" style="color:#071f3f;text-decoration:none;font-weight:700;">${escapeHtml(productName)}</a>`
+    : escapeHtml(productName);
 
   return baseTemplate({
     title: "Your perfume is back in stock",
@@ -27,11 +31,13 @@ export const backInStockTemplate = ({ customerName = "there", product = {} }) =>
       p("The perfume you requested is now back in stock."),
       image
         ? `<div style="margin:18px 0;overflow:hidden;border-radius:12px;border:1px solid #eadfc9;background:#f6f0e7;">
+            ${productUrl ? `<a href="${escapeHtml(productUrl)}" style="display:block;text-decoration:none;">` : ""}
             <img src="${escapeHtml(image)}" alt="${escapeHtml(productName)}" style="display:block;width:100%;max-height:320px;object-fit:cover;" />
+            ${productUrl ? `</a>` : ""}
           </div>`
         : "",
       `<div style="border:1px solid #eadfc9;border-radius:12px;padding:16px;background:#fffaf4;">
-        <div style="font-size:18px;font-weight:700;color:#071f3f;">${escapeHtml(productName)}</div>
+        <div style="font-size:18px;font-weight:700;color:#071f3f;">${productNameHtml}</div>
         ${
           Number(product.price || 0) > 0
             ? `<div style="margin-top:8px;font-size:15px;color:#c9a14a;font-weight:700;">${escapeHtml(formatINR(product.price))}</div>`

@@ -74,12 +74,12 @@ export function ProductAvailabilityNotify({ product }: { product: Product }) {
   };
 
   return (
-    <section className="rounded-[1.5rem] border border-gold/30 bg-beige/45 p-5 shadow-soft">
-      <div className="flex items-start gap-3">
+    <section className="w-full min-w-0 max-w-full overflow-hidden rounded-[1.5rem] border border-gold/30 bg-beige/45 p-5 shadow-soft">
+      <div className="flex min-w-0 flex-wrap items-start gap-3">
         <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gold text-navy shadow-[0_14px_24px_rgba(201,161,74,0.24)]">
           <Bell className="h-5 w-5" />
         </span>
-        <div>
+        <div className="min-w-0 flex-1">
           <h2 className="font-display text-2xl text-navy">Notify Me When Available</h2>
           <p className="mt-2 text-sm leading-6 text-navy/62">
             This fragrance is currently out of stock. Leave your details and we'll notify you as
@@ -88,12 +88,12 @@ export function ProductAvailabilityNotify({ product }: { product: Product }) {
         </div>
       </div>
 
-      <form className="mt-5 space-y-4" onSubmit={handleSubmit} noValidate>
-        <label className="block">
+      <form className="mt-5 w-full min-w-0 max-w-full space-y-4" onSubmit={handleSubmit} noValidate>
+        <label className="block min-w-0 w-full max-w-full">
           <span className="text-[0.65rem] uppercase tracking-[0.22em] text-navy/52">
             Email Address
           </span>
-          <span className="mt-2 flex min-h-12 items-center gap-2 rounded-2xl border border-border bg-white/85 px-4 transition focus-within:border-gold/70">
+          <span className="mt-2 flex min-h-12 w-full max-w-full items-center gap-2 overflow-hidden rounded-2xl border border-border bg-white/85 px-4 transition focus-within:border-gold/70">
             <Mail className="h-4 w-4 shrink-0 text-gold" />
             <input
               type="email"
@@ -111,11 +111,11 @@ export function ProductAvailabilityNotify({ product }: { product: Product }) {
           {emailError ? <p className="mt-2 text-xs text-red-600">{emailError}</p> : null}
         </label>
 
-        <label className="block">
+        <label className="block min-w-0 w-full max-w-full">
           <span className="text-[0.65rem] uppercase tracking-[0.22em] text-navy/52">
             Mobile Number
           </span>
-          <span className="mt-2 flex min-h-12 items-center gap-2 rounded-2xl border border-border bg-white/85 px-4 transition focus-within:border-gold/70">
+          <span className="mt-2 flex min-h-12 w-full max-w-full items-center gap-2 overflow-hidden rounded-2xl border border-border bg-white/85 px-4 transition focus-within:border-gold/70">
             <Phone className="h-4 w-4 shrink-0 text-gold" />
             <input
               type="tel"
@@ -145,13 +145,13 @@ export function ProductAvailabilityNotify({ product }: { product: Product }) {
         </Button>
       </form>
 
-      <p className="mt-4 flex items-start gap-2 text-sm leading-6 text-navy/60">
+      <p className="mt-4 flex min-w-0 items-start gap-2 break-words text-sm leading-6 text-navy/60">
         <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
         We'll only contact you once this product is back in stock.
       </p>
 
       {statusMessage ? (
-        <p className="mt-3 rounded-2xl bg-white/70 px-4 py-3 text-sm text-navy/70">
+        <p className="mt-3 max-w-full break-words rounded-2xl bg-white/70 px-4 py-3 text-sm text-navy/70">
           {statusMessage}
         </p>
       ) : null}

@@ -41,3 +41,4 @@ frontend/.dev.vars
 *.njsproj
 *.sln
 *.sw?
+frontend/lint-output.txt

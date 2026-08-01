@@ -83,8 +83,8 @@ export const ProductInfo = memo(function ProductInfo({
 
   return (
     <>
-      <aside className="lg:sticky lg:top-28">
-        <div className="rounded-[2rem] border border-border/60 bg-card p-6 shadow-soft sm:p-8">
+      <aside className="min-w-0 lg:sticky lg:top-28">
+        <div className="w-full min-w-0 max-w-full overflow-hidden rounded-[2rem] border border-border/60 bg-card p-6 shadow-soft sm:p-8">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
               {product.brandId ? (
@@ -174,7 +174,7 @@ export const ProductInfo = memo(function ProductInfo({
             <SizeSelector sizes={product.sizes} selected={selectedSize} onSelect={onSelectSize} />
           </div>
 
-          <div className="mt-8 rounded-[1.75rem] border border-border/60 bg-background/70 p-5 shadow-soft">
+          <div className="mt-8 w-full min-w-0 max-w-full overflow-hidden rounded-[1.75rem] border border-border/60 bg-background/70 p-5 shadow-soft">
             {inStock ? (
               <PurchaseButtons disabled={false} onAddToCart={onAddToCart} onBuyNow={onBuyNow} />
             ) : (
