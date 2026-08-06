@@ -21,4 +21,17 @@ describe("Core middleware", () => {
     expect(response.headers["access-control-allow-credentials"]).toBe("true");
     expect(response.headers["access-control-allow-headers"]).toContain("X-CSRF-Token");
   });
+
+  it("allows credentialed refresh endpoint preflight with CSRF headers", async () => {
+    const response = await request(app)
+      .options("/api/auth/refresh")
+      .set("Origin", "http://localhost:8080")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "Content-Type,X-CSRF-Token")
+      .expect(204);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("http://localhost:8080");
+    expect(response.headers["access-control-allow-credentials"]).toBe("true");
+    expect(response.headers["access-control-allow-headers"]).toContain("X-CSRF-Token");
+  });
 });

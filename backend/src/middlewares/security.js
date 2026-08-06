@@ -117,6 +117,7 @@ export const applySecurityMiddleware = (app) => {
         "X-Device-Id",
         "X-Device-Name",
         "Idempotency-Key",
+        "X-CSRF-Token",
       ],
       exposedHeaders: ["X-Request-Id"],
       optionsSuccessStatus: 204,
